@@ -1,0 +1,240 @@
+import React, { useState, useEffect } from 'react';
+import { Menu, X, ArrowRight, ShoppingBag } from 'lucide-react';
+
+interface HeaderProps {
+  currentPage: 'home' | 'shop';
+  onNavigate: (page: 'home' | 'shop') => void;
+  onSearchClick?: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate }) => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<string>(currentPage === 'shop' ? 'shop' : 'home');
+
+  // Scrollspy logic to automatically activate navbar links based on scroll position
+  useEffect(() => {
+    if (currentPage === 'shop') {
+      setActiveSection('shop');
+      return;
+    }
+
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY + 180;
+      const bodyHeight = document.body.offsetHeight;
+      const windowHeight = window.innerHeight;
+
+      // Bottom of page -> Footer (Contact Us)
+      if (windowHeight + window.scrollY >= bodyHeight - 150) {
+        setActiveSection('footer');
+        return;
+      }
+
+      const processEl = document.getElementById('process');
+      const categoriesEl = document.getElementById('categories');
+
+      if (processEl && scrollPosition >= processEl.offsetTop) {
+        setActiveSection('process');
+      } else if (categoriesEl && scrollPosition >= categoriesEl.offsetTop) {
+        setActiveSection('categories');
+      } else {
+        setActiveSection('home');
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [currentPage]);
+
+  const toggleMobileMenu = () => {
+    setIsMobileMenuOpen((prev) => !prev);
+  };
+
+  const handleNavClick = (page: 'home' | 'shop', hashAnchor?: string) => {
+    setIsMobileMenuOpen(false);
+    onNavigate(page);
+
+    if (page === 'shop') {
+      setActiveSection('shop');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (hashAnchor) {
+      setActiveSection(hashAnchor);
+      setTimeout(() => {
+        const el = document.getElementById(hashAnchor);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+    } else {
+      setActiveSection('home');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  return (
+    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-xs w-full">
+      <div className="w-full px-4 sm:px-8 lg:px-12 h-26 sm:h-28 flex items-center justify-between">
+        
+        {/* Pure Clean Brand Logo & Title (No Box Border, No Shadow) */}
+        <div 
+          onClick={() => handleNavClick('home')}
+          className="flex items-center gap-1.5 sm:gap-2 cursor-pointer group py-2"
+        >
+
+          <img
+            src="/logo.png"
+            alt="Homemade Foods Logo"
+            className="w-20 h-20 sm:w-24 sm:h-24 object-contain group-hover:scale-105 transition-transform shrink-0"
+          />
+          <div>
+            <span className="text-2xl sm:text-4xl font-black tracking-tight text-[#1F2937] block leading-tight">
+              Homemade<span className="text-[#95CD1A]">.</span>
+            </span>
+            <span className="text-xs sm:text-sm font-black text-gray-500 uppercase tracking-widest block mt-0.5">
+              Traditional Foods
+            </span>
+          </div>
+        </div>
+
+        {/* Desktop Scrollspy Navigation Links */}
+        <nav className="hidden md:flex items-center gap-8 text-base sm:text-lg font-extrabold text-gray-700">
+          
+          {/* Home Link */}
+          <button
+            onClick={() => handleNavClick('home')}
+            className={`relative py-1 transition-all duration-200 cursor-pointer ${
+              activeSection === 'home' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+            }`}
+          >
+            <span>Home</span>
+            {activeSection === 'home' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#95CD1A] rounded-full animate-in fade-in zoom-in-50 duration-200" />
+            )}
+          </button>
+
+          {/* Categories Link */}
+          <button
+            onClick={() => handleNavClick('home', 'categories')}
+            className={`relative py-1 transition-all duration-200 cursor-pointer ${
+              activeSection === 'categories' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+            }`}
+          >
+            <span>Categories</span>
+            {activeSection === 'categories' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#95CD1A] rounded-full animate-in fade-in zoom-in-50 duration-200" />
+            )}
+          </button>
+
+          {/* Our Method Link */}
+          <button
+            onClick={() => handleNavClick('home', 'process')}
+            className={`relative py-1 transition-all duration-200 cursor-pointer ${
+              activeSection === 'process' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+            }`}
+          >
+            <span>Our Method</span>
+            {activeSection === 'process' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#95CD1A] rounded-full animate-in fade-in zoom-in-50 duration-200" />
+            )}
+          </button>
+
+          {/* Contact Us Link */}
+          <button
+            onClick={() => handleNavClick('home', 'footer')}
+            className={`relative py-1 transition-all duration-200 cursor-pointer ${
+              activeSection === 'footer' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+            }`}
+          >
+            <span>Contact Us</span>
+            {activeSection === 'footer' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#95CD1A] rounded-full animate-in fade-in zoom-in-50 duration-200" />
+            )}
+          </button>
+        </nav>
+
+        {/* Header Right Actions: Shop Now CTA Button */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => handleNavClick('shop')}
+            className={`hidden sm:inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl text-white font-extrabold text-base transition-all duration-300 shadow-md cursor-pointer ${
+              activeSection === 'shop'
+                ? 'bg-[#7EB30E] ring-4 ring-[#95CD1A]/30 scale-105 shadow-lg'
+                : 'bg-[#95CD1A] hover:bg-[#7EB30E] shadow-[#95CD1A]/25 hover:shadow-lg transform hover:-translate-y-0.5'
+            }`}
+          >
+            <ShoppingBag className="w-5 h-5 text-white" />
+            <span>Shop Now</span>
+            <ArrowRight className="w-5 h-5 text-white stroke-[3]" />
+          </button>
+
+          {/* Mobile Hamburger Menu Toggle Button */}
+          <button
+            onClick={toggleMobileMenu}
+            aria-label="Toggle Navigation Menu"
+            className="md:hidden p-3 rounded-2xl bg-gray-100 text-[#1F2937] hover:bg-[#F7FCE8] hover:text-[#95CD1A] transition-colors cursor-pointer"
+          >
+            {isMobileMenuOpen ? <X className="w-7 h-7" /> : <Menu className="w-7 h-7" />}
+          </button>
+        </div>
+
+      </div>
+
+      {/* Mobile Slide-Down Navigation Menu */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden bg-white border-b border-gray-200 px-6 py-6 space-y-4 shadow-xl animate-in slide-in-from-top duration-300">
+          <nav className="flex flex-col space-y-3 font-bold text-lg text-gray-800 text-center">
+            <button
+              onClick={() => handleNavClick('home')}
+              className={`py-2.5 border-b border-gray-100 ${
+                activeSection === 'home' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+              }`}
+            >
+              <span>Home</span>
+            </button>
+
+            <button
+              onClick={() => handleNavClick('home', 'categories')}
+              className={`py-2.5 border-b border-gray-100 ${
+                activeSection === 'categories' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+              }`}
+            >
+              <span>Categories</span>
+            </button>
+
+            <button
+              onClick={() => handleNavClick('home', 'process')}
+              className={`py-2.5 border-b border-gray-100 ${
+                activeSection === 'process' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+              }`}
+            >
+              <span>Our Method</span>
+            </button>
+
+            <button
+              onClick={() => handleNavClick('home', 'footer')}
+              className={`py-2.5 border-b border-gray-100 ${
+                activeSection === 'footer' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+              }`}
+            >
+              <span>Contact Us</span>
+            </button>
+          </nav>
+
+          <div className="pt-2">
+            <button
+              onClick={() => handleNavClick('shop')}
+              className="w-full py-3.5 rounded-xl bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-base flex items-center justify-center gap-2 shadow-lg shadow-[#95CD1A]/25 cursor-pointer"
+            >
+              <ShoppingBag className="w-5 h-5 text-white" />
+              <span>Shop Now</span>
+              <ArrowRight className="w-4 h-4 text-white stroke-[3] ml-1" />
+            </button>
+          </div>
+        </div>
+      )}
+    </header>
+  );
+};
