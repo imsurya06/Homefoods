@@ -76,27 +76,18 @@ export const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate }) => {
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-xs w-full">
-      <div className="w-full px-4 sm:px-8 lg:px-12 h-26 sm:h-28 flex items-center justify-between">
+      <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between">
         
-        {/* Pure Clean Brand Logo & Title (No Box Border, No Shadow) */}
+        {/* Pure Clean Brand Logo */}
         <div 
           onClick={() => handleNavClick('home')}
-          className="flex items-center gap-1.5 sm:gap-2 cursor-pointer group py-2"
+          className="flex items-center cursor-pointer group py-1"
         >
-
           <img
-            src="/logo.png"
-            alt="Homemade Foods Logo"
-            className="w-20 h-20 sm:w-24 sm:h-24 object-contain group-hover:scale-105 transition-transform shrink-0"
+            src="/logo.svg"
+            alt="Homemade Foods - Traditional Foods Logo"
+            className="h-10 sm:h-12 md:h-14 w-auto object-contain group-hover:scale-105 transition-transform shrink-0"
           />
-          <div>
-            <span className="text-2xl sm:text-4xl font-black tracking-tight text-[#1F2937] block leading-tight">
-              Homemade<span className="text-[#95CD1A]">.</span>
-            </span>
-            <span className="text-xs sm:text-sm font-black text-gray-500 uppercase tracking-widest block mt-0.5">
-              Traditional Foods
-            </span>
-          </div>
         </div>
 
         {/* Desktop Scrollspy Navigation Links */}

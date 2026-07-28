@@ -38,22 +38,12 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage }) => {
           
           {/* Column 1: Brand & Heritage (4 cols lg) */}
           <div className="lg:col-span-4 space-y-4">
-            <div className="flex items-center gap-1.5 sm:gap-2">
-
+            <div className="flex items-center">
               <img
-                src="/logo.png"
-                alt="Homemade Foods Logo"
-                className="w-12 h-12 object-contain"
+                src="/logo.svg"
+                alt="Homemade Foods - Traditional Foods Logo"
+                className="h-10 sm:h-12 w-auto object-contain"
               />
-
-              <div>
-                <span className="text-2xl font-black tracking-tight text-[#1F2937] block leading-none">
-                  Homemade<span className="text-[#95CD1A]">.</span>
-                </span>
-                <span className="text-xs font-bold text-gray-500 uppercase tracking-widest block mt-0.5">
-                  Traditional Foods
-                </span>
-              </div>
             </div>
 
             <p className="text-sm text-gray-600 leading-relaxed max-w-sm">
