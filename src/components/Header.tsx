@@ -5,9 +5,16 @@ interface HeaderProps {
   currentPage: 'home' | 'shop';
   onNavigate: (page: 'home' | 'shop') => void;
   onSearchClick?: () => void;
+  cartItemCount?: number;
+  onOpenCart?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate }) => {
+export const Header: React.FC<HeaderProps> = ({
+  currentPage,
+  onNavigate,
+  cartItemCount = 0,
+  onOpenCart,
+}) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string>(currentPage === 'shop' ? 'shop' : 'home');
 
@@ -146,8 +153,23 @@ export const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate }) => {
           </button>
         </nav>
 
-        {/* Header Right Actions: Shop Now CTA Button */}
+        {/* Header Right Actions: Cart Icon Button & Shop Now CTA Button */}
         <div className="flex items-center gap-3">
+          {/* Cart Drawer Trigger Button */}
+          <button
+            onClick={onOpenCart}
+            aria-label="View Cart"
+            className="relative px-4 py-3 rounded-2xl bg-gray-100 text-[#1F2937] hover:bg-[#F7FCE8] hover:text-[#95CD1A] transition-all cursor-pointer group shadow-2xs flex items-center gap-2 font-extrabold text-sm sm:text-base"
+          >
+            <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6 text-[#1F2937] group-hover:text-[#95CD1A] transition-colors" />
+            <span>Cart</span>
+            {cartItemCount > 0 && (
+              <span className="bg-[#95CD1A] text-white text-[11px] font-black px-1.5 py-0.5 rounded-full min-w-5 h-5 flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200 ml-0.5">
+                {cartItemCount > 99 ? '99+' : cartItemCount}
+              </span>
+            )}
+          </button>
+
           <button
             onClick={() => handleNavClick('shop')}
             className={`hidden sm:inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl text-white font-extrabold text-base transition-all duration-300 shadow-md cursor-pointer ${

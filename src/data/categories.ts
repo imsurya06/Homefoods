@@ -24,7 +24,7 @@ export const CATEGORIES: Category[] = [
   {
     id: 'beverages',
     title: 'Beverages & Sweeteners',
-    subtitle: 'Nannari Sherbet & Palm Jaggery',
+    subtitle: 'Nannari Sharbath & Palm Jaggery',
     imageUrl: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=800&q=80',
     itemCount: '6 Items',
   },

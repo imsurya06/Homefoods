@@ -131,7 +131,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage }) => {
             <div className="space-y-2 text-xs font-bold text-gray-600">
               <p className="flex items-center gap-2">
                 <PhoneCall className="w-4 h-4 text-[#95CD1A] shrink-0" />
-                <span>+91 86088 57705</span>
+                <span>+91 86677 26345</span>
               </p>
               <p className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-[#95CD1A] shrink-0" />
@@ -141,7 +141,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage }) => {
 
             <div className="pt-2">
               <a
-                href="https://wa.me/918608857705"
+                href="https://wa.me/918667726345"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-3 bg-[#95CD1A] hover:bg-[#7EB30E] text-[#1F2937] font-extrabold text-xs rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer"

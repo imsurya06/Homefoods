@@ -1,5 +1,5 @@
 import React from 'react';
-import { Leaf, Ban, HeartHandshake, Flame, Sparkles } from 'lucide-react';
+import { Leaf, Ban, HeartHandshake, Flame, Droplet } from 'lucide-react';
 
 export const MarqueeTrustBar: React.FC = () => {
   const trustItems = [
@@ -8,7 +8,7 @@ export const MarqueeTrustBar: React.FC = () => {
     { icon: <img src="/fssai-logo.png" alt="FSSAI Logo" className="h-5 w-auto object-contain shrink-0" />, label: 'FSSAI Certified', sub: '(Lic. 22425577000230)' },
     { icon: <HeartHandshake className="w-4 h-4 text-amber-600 shrink-0" />, label: 'Authentic Family Recipes' },
     { icon: <Flame className="w-4 h-4 text-[#95CD1A] shrink-0" />, label: 'Hand-pounded Spices' },
-    { icon: <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />, label: 'Pure Desi Ghee' },
+    { icon: <Droplet className="w-4 h-4 text-amber-500 fill-amber-400 shrink-0" />, label: 'Pure Desi Ghee' },
   ];
 
   return (

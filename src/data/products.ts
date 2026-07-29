@@ -146,9 +146,9 @@ export const PRODUCTS: Product[] = [
 
   // 3. BEVERAGES & SWEETENERS
   {
-    id: 'nannari-sherbet',
-    name: 'Nannari Sherbet Concentrate',
-    slug: 'nannari-sherbet',
+    id: 'nannari-sharbath',
+    name: 'Nannari Sharbath Concentrate',
+    slug: 'nannari-sharbath',
     categoryId: 'beverages',
     categoryName: 'Beverage & Sweeteners',
     description: 'Refreshing Sarsaparilla root extract brewed slowly with natural palm sugar.',

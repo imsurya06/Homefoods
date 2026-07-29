@@ -23,7 +23,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
   const searchSuggestions = [
     'Natural Honey',
-    'Nannari Sherbet',
+    'Nannari Sharbath',
     'Garlic Thokku',
     'Ragi Flour',
     'Millet Cookies',
@@ -93,19 +93,20 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       </div>
 
       {/* 1. Asymmetrical Organic Hero Section */}
-      <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-8 lg:px-12 pt-3 pb-6 md:pt-4 md:pb-8">
+      <section className="relative z-30 max-w-7xl mx-auto px-4 sm:px-8 lg:px-12 pt-3 pb-6 md:pt-4 md:pb-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-8 items-center">
           
           {/* Left Column (7 cols lg) - Warm Conversational Typography */}
           <div className="lg:col-span-7 flex flex-col items-center lg:items-start text-center lg:text-left space-y-3 sm:space-y-3.5">
             
-            {/* Warm Conversational Tag */}
-            <div className="inline-flex items-center px-3 py-1 rounded-full bg-[#F7FCE8] border border-[#ECF9CA] text-[#1F2937] text-[11px] font-extrabold tracking-wide uppercase shadow-xs mx-auto lg:mx-0">
-              <span>From our kitchen to yours</span>
+            {/* Organic Asymmetrical Badge */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#F7FCE8] border border-[#95CD1A]/30 text-[#1F2937] text-xs font-extrabold shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-[#95CD1A] animate-pulse" />
+              <span>Authentic Homemade Recipes</span>
             </div>
 
-            {/* Natural Serif Headline */}
-            <h1 className="font-serif-headline text-3xl sm:text-4xl lg:text-[2.75rem] font-bold text-[#1F2937] tracking-tight leading-[1.12] text-center lg:text-left">
+            {/* Display Headline with Handwritten Accent Accent */}
+            <h1 className="font-serif-headline text-3xl sm:text-5xl lg:text-[3.6rem] font-extrabold text-[#1F2937] leading-[1.12] tracking-tight">
               A taste of tradition <br />
               <span className="font-decorative text-[#95CD1A] font-normal text-4xl sm:text-5xl lg:text-[3.5rem] relative inline-block">
                 in every bite.
@@ -121,7 +122,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             </p>
 
             {/* Search Input Bar + Interactive Dropdown Menu Options */}
-            <div ref={searchContainerRef} className="w-full max-w-xl pt-1 mx-auto lg:mx-0 relative z-30">
+            <div ref={searchContainerRef} className="w-full max-w-xl pt-1 mx-auto lg:mx-0 relative z-40">
               <form onSubmit={handleSearchSubmit} className="relative group">
                 <div className="relative flex items-center bg-white rounded-2xl border-2 border-gray-200 group-hover:border-[#95CD1A]/60 focus-within:border-[#95CD1A] shadow-md shadow-gray-100 transition-all duration-300 overflow-hidden">
                   <div className="pl-3.5 pr-2 py-2.5 sm:py-3 text-[#95CD1A] flex items-center justify-center">
@@ -136,7 +137,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                       setSearchTerm(e.target.value);
                       setIsDropdownOpen(true);
                     }}
-                    placeholder="Search thokku, podi, honey, sherbet..."
+                    placeholder="Search thokku, podi, honey, sharbath..."
                     className="w-full py-2.5 sm:py-3 pr-3 text-gray-800 text-sm sm:text-base bg-transparent placeholder-gray-400 focus:outline-none font-medium text-left"
                   />
 
@@ -151,7 +152,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
               {/* Interactive Product Dropdown Menu Options */}
               {isDropdownOpen && (
-                <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl border border-gray-200 shadow-2xl overflow-hidden z-50 text-left animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl border border-gray-200 shadow-2xl overflow-hidden z-[100] text-left animate-in fade-in slide-in-from-top-2 duration-200">
                   <div className="p-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between text-xs font-bold text-gray-500">
                     <span>
                       {searchTerm.trim() ? `Matching Items (${dropdownProducts.length})` : 'Popular Recommendations'}
@@ -224,7 +225,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 className="px-6 py-2.5 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-xs sm:text-sm rounded-xl transition-all duration-300 shadow-md shadow-[#95CD1A]/25 hover:shadow-lg transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Layers className="w-4 h-4 text-white" />
-                <span>View Inventory</span>
+                <span>View Products</span>
               </button>
 
               <button
@@ -261,37 +262,37 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </div>
 
               {/* Physical Floating Kitchen Recipe Tag */}
-              <div className="absolute -top-3 -left-3 sm:top-1 sm:-left-4 bg-white px-3 py-1.5 rounded-xl shadow-md border border-gray-200 transform -rotate-2 flex items-center gap-2 text-left z-20">
-                <div className="w-6 h-6 rounded-full bg-[#F7FCE8] text-[#95CD1A] flex items-center justify-center font-bold text-[10px]">
+              <div className="absolute -top-3 -left-2 sm:top-1 sm:-left-4 bg-white/95 backdrop-blur-xs px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl shadow-md border border-gray-200 transform -rotate-2 flex items-center gap-1.5 sm:gap-2 text-left z-20">
+                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#F7FCE8] text-[#95CD1A] flex items-center justify-center font-bold text-[10px] shrink-0">
                   🌱
                 </div>
                 <div>
-                  <span className="text-xs font-extrabold text-[#1F2937] block leading-tight">
+                  <span className="text-[11px] sm:text-xs font-extrabold text-[#1F2937] block leading-tight">
                     Pure Ghee & Spices
                   </span>
-                  <span className="text-[9px] text-gray-500 block">
+                  <span className="text-[8px] sm:text-[9px] text-gray-500 block">
                     100% Traditional Recipe
                   </span>
                 </div>
               </div>
 
               {/* Floating FSSAI Certificate Badge */}
-              <div className="absolute -top-3 -right-3 sm:top-1 sm:-right-4 bg-white/95 backdrop-blur-xs px-3 py-1.5 rounded-xl shadow-lg border border-gray-200 transform rotate-3 hover:rotate-0 transition-transform duration-300 flex items-center gap-2 text-left z-20">
-                <img src="/fssai-logo.png" alt="FSSAI Logo" className="h-5 w-auto object-contain shrink-0" />
+              <div className="absolute top-12 -right-2 sm:top-1 sm:-right-4 bg-white/95 backdrop-blur-xs px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl shadow-lg border border-gray-200 transform rotate-3 hover:rotate-0 transition-transform duration-300 flex items-center gap-1.5 sm:gap-2 text-left z-20">
+                <img src="/fssai-logo.png" alt="FSSAI Logo" className="h-4 sm:h-5 w-auto object-contain shrink-0" />
                 <div>
-                  <span className="text-xs font-extrabold text-[#1F2937] block leading-tight">
+                  <span className="text-[11px] sm:text-xs font-extrabold text-[#1F2937] block leading-tight">
                     FSSAI Certified
                   </span>
-                  <span className="text-[9px] font-mono text-gray-500 font-semibold block">
+                  <span className="text-[8px] sm:text-[9px] font-mono text-gray-500 font-semibold block">
                     Lic. 22425577000230
                   </span>
                 </div>
               </div>
 
               {/* Fresh Batch Tag */}
-              <div className="absolute -bottom-2 right-2 bg-white px-3 py-1 rounded-lg shadow-md border border-gray-200 flex items-center gap-1.5 transform rotate-1 z-20">
+              <div className="absolute -bottom-2 right-2 bg-white px-2.5 sm:px-3 py-1 rounded-lg shadow-md border border-gray-200 flex items-center gap-1.5 transform rotate-1 z-20">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#95CD1A] animate-pulse" />
-                <span className="text-[11px] font-bold text-gray-700">Fresh Weekly Batches</span>
+                <span className="text-[10px] sm:text-[11px] font-bold text-gray-700">Fresh Weekly Batches</span>
               </div>
 
             </div>

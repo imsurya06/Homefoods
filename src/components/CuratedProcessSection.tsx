@@ -7,7 +7,7 @@ export const CuratedProcessSection: React.FC = () => {
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({
     'garlic-thokku': 0,
     'karuppu-kavuni-kanji': 0,
-    'nannari-sherbet': 0,
+    'nannari-sharbath': 0,
   });
 
   const handleVariantChange = (productId: string, variantIndex: number) => {
@@ -19,20 +19,20 @@ export const CuratedProcessSection: React.FC = () => {
 
   return (
     <section id="process" className="w-full bg-white text-[#1F2937] py-20 md:py-28 px-4 sm:px-8 lg:px-12 border-t border-gray-100 relative overflow-hidden">
-      
+
       {/* Subtle Background Glow Accent */}
       <div className="absolute inset-0 pointer-events-none -z-0">
         <div className="absolute top-1/2 left-0 w-96 h-96 bg-[#F7FCE8] rounded-full blur-3xl opacity-60 transform -translate-y-1/2" />
       </div>
 
       <div className="max-w-7xl mx-auto relative z-10">
-        
+
         {/* Main Section Grid: Our Process (Left 5 Cols) vs Curated Signature Bestsellers (Right 7 Cols) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 lg:gap-12 items-start">
-          
+
           {/* Component 1: The Homemade Process (Left Side) */}
           <div className="lg:col-span-5 flex flex-col items-start text-left space-y-8">
-            
+
             {/* Section Tag */}
             <div className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-[#F7FCE8] border border-[#ECF9CA] text-[#1F2937] text-xs font-extrabold uppercase tracking-wider">
               <span>Our Recipe Story & Method</span>
@@ -46,7 +46,7 @@ export const CuratedProcessSection: React.FC = () => {
                   Sun-Dried.
                 </span>
               </h2>
-              
+
               <p className="text-base text-gray-600 leading-relaxed max-w-md">
                 We believe food tastes best when crafted slowly. Our spices are sun-dried under traditional Tamil Nadu sunshine, hand-pounded in small batches, and cooked in cold-pressed sesame oil and pure ghee. No artificial colors, no chemicals—just pure, authentic taste.
               </p>
@@ -108,7 +108,7 @@ export const CuratedProcessSection: React.FC = () => {
 
           {/* Component 2: Curated Signature Items (Right Side) */}
           <div className="lg:col-span-7 flex flex-col space-y-8">
-            
+
             {/* Header Title */}
             <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 pb-4 border-b border-gray-100 text-left">
               <div>
@@ -156,7 +156,7 @@ export const CuratedProcessSection: React.FC = () => {
 
                     {/* Product Info & Controls */}
                     <div className="flex flex-col justify-between grow w-full space-y-4">
-                      
+
                       <div>
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
@@ -178,7 +178,7 @@ export const CuratedProcessSection: React.FC = () => {
 
                       {/* Variant Selection & Pricing Bar */}
                       <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-4">
-                        
+
                         {/* Weight Variant Switcher */}
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-bold text-gray-500 mr-1">Weight:</span>
@@ -186,11 +186,10 @@ export const CuratedProcessSection: React.FC = () => {
                             <button
                               key={v.weight}
                               onClick={() => handleVariantChange(product.id, vIdx)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-                                vIdx === currentVariantIdx
+                              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${vIdx === currentVariantIdx
                                   ? 'bg-[#95CD1A] text-white shadow-xs'
                                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              }`}
+                                }`}
                             >
                               {v.weight}
                             </button>

@@ -1,23 +1,25 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, PhoneCall, Filter, ChevronDown, X, ArrowLeft, Check } from 'lucide-react';
+import { Search, Filter, ChevronDown, X, ArrowLeft, Check, ShoppingBag, Zap } from 'lucide-react';
 import { PRODUCTS, CATEGORY_FILTERS, type Product } from '../data/products';
-import { calculatePriceDetails, generateWhatsAppOrderUrl } from '../data/bestsellers';
+import { calculatePriceDetails, generateBuyNowWhatsAppUrl, type CartItem } from '../data/bestsellers';
 
 interface ShopCatalogProps {
   initialCategory?: string;
   initialSearchQuery?: string;
   onNavigateHome?: () => void;
+  onAddToCart?: (item: Omit<CartItem, 'id' | 'quantity'>) => void;
 }
 
 export const ShopCatalog: React.FC<ShopCatalogProps> = ({
   initialCategory = 'all',
   initialSearchQuery = '',
   onNavigateHome,
+  onAddToCart,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
   const [searchQuery, setSearchQuery] = useState<string>(initialSearchQuery);
   const [showInStockOnly, setShowInStockOnly] = useState<boolean>(false);
-  
+
   // Track selected variant index for each product ID
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
 
@@ -42,18 +44,14 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
     setSearchQuery('');
   };
 
-  // Filter products based on Category, Search Query, and In-Stock toggle
+  // Filter products: Global Search across all store items, with Category filter active when search is empty
   const filteredProducts = useMemo(() => {
     return PRODUCTS.filter((product: Product) => {
-      // Category Filter
-      if (selectedCategory !== 'all' && product.categoryId !== selectedCategory) {
-        return false;
-      }
       // In-Stock Filter
       if (showInStockOnly && !product.isAvailable) {
         return false;
       }
-      // Search Query Filter (Matches Name, Description, or Ingredients)
+      // Global Search Query Filter (Matches Name, Description, Ingredients, or Category)
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
         const matchesName = product.name.toLowerCase().includes(query);
@@ -61,6 +59,10 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
         const matchesIngr = product.ingredients.toLowerCase().includes(query);
         const matchesCategory = product.categoryName.toLowerCase().includes(query);
         return matchesName || matchesDesc || matchesIngr || matchesCategory;
+      }
+      // Category Filter (applies when search bar is empty)
+      if (selectedCategory !== 'all' && product.categoryId !== selectedCategory) {
+        return false;
       }
       return true;
     });
@@ -73,7 +75,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
   return (
     <section id="shop" className="w-full bg-white text-[#1F2937] py-8 sm:py-14 px-3 sm:px-8 lg:px-12">
       <div className="max-w-7xl mx-auto">
-        
+
         {/* Breadcrumb / Back to Home Navigation */}
         <div className="flex items-center justify-between pb-4 mb-4 border-b border-gray-100 text-left">
           <button
@@ -93,7 +95,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
 
         {/* Section Title & Prominent Center-Aligned Search Bar */}
         <div className="text-center max-w-3xl mx-auto mb-8 space-y-4">
-          
+
           <div>
             <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-widest text-[#1F2937] mb-1">
               <span>Full Storefront Catalog</span>
@@ -113,12 +115,12 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
               <div className="pl-4.5 pr-2 py-4 text-[#95CD1A] flex items-center justify-center">
                 <Search className="w-5 h-5 sm:w-6 sm:h-6 text-[#95CD1A] stroke-[2.5]" />
               </div>
-              
+
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search recipes, thokku, podi, honey, sherbet..."
+                placeholder="Search recipes, thokku, podi, honey, sharbath..."
                 className="w-full py-4 pr-10 text-sm sm:text-base bg-transparent text-gray-900 placeholder-gray-400 focus:outline-none font-bold text-left"
               />
 
@@ -152,16 +154,18 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
         {/* Mobile-Only Horizontal Category Pills (Scrolly Pill Row) */}
         <div className="md:hidden mb-6 overflow-x-auto hide-scrollbar flex items-center gap-2.5 pb-2">
           {CATEGORY_FILTERS.map((cat) => {
-            const isActive = selectedCategory === cat.id;
+            const isActive = !searchQuery.trim() && selectedCategory === cat.id;
             return (
               <button
                 key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
-                className={`px-4 py-2.5 rounded-full text-xs sm:text-sm font-extrabold whitespace-nowrap transition-all cursor-pointer shadow-xs ${
-                  isActive
+                onClick={() => {
+                  setSelectedCategory(cat.id);
+                  setSearchQuery('');
+                }}
+                className={`px-4 py-2.5 rounded-full text-xs sm:text-sm font-extrabold whitespace-nowrap transition-all cursor-pointer shadow-xs ${isActive
                     ? 'bg-[#95CD1A] text-white shadow-md shadow-[#95CD1A]/30 scale-105'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 {cat.label}
               </button>
@@ -171,18 +175,20 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
 
         {/* Main Two-Column Layout */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 items-start">
-          
+
           {/* Component 1: The Artisan Sidebar (Left Column - 3.5 cols desktop) */}
           <aside className="hidden md:block md:col-span-4 lg:col-span-3 bg-gray-50/70 p-6 rounded-2xl border border-gray-200/80 sticky top-24 text-left space-y-6">
-            
+
             <div className="flex items-center justify-between pb-3 border-b border-gray-200/80">
-              <h3 className="font-serif-headline text-lg font-extrabold text-[#1F2937] flex items-center gap-2">
-                <Filter className="w-4 h-4 text-[#95CD1A]" />
-                <span>Artisan Menu Index</span>
+              <h3 className="font-serif-headline text-xs sm:text-sm font-extrabold text-[#1F2937] tracking-tight">
+                Artisan Menu Index
               </h3>
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">
-                Filter
-              </span>
+              <div className="flex flex-col items-center justify-center shrink-0 leading-none">
+                <Filter className="w-3.5 h-3.5 text-[#95CD1A]" />
+                <span className="text-[9px] font-extrabold text-gray-400 uppercase tracking-wider mt-0.5">
+                  Filter
+                </span>
+              </div>
             </div>
 
             {/* Category List */}
@@ -190,19 +196,21 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
               <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 block mb-2">
                 Categories
               </span>
-              
+
               <nav className="flex flex-col space-y-1.5 font-bold text-sm">
                 {CATEGORY_FILTERS.map((cat) => {
-                  const isActive = selectedCategory === cat.id;
+                  const isActive = !searchQuery.trim() && selectedCategory === cat.id;
                   return (
                     <button
                       key={cat.id}
-                      onClick={() => setSelectedCategory(cat.id)}
-                      className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all text-left cursor-pointer ${
-                        isActive
+                      onClick={() => {
+                        setSelectedCategory(cat.id);
+                        setSearchQuery('');
+                      }}
+                      className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all text-left cursor-pointer ${isActive
                           ? 'bg-[#95CD1A] text-white font-black shadow-md shadow-[#95CD1A]/20'
                           : 'text-gray-600 hover:bg-white/80 hover:text-gray-900'
-                      }`}
+                        }`}
                     >
                       <span className="flex items-center gap-2">
                         {isActive && <span className="w-2 h-2 rounded-full bg-white" />}
@@ -233,14 +241,12 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                 role="switch"
                 aria-checked={showInStockOnly}
                 onClick={() => setShowInStockOnly((prev) => !prev)}
-                className={`w-12 h-7 rounded-full p-1 transition-colors duration-300 ease-in-out cursor-pointer flex items-center shadow-inner border border-gray-200/60 shrink-0 ${
-                  showInStockOnly ? 'bg-[#95CD1A] shadow-md shadow-[#95CD1A]/20' : 'bg-gray-300 hover:bg-gray-400'
-                }`}
+                className={`w-12 h-7 rounded-full p-1 transition-colors duration-300 ease-in-out cursor-pointer flex items-center shadow-inner border border-gray-200/60 shrink-0 ${showInStockOnly ? 'bg-[#95CD1A] shadow-md shadow-[#95CD1A]/20' : 'bg-gray-300 hover:bg-gray-400'
+                  }`}
               >
                 <span
-                  className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-300 ease-in-out flex items-center justify-center ${
-                    showInStockOnly ? 'translate-x-5' : 'translate-x-0'
-                  }`}
+                  className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-300 ease-in-out flex items-center justify-center ${showInStockOnly ? 'translate-x-5' : 'translate-x-0'
+                    }`}
                 >
                   {showInStockOnly && <Check className="w-3 h-3 text-[#1F2937] stroke-[3]" />}
                 </span>
@@ -251,15 +257,17 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
 
           {/* Component 2: The Organic Product Grid (Right Column - 8 cols desktop) */}
           <main className="md:col-span-8 lg:col-span-9 flex flex-col space-y-4 sm:space-y-6">
-            
+
             {/* Header with Active Category & Item Count */}
             <div className="flex flex-row items-center justify-between gap-2 text-left pb-1">
               <div>
                 <h3 className="font-serif-headline text-lg sm:text-2xl font-extrabold text-[#1F2937]">
-                  {activeCategoryInfo.label}
+                  {searchQuery.trim() ? `Search Results for "${searchQuery.trim()}"` : activeCategoryInfo.label}
                 </h3>
                 <p className="text-xs text-gray-500 hidden sm:block">
-                  Hand-crafted traditional items made with pure ingredients.
+                  {searchQuery.trim()
+                    ? `Searching globally across all store categories.`
+                    : `Hand-crafted traditional items made with pure ingredients.`}
                 </p>
               </div>
               <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full shrink-0">
@@ -289,12 +297,24 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                   const currentVariantIdx = selectedVariants[product.id] ?? 0;
                   const currentVariant = product.variants[currentVariantIdx] || product.variants[0];
                   const priceInfo = calculatePriceDetails(currentVariant.basePrice, product.gstPercentage);
-                  const orderUrl = generateWhatsAppOrderUrl(
+                  const buyNowUrl = generateBuyNowWhatsAppUrl(
                     product.name,
                     currentVariant.weight,
-                    currentVariant.basePrice,
-                    product.gstPercentage
+                    priceInfo.totalPrice
                   );
+
+                  const handleAddToCartClick = () => {
+                    if (onAddToCart) {
+                      onAddToCart({
+                        productId: product.id,
+                        name: product.name,
+                        weight: currentVariant.weight,
+                        pricePerUnit: priceInfo.totalPrice,
+                        imageUrl: product.imageUrl,
+                        gstPercentage: product.gstPercentage,
+                      });
+                    }
+                  };
 
                   return (
                     <div
@@ -309,7 +329,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                           loading="lazy"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                         />
-                        
+
                         {/* Category Badge (Desktop) */}
                         <span className="hidden sm:block absolute top-2 left-2 bg-white/90 backdrop-blur-xs text-[#1F2937] text-[10px] font-extrabold px-2.5 py-0.5 rounded-md shadow-xs border border-gray-200">
                           {product.categoryName}
@@ -322,7 +342,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
 
                       {/* Content Details */}
                       <div className="p-3 sm:p-5 flex flex-col justify-between grow space-y-3 sm:space-y-4">
-                        
+
                         <div className="space-y-1">
                           <h4 className="font-extrabold text-sm sm:text-lg text-[#1F2937] group-hover:text-[#95CD1A] transition-colors leading-tight line-clamp-2">
                             {product.name}
@@ -334,7 +354,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
 
                         {/* Weight Variant Selector & Price */}
                         <div className="pt-2 sm:pt-3 border-t border-gray-100 space-y-2.5">
-                          
+
                           {/* Prominent Weight Selector Dropdown */}
                           <div className="space-y-1">
                             <label htmlFor={`variant-${product.id}`} className="text-xs font-extrabold text-gray-700 block">
@@ -374,16 +394,24 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
 
                         </div>
 
-                        {/* Prominent WhatsApp Order Action Button */}
-                        <div className="pt-1">
+                        {/* Dual Action Buttons: Add to Cart & Buy Now */}
+                        <div className="pt-1 grid grid-cols-2 gap-2">
+                          <button
+                            onClick={handleAddToCartClick}
+                            className="w-full py-2.5 px-2 bg-[#F7FCE8] hover:bg-[#95CD1A] text-[#1F2937] hover:text-white font-extrabold text-xs rounded-xl border border-[#95CD1A]/40 transition-all duration-200 shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer text-center group/cartBtn"
+                          >
+                            <ShoppingBag className="w-3.5 h-3.5 text-[#95CD1A] group-hover/cartBtn:text-white shrink-0" />
+                            <span className="truncate">Add to Cart</span>
+                          </button>
+
                           <a
-                            href={orderUrl}
+                            href={buyNowUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="w-full py-2.5 sm:py-3.5 px-3 sm:px-4 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-xs sm:text-sm rounded-xl transition-all duration-300 shadow-md shadow-[#95CD1A]/25 hover:shadow-lg transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer text-center"
+                            className="w-full py-2.5 px-2 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-xs rounded-xl transition-all duration-200 shadow-md shadow-[#95CD1A]/20 hover:shadow-lg transform hover:-translate-y-0.5 flex items-center justify-center gap-1.5 cursor-pointer text-center"
                           >
-                            <PhoneCall className="w-4 h-4 text-white shrink-0" />
-                            <span className="truncate">Order via WhatsApp</span>
+                            <Zap className="w-3.5 h-3.5 text-white shrink-0 fill-white" />
+                            <span className="truncate">Buy Now</span>
                           </a>
                         </div>
 
