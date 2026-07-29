@@ -121,12 +121,21 @@ export function generateWhatsAppOrderUrl(
   return generateBuyNowWhatsAppUrl(productName, selectedWeight, totalPrice);
 }
 
+export interface ShippingDetails {
+  customerName?: string;
+  phone?: string;
+  address?: string;
+}
+
 /**
  * Logic B - "Cart Checkout" (Multiple Items Checkout)
  * Loops through items with generous line breaks and dashed dividers (---).
- * Appends total items count and grand total.
+ * Appends total items count, grand total, and customer shipping details.
  */
-export function generateCartCheckoutWhatsAppUrl(cartItems: CartItem[]): string {
+export function generateCartCheckoutWhatsAppUrl(
+  cartItems: CartItem[],
+  shippingDetails?: ShippingDetails
+): string {
   if (!cartItems || cartItems.length === 0) {
     return `https://wa.me/${WHATSAPP_PHONE_NUMBER}`;
   }
@@ -145,7 +154,25 @@ export function generateCartCheckoutWhatsAppUrl(cartItems: CartItem[]): string {
 
   const totalItemsCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
-  const message = `Hello Homemade Foods! 🌿\nI would like to place an order:\n\n${itemsBody}*Total Items:* ${totalItemsCount}\n*Grand Total:* ₹${grandTotal} (Includes GST)\n\nPlease confirm availability and share payment details. Thank you!`;
+  let shippingText = '';
+  if (
+    shippingDetails?.customerName?.trim() ||
+    shippingDetails?.phone?.trim() ||
+    shippingDetails?.address?.trim()
+  ) {
+    shippingText = `\n\n*🚚 Delivery Information:*\n`;
+    if (shippingDetails.customerName?.trim()) {
+      shippingText += `*Name:* ${shippingDetails.customerName.trim()}\n`;
+    }
+    if (shippingDetails.phone?.trim()) {
+      shippingText += `*Mobile:* ${shippingDetails.phone.trim()}\n`;
+    }
+    if (shippingDetails.address?.trim()) {
+      shippingText += `*Address:* ${shippingDetails.address.trim()}\n`;
+    }
+  }
+
+  const message = `Hello Homemade Foods! 🌿\nI would like to place an order:\n\n${itemsBody}*Total Items:* ${totalItemsCount}\n*Grand Total:* ₹${grandTotal} (Includes GST)${shippingText}\n\nPlease confirm availability and share payment details. Thank you!`;
 
   return `https://wa.me/${WHATSAPP_PHONE_NUMBER}?text=${encodeURIComponent(message)}`;
 }
