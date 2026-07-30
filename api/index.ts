@@ -3,8 +3,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
-import { WooCommerceRestApi } from '@woocommerce/woocommerce-rest-api';
+import pkg from '@woocommerce/woocommerce-rest-api';
 import Razorpay from 'razorpay';
+
+const WooCommerceRestApi = (pkg as any).default || pkg;
 
 dotenv.config();
 
@@ -41,7 +43,7 @@ function getWcApi() {
   const consumerKey = process.env.WC_CONSUMER_KEY || 'ck_48a6c149fa81c87736460d25a0af0c9b439d8a49';
   const consumerSecret = process.env.WC_CONSUMER_SECRET || 'cs_77c182f6d49a3626a55a57da825c54231ae3fb43';
 
-  return new WooCommerceRestApi.default({
+  return new WooCommerceRestApi({
     url: storeUrl,
     consumerKey,
     consumerSecret,
