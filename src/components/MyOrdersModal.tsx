@@ -37,7 +37,7 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
       } catch {}
 
       const syncOrderStatuses = async (initialOrders: CustomerOrderHistoryItem[]) => {
-        const updatedList = [...initialOrders];
+        let updatedList = [...initialOrders];
         let hasChanges = false;
 
         await Promise.all(
@@ -59,21 +59,25 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
           })
         );
 
-        if (hasChanges) {
+        // Filter out any trashed orders
+        const activeOrders = updatedList.filter((o) => o.status !== 'trash');
+
+        if (hasChanges || activeOrders.length !== updatedList.length) {
           try {
-            localStorage.setItem('hf_local_orders', JSON.stringify(updatedList));
+            localStorage.setItem('hf_local_orders', JSON.stringify(activeOrders));
           } catch {}
-          setOrders([...updatedList]);
+          setOrders(activeOrders);
         }
       };
 
       fetchCustomerOrders()
         .then((remoteOrders) => {
-          const remoteMap = new Map(remoteOrders.map((o) => [o.id.toString(), o]));
-          const merged: CustomerOrderHistoryItem[] = [...remoteOrders];
+          const cleanRemote = remoteOrders.filter((o) => o.status !== 'trash');
+          const remoteMap = new Map(cleanRemote.map((o) => [o.id.toString(), o]));
+          const merged: CustomerOrderHistoryItem[] = [...cleanRemote];
 
           localOrders.forEach((lo) => {
-            if (!remoteMap.has(lo.id.toString())) {
+            if (lo.status !== 'trash' && !remoteMap.has(lo.id.toString())) {
               merged.push(lo);
             }
           });
@@ -82,8 +86,9 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
           syncOrderStatuses(merged);
         })
         .catch(() => {
-          setOrders(localOrders);
-          syncOrderStatuses(localOrders);
+          const activeLocal = localOrders.filter((lo) => lo.status !== 'trash');
+          setOrders(activeLocal);
+          syncOrderStatuses(activeLocal);
         })
         .finally(() => setLoading(false));
     }

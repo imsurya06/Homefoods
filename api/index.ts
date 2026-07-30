@@ -661,6 +661,7 @@ app.get('/api/v1/auth/my-orders', async (req, res) => {
       if (userEmail) {
         const usernamePrefix = userEmail.split('@')[0].toLowerCase();
         orders = orders.filter((o: any) => {
+          if (o.status === 'trash') return false;
           const orderEmail = (o.billing?.email || '').toLowerCase();
           const orderFirstName = (o.billing?.first_name || '').toLowerCase();
           return (
