@@ -610,8 +610,17 @@ app.get('/api/v1/auth/my-orders', async (req, res) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    const decoded = Buffer.from(token, 'base64').toString('utf-8');
-    const [idStr, userEmail] = decoded.split(':');
+    let userEmail = '';
+    let idStr = '';
+    try {
+      const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
+      const decoded = rawDecoded.includes('%') ? decodeURIComponent(rawDecoded) : rawDecoded;
+      const parts = decoded.split(':');
+      idStr = parts[0] || '';
+      userEmail = parts[1] || '';
+    } catch {
+      userEmail = '';
+    }
 
     const wcApi = getWcApi();
     const statusStageMap: Record<string, { stage: number; label: string }> = {

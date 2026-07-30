@@ -37,12 +37,16 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
 
       fetchCustomerOrders()
         .then((remoteOrders) => {
-          const merged = [...localOrders];
-          remoteOrders.forEach((r) => {
-            if (!merged.some((m) => m.id.toString() === r.id.toString())) {
-              merged.push(r);
+          const remoteMap = new Map(remoteOrders.map((o) => [o.id.toString(), o]));
+          const merged: CustomerOrderHistoryItem[] = [...remoteOrders];
+
+          // Append any local-only orders that have not synced to WooCommerce yet
+          localOrders.forEach((lo) => {
+            if (!remoteMap.has(lo.id.toString())) {
+              merged.push(lo);
             }
           });
+
           setOrders(merged);
         })
         .catch(() => setOrders(localOrders))
