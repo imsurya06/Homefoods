@@ -58,13 +58,12 @@ export async function processRazorpayCheckout(
     }
 
     // 3. Open Razorpay Modal
-    const razorpayOptions = {
-      key: orderRes.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_mock',
+    const razorpayOptions: any = {
+      key: orderRes.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E',
       amount: orderRes.amountInPaise,
       currency: orderRes.currency || 'INR',
       name: 'Homemade Foods',
       description: `Order #${orderRes.wcOrderId}`,
-      order_id: orderRes.razorpayOrderId,
       prefill: {
         name: payload.customerDetails.name,
         email: payload.customerDetails.email,
@@ -104,6 +103,11 @@ export async function processRazorpayCheckout(
         },
       },
     };
+
+    // Include order_id ONLY if it is a valid live Razorpay order ID
+    if (orderRes.razorpayOrderId && orderRes.razorpayOrderId.startsWith('order_') && !orderRes.razorpayOrderId.startsWith('order_mock_')) {
+      razorpayOptions.order_id = orderRes.razorpayOrderId;
+    }
 
     const rzp = new window.Razorpay(razorpayOptions);
     rzp.open();
