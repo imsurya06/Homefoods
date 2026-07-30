@@ -47,6 +47,25 @@ export function getSavedToken(): string | null {
   }
 }
 
+export async function sendForgotPasswordOtp(email: string): Promise<{ success: boolean; message: string; testOtp?: string }> {
+  return await fetchApi<{ success: boolean; message: string; testOtp?: string }>('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPasswordWithOtp(email: string, otp: string, newPassword: string): Promise<{ success: boolean; token: string; user: UserProfile }> {
+  const res = await fetchApi<{ success: boolean; token: string; user: UserProfile }>('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, otp, newPassword }),
+  });
+  if (res.success && res.token) {
+    localStorage.setItem('hf_auth_token', res.token);
+    localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
+  }
+  return res;
+}
+
 export async function loginOrSignupCustomer(email: string, password: string): Promise<{ success: boolean; token: string; user: UserProfile }> {
   const res = await fetchApi<{ success: boolean; token: string; user: UserProfile }>('/auth/login-signup', {
     method: 'POST',

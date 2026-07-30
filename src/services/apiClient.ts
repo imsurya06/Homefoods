@@ -18,6 +18,13 @@ export async function fetchApi<T = any>(endpoint: string, options: RequestInit =
     headers,
   });
 
+  const contentType = response.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    const rawText = await response.text();
+    console.error('Non-JSON API response received:', rawText);
+    throw new Error('Connecting to backend server... Please try again in a moment.');
+  }
+
   const data = await response.json();
 
   if (!response.ok) {
