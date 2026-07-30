@@ -70,6 +70,23 @@ function safeGenerateToken(id: number, email: string): string {
   }
 }
 
+function getRegisteredPasswords(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem('hf_user_passwords');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveRegisteredPassword(email: string, pass: string) {
+  try {
+    const map = getRegisteredPasswords();
+    map[email.trim().toLowerCase()] = pass;
+    localStorage.setItem('hf_user_passwords', JSON.stringify(map));
+  } catch {}
+}
+
 export async function resetPasswordWithOtp(email: string, otp: string, newPassword: string): Promise<{ success: boolean; token: string; user: UserProfile }> {
   try {
     const res = await fetchApi<{ success: boolean; token: string; user: UserProfile }>('/auth/reset-password', {
@@ -77,12 +94,14 @@ export async function resetPasswordWithOtp(email: string, otp: string, newPasswo
       body: JSON.stringify({ email, otp, newPassword }),
     });
     if (res.success && res.token) {
+      saveRegisteredPassword(email, newPassword);
       localStorage.setItem('hf_auth_token', res.token);
       localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
     }
     return res;
   } catch {
     const cleanEmail = email.trim().toLowerCase();
+    saveRegisteredPassword(cleanEmail, newPassword);
     const mockUser: UserProfile = {
       id: Date.now(),
       email: cleanEmail,
@@ -101,18 +120,36 @@ export async function resetPasswordWithOtp(email: string, otp: string, newPasswo
 }
 
 export async function loginOrSignupCustomer(email: string, password: string): Promise<{ success: boolean; token: string; user: UserProfile }> {
+  const cleanEmail = email.trim().toLowerCase();
+  const registeredPasswords = getRegisteredPasswords();
+
+  // Strict Security Check: Verify Password for existing accounts
+  if (registeredPasswords[cleanEmail] && registeredPasswords[cleanEmail] !== password) {
+    throw new Error('Incorrect password! Account already exists for this email address. Please enter the correct password or reset it using OTP.');
+  }
+
   try {
     const res = await fetchApi<{ success: boolean; token: string; user: UserProfile }>('/auth/login-signup', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
     if (res.success && res.token) {
+      saveRegisteredPassword(cleanEmail, password);
       localStorage.setItem('hf_auth_token', res.token);
       localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
     }
     return res;
-  } catch (err) {
-    const cleanEmail = email.trim().toLowerCase();
+  } catch (err: any) {
+    if (err.message && (err.message.toLowerCase().includes('password') || err.message.toLowerCase().includes('invalid') || err.message.toLowerCase().includes('credentials'))) {
+      throw err;
+    }
+
+    if (registeredPasswords[cleanEmail] && registeredPasswords[cleanEmail] !== password) {
+      throw new Error('Incorrect password! Account already exists for this email address. Please enter the correct password or reset it using OTP.');
+    }
+
+    saveRegisteredPassword(cleanEmail, password);
+
     const mockUser: UserProfile = {
       id: Date.now(),
       email: cleanEmail,

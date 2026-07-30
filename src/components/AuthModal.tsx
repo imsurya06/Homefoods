@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Lock, Mail, AlertCircle, CheckCircle2, ShieldCheck, Eye, EyeOff, KeyRound, ArrowLeft } from 'lucide-react';
 import { loginOrSignupCustomer, sendForgotPasswordOtp, resetPasswordWithOtp, type UserProfile } from '../services/authService';
 
@@ -22,6 +22,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setEmail('');
+      setPassword('');
+      setOtpCode('');
+      setError(null);
+      setSuccessMessage(null);
+      setViewMode('login');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -156,12 +167,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* View Mode 1: Regular Login / Signup */}
         {viewMode === 'login' && (
-          <form onSubmit={handleLoginSubmit} className="space-y-4 text-xs">
+          <form onSubmit={handleLoginSubmit} autoComplete="off" className="space-y-4 text-xs">
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1.5">Email Address</label>
               <div className="relative">
                 <input
                   type="email"
+                  name="hf_noautofill_email"
+                  autoComplete="off"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -177,6 +190,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  name="hf_noautofill_pass"
+                  autoComplete="new-password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
