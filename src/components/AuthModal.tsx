@@ -173,20 +173,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold text-gray-700">Password</label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    setSuccessMessage(null);
-                    setViewMode('forgot_request');
-                  }}
-                  className="text-[11px] font-extrabold text-[#95CD1A] hover:underline cursor-pointer"
-                >
-                  Forgot Password?
-                </button>
-              </div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -208,6 +195,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   ) : (
                     <Eye className="w-4 h-4 text-gray-400" />
                   )}
+                </button>
+              </div>
+              <div className="flex justify-end mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setSuccessMessage(null);
+                    setViewMode('forgot_request');
+                  }}
+                  className="text-[11px] font-extrabold text-[#95CD1A] hover:underline cursor-pointer"
+                >
+                  Forgot Password?
                 </button>
               </div>
             </div>

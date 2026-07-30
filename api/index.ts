@@ -260,6 +260,8 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
       }
     } catch (err) {}
 
+    const isExistingUser = !!customer;
+
     // If customer doesn't exist in WooCommerce yet, automatically create account!
     if (!customer) {
       const username = cleanEmail.split('@')[0] + '_' + Math.floor(1000 + Math.random() * 9000);
@@ -311,6 +313,10 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
     return res.json({
       success: true,
       token,
+      isExistingUser,
+      message: isExistingUser
+        ? 'Account exists! Logging you in.'
+        : 'Welcome! Account created successfully.',
       user: {
         id: customer.id,
         email: customer.email,

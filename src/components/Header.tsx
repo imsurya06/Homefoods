@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ArrowRight, ShoppingBag, User, LogOut, PackageCheck } from 'lucide-react';
+import { Menu, X, ArrowRight, ShoppingBag, User, LogOut } from 'lucide-react';
 import type { UserProfile } from '../services/authService';
 
 interface HeaderProps {
@@ -150,7 +150,6 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onOpenTrackModal}
             className="relative py-1 text-gray-700 hover:text-[#95CD1A] transition-all duration-200 cursor-pointer flex items-center gap-1.5 font-extrabold"
           >
-            <PackageCheck className="w-4 h-4 text-[#95CD1A]" />
             <span>{user ? 'My Orders' : 'Track Order'}</span>
           </button>
 
@@ -172,9 +171,9 @@ export const Header: React.FC<HeaderProps> = ({
           
           {/* User Account / Login Button */}
           {user ? (
-            <div className="flex items-center gap-2 bg-gray-100 px-3.5 py-2.5 rounded-2xl">
-              <User className="w-4 h-4 text-[#95CD1A]" />
-              <span className="text-xs font-black text-[#1F2937] hidden sm:inline-block">
+            <div className="flex items-center gap-2 bg-gray-100 px-4 py-3 rounded-2xl">
+              <User className="w-5 h-5 text-[#95CD1A]" />
+              <span className="text-xs sm:text-sm font-black text-[#1F2937] hidden sm:inline-block">
                 Hi, {user.firstName}
               </span>
               <button
@@ -182,15 +181,15 @@ export const Header: React.FC<HeaderProps> = ({
                 title="Logout"
                 className="text-gray-400 hover:text-red-500 transition-colors p-1 cursor-pointer"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <LogOut className="w-4 h-4" />
               </button>
             </div>
           ) : (
             <button
               onClick={onOpenAuthModal}
-              className="px-3.5 py-3 rounded-2xl bg-gray-100 text-[#1F2937] hover:bg-[#F7FCE8] hover:text-[#95CD1A] transition-all cursor-pointer font-extrabold text-xs sm:text-sm flex items-center gap-1.5"
+              className="px-4 py-3 rounded-2xl bg-gray-100 text-[#1F2937] hover:bg-[#F7FCE8] hover:text-[#95CD1A] transition-all cursor-pointer group shadow-2xs flex items-center gap-2 font-extrabold text-sm sm:text-base"
             >
-              <User className="w-4 h-4 text-[#95CD1A]" />
+              <User className="w-5 h-5 sm:w-6 sm:h-6 text-[#1F2937] group-hover:text-[#95CD1A] transition-colors" />
               <span>Login</span>
             </button>
           )}
