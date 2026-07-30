@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ShoppingBag, Trash2, Plus, Minus, ArrowRight, MapPin, Phone, Mail, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, ShoppingBag, Trash2, Plus, Minus, ArrowRight, MapPin, Phone, Mail, CheckCircle2 } from 'lucide-react';
 import { type CartItem } from '../data/bestsellers';
 import { processRazorpayCheckout, type CheckoutPayload } from '../services/checkoutService';
 
@@ -111,37 +111,41 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const subtotal = items.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
   const grandTotal = subtotal > 0 ? subtotal + SHIPPING_FEE : 0;
 
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
   const handleOrderNow = async () => {
     setCheckoutError(null);
+    setFieldErrors({});
 
     if (items.length === 0) {
       setCheckoutError('Your cart is empty');
       return;
     }
 
-    // Enforce Mandatory Form Field Validation
+    const errors: Record<string, string> = {};
+
+    // Enforce Mandatory Form Field Validation with Per-Field Error States
     if (!customerName.trim()) {
-      setCheckoutError('Full Name is mandatory');
-      return;
+      errors.customerName = 'Full Name is required';
     }
     if (!mobileNumber.trim() || mobileNumber.trim().length < 10) {
-      setCheckoutError('Valid 10-digit Mobile Number is mandatory');
-      return;
+      errors.mobileNumber = 'Valid 10-digit mobile number required';
     }
     if (!email.trim() || !email.includes('@')) {
-      setCheckoutError('Valid Email Address is mandatory');
-      return;
+      errors.email = 'Valid email address required';
     }
     if (!shippingAddress.trim()) {
-      setCheckoutError('Shipping Address is mandatory');
-      return;
+      errors.shippingAddress = 'Shipping address is required';
     }
     if (!city.trim()) {
-      setCheckoutError('City is mandatory');
-      return;
+      errors.city = 'City is required';
     }
     if (!pincode.trim() || pincode.trim().length < 6) {
-      setCheckoutError('Valid 6-digit Pincode is mandatory');
+      errors.pincode = 'Valid 6-digit pincode required';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
 
@@ -273,14 +277,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </div>
             ) : (
               <>
-                {/* Checkout Error Notice */}
-                {checkoutError && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-xs text-red-700 font-semibold">
-                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                    <span>{checkoutError}</span>
-                  </div>
-                )}
-
                 {/* Items List */}
                 <div className="space-y-3">
                   {items.map((item) => {
@@ -294,13 +290,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         <img
                           src={item.imageUrl}
                           alt={item.name}
-                          className="w-16 h-16 rounded-xl object-cover border border-gray-200 shrink-0"
+                          className="w-16 h-16 rounded-xl object-cover bg-gray-200 shrink-0 border border-gray-100"
                         />
 
-                        {/* Info & Quantity controls */}
-                        <div className="grow space-y-1.5">
+                        {/* Item Details */}
+                        <div className="flex flex-col justify-between grow min-w-0 space-y-1">
                           <div className="flex items-start justify-between gap-2">
-                            <h4 className="text-xs sm:text-sm font-extrabold text-[#1F2937] leading-snug line-clamp-1">
+                            <h4 className="font-extrabold text-xs text-[#1F2937] truncate">
                               {item.name}
                             </h4>
                             <button
@@ -312,7 +308,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                             </button>
                           </div>
 
-                          <div className="flex items-center justify-between text-xs text-gray-500 font-bold">
+                          <div className="flex items-center gap-2 text-[11px] font-semibold text-gray-500">
                             <span className="bg-white px-2 py-0.5 rounded-md border border-gray-200 text-gray-700">
                               {item.weight}
                             </span>
@@ -392,10 +388,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         <input
                           type="text"
                           value={customerName}
-                          onChange={(e) => setCustomerName(e.target.value)}
+                          onChange={(e) => {
+                            setCustomerName(e.target.value);
+                            if (fieldErrors.customerName) setFieldErrors(prev => ({ ...prev, customerName: '' }));
+                          }}
                           placeholder="Enter your full name"
-                          className="w-full px-3 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all"
+                          className={`w-full px-3 py-2 bg-white rounded-xl border ${
+                            fieldErrors.customerName ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
+                          } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all`}
                         />
+                        {fieldErrors.customerName && (
+                          <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.customerName}</p>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
@@ -407,12 +411,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                             <input
                               type="tel"
                               value={mobileNumber}
-                              onChange={(e) => setMobileNumber(e.target.value)}
+                              onChange={(e) => {
+                                setMobileNumber(e.target.value);
+                                if (fieldErrors.mobileNumber) setFieldErrors(prev => ({ ...prev, mobileNumber: '' }));
+                              }}
                               placeholder="+91 9876543210"
-                              className="w-full pl-8 pr-2 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all"
+                              className={`w-full pl-8 pr-2 py-2 bg-white rounded-xl border ${
+                                fieldErrors.mobileNumber ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
+                              } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all`}
                             />
                             <Phone className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                           </div>
+                          {fieldErrors.mobileNumber && (
+                            <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.mobileNumber}</p>
+                          )}
                         </div>
 
                         <div>
@@ -423,12 +435,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                             <input
                               type="email"
                               value={email}
-                              onChange={(e) => setEmail(e.target.value)}
+                              onChange={(e) => {
+                                setEmail(e.target.value);
+                                if (fieldErrors.email) setFieldErrors(prev => ({ ...prev, email: '' }));
+                              }}
                               placeholder="name@email.com"
-                              className="w-full pl-8 pr-2 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all"
+                              className={`w-full pl-8 pr-2 py-2 bg-white rounded-xl border ${
+                                fieldErrors.email ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
+                              } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all`}
                             />
                             <Mail className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                           </div>
+                          {fieldErrors.email && (
+                            <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.email}</p>
+                          )}
                         </div>
                       </div>
 
@@ -439,10 +459,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         <textarea
                           rows={2}
                           value={shippingAddress}
-                          onChange={(e) => setShippingAddress(e.target.value)}
+                          onChange={(e) => {
+                            setShippingAddress(e.target.value);
+                            if (fieldErrors.shippingAddress) setFieldErrors(prev => ({ ...prev, shippingAddress: '' }));
+                          }}
                           placeholder="Door No, Street Name, Area"
-                          className="w-full px-3 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium resize-none transition-all"
+                          className={`w-full px-3 py-2 bg-white rounded-xl border ${
+                            fieldErrors.shippingAddress ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
+                          } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium resize-none transition-all`}
                         />
+                        {fieldErrors.shippingAddress && (
+                          <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.shippingAddress}</p>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
@@ -453,10 +481,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           <input
                             type="text"
                             value={city}
-                            onChange={(e) => setCity(e.target.value)}
+                            onChange={(e) => {
+                              setCity(e.target.value);
+                              if (fieldErrors.city) setFieldErrors(prev => ({ ...prev, city: '' }));
+                            }}
                             placeholder="Madurai"
-                            className="w-full px-3 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all"
+                            className={`w-full px-3 py-2 bg-white rounded-xl border ${
+                              fieldErrors.city ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
+                            } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all`}
                           />
+                          {fieldErrors.city && (
+                            <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.city}</p>
+                          )}
                         </div>
 
                         <div>
@@ -466,10 +502,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           <input
                             type="text"
                             value={pincode}
-                            onChange={(e) => setPincode(e.target.value)}
+                            onChange={(e) => {
+                              setPincode(e.target.value);
+                              if (fieldErrors.pincode) setFieldErrors(prev => ({ ...prev, pincode: '' }));
+                            }}
                             placeholder="625001"
-                            className="w-full px-3 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all"
+                            className={`w-full px-3 py-2 bg-white rounded-xl border ${
+                              fieldErrors.pincode ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
+                            } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all`}
                           />
+                          {fieldErrors.pincode && (
+                            <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.pincode}</p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -509,6 +553,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </span>
                 </div>
               </div>
+
+              {checkoutError && (
+                <p className="text-xs text-red-500 font-extrabold text-center">{checkoutError}</p>
+              )}
 
               {/* Headless E-Commerce "Order Now" CTA */}
               <button

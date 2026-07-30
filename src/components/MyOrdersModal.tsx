@@ -28,9 +28,24 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
   useEffect(() => {
     if (isOpen && user) {
       setLoading(true);
+
+      let localOrders: CustomerOrderHistoryItem[] = [];
+      try {
+        const saved = localStorage.getItem('hf_local_orders');
+        localOrders = saved ? JSON.parse(saved) : [];
+      } catch {}
+
       fetchCustomerOrders()
-        .then((data) => setOrders(data))
-        .catch((err) => console.warn('Failed to load user orders:', err))
+        .then((remoteOrders) => {
+          const merged = [...localOrders];
+          remoteOrders.forEach((r) => {
+            if (!merged.some((m) => m.id.toString() === r.id.toString())) {
+              merged.push(r);
+            }
+          });
+          setOrders(merged);
+        })
+        .catch(() => setOrders(localOrders))
         .finally(() => setLoading(false));
     }
   }, [isOpen, user]);

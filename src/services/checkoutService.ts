@@ -86,6 +86,23 @@ export async function processRazorpayCheckout(
           });
 
           if (verifyRes.success) {
+            try {
+              const newOrder = {
+                id: orderRes.wcOrderId,
+                status: 'processing',
+                statusLabel: 'Order Confirmed & Kitchen Preparation',
+                stage: 2,
+                total: orderRes.amountInPaise ? (orderRes.amountInPaise / 100).toString() : '0',
+                currency: '₹',
+                dateCreated: new Date().toISOString(),
+                items: payload.items.map((it: any) => ({ name: it.name, quantity: it.quantity, total: (it.pricePerUnit * it.quantity).toString() })),
+                shippingAddress: `${payload.shippingAddress.address}, ${payload.shippingAddress.city}`,
+              };
+              const saved = localStorage.getItem('hf_local_orders');
+              const existingOrders = saved ? JSON.parse(saved) : [];
+              localStorage.setItem('hf_local_orders', JSON.stringify([newOrder, ...existingOrders]));
+            } catch (e) {}
+
             onSuccess({
               wcOrderId: orderRes.wcOrderId,
               paymentId: response.razorpay_payment_id,
