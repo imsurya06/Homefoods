@@ -7,6 +7,7 @@ import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
 import { AuthModal } from './components/AuthModal';
 import { MyOrdersModal } from './components/MyOrdersModal';
+import { LogoutConfirmModal } from './components/LogoutConfirmModal';
 import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
 import { type CartItem } from './data/bestsellers';
@@ -23,6 +24,7 @@ export function App() {
   const [user, setUser] = useState<UserProfile | null>(() => getSavedUserProfile());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isMyOrdersModalOpen, setIsMyOrdersModalOpen] = useState<boolean>(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState<boolean>(false);
 
   // Cart State (Guest: sessionStorage | Logged-In: DB/localStorage)
   const [cartItems, setCartItems] = useState<CartItem[]>(() => getStoredCart(!!getSavedUserProfile()));
@@ -239,7 +241,7 @@ export function App() {
         onOpenTrackModal={() => setIsMyOrdersModalOpen(true)}
         user={user}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
-        onLogout={handleUserLogout}
+        onLogout={() => setIsLogoutConfirmOpen(true)}
       />
 
       {/* Auth Modal (Login / Sign Up) */}
@@ -247,6 +249,13 @@ export function App() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onSuccess={handleAuthSuccess}
+      />
+
+      {/* Logout Confirmation Dialog Modal */}
+      <LogoutConfirmModal
+        isOpen={isLogoutConfirmOpen}
+        onClose={() => setIsLogoutConfirmOpen(false)}
+        onConfirmLogout={handleUserLogout}
       />
 
       {/* Unified My Orders & Tracking Modal */}
