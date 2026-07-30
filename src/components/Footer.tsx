@@ -3,9 +3,10 @@ import { PhoneCall, MapPin, Heart, ArrowUpRight, Leaf, Sparkles } from 'lucide-r
 
 interface FooterProps {
   onNavigatePage?: (page: 'home' | 'shop', categoryId?: string) => void;
+  onOpenTrackModal?: () => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onNavigatePage }) => {
+export const Footer: React.FC<FooterProps> = ({ onNavigatePage, onOpenTrackModal }) => {
   const handleNavClick = (page: 'home' | 'shop', hashAnchor?: string) => {
     if (onNavigatePage) {
       onNavigatePage(page);
@@ -24,7 +25,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage }) => {
 
   return (
     <footer id="footer" className="bg-[#FAFBF6] text-[#1F2937] pt-16 pb-8 px-4 sm:px-8 lg:px-12 border-t border-gray-200/80 relative overflow-hidden">
-      
+
       {/* Subtle Warm Background Ambient Glow */}
       <div className="absolute inset-0 pointer-events-none -z-0">
         <div className="absolute -bottom-20 -left-20 w-96 h-96 bg-[#F7FCE8] rounded-full blur-3xl opacity-70" />
@@ -32,10 +33,10 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage }) => {
       </div>
 
       <div className="max-w-7xl mx-auto relative z-10 space-y-12">
-        
+
         {/* Main 4-Column Premium Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-12 items-start text-left">
-          
+
           {/* Column 1: Brand & Heritage (4 cols lg) */}
           <div className="lg:col-span-4 space-y-4">
             <div className="flex items-center">
@@ -67,7 +68,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage }) => {
             <h4 className="font-serif-headline text-base font-extrabold text-[#1F2937] uppercase tracking-wider">
               Explore Storefront
             </h4>
-            
+
             <nav className="flex flex-col space-y-2 text-sm font-bold text-gray-600">
               <button
                 onClick={() => handleNavClick('home')}
@@ -100,6 +101,16 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage }) => {
                 <span>Our Preparation Method</span>
                 <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-[#95CD1A]" />
               </button>
+
+              {onOpenTrackModal && (
+                <button
+                  onClick={onOpenTrackModal}
+                  className="hover:text-[#95CD1A] transition-colors flex items-center justify-between text-left cursor-pointer group font-bold"
+                >
+                  <span>Track Live Order</span>
+                  <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-[#95CD1A]" />
+                </button>
+              )}
             </nav>
           </div>
 
@@ -109,11 +120,11 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage }) => {
               <img src="/fssai-logo.png" alt="FSSAI Logo" className="h-8 w-auto object-contain" />
               <span className="text-[#1F2937] font-extrabold text-sm">FSSAI Certified Business</span>
             </div>
-            
+
             <p className="text-xs text-gray-500 leading-normal">
               Government Food Safety & Standards Authority of India Registration:
             </p>
-            
+
             <div className="bg-[#FAFBF6] px-3.5 py-2 rounded-xl border border-gray-200 flex items-center justify-between">
               <span className="text-xs text-gray-400 font-bold uppercase">Lic No:</span>
               <span className="text-sm font-mono font-black text-[#1F2937] tracking-wider">
@@ -127,7 +138,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage }) => {
             <h4 className="font-serif-headline text-base font-extrabold text-[#1F2937] uppercase tracking-wider">
               Direct Contact
             </h4>
-            
+
             <div className="space-y-2 text-xs font-bold text-gray-600">
               <p className="flex items-center gap-2">
                 <PhoneCall className="w-4 h-4 text-[#95CD1A] shrink-0" />
@@ -155,7 +166,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage }) => {
         {/* Footer Bottom Bar */}
         <div className="pt-8 border-t border-gray-200/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-gray-500">
           <p>© {new Date().getFullYear()} Homemade Foods. All rights reserved.</p>
-          
+
           <p className="flex items-center gap-1.5">
             Made with <Heart className="w-3.5 h-3.5 text-[#95CD1A] fill-[#95CD1A]" /> for South Indian Taste Traditions
           </p>

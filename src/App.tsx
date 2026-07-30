@@ -5,9 +5,13 @@ import { CuratedProcessSection } from './components/CuratedProcessSection';
 import { ShopCatalog } from './components/ShopCatalog';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
+import { AuthModal } from './components/AuthModal';
+import { MyOrdersModal } from './components/MyOrdersModal';
 import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
 import { type CartItem } from './data/bestsellers';
+import { fetchCurrentUser, logoutCustomer, type UserProfile } from './services/authService';
+import { getStoredCart, saveCartItems, clearCartStorage } from './services/cartStorage';
 
 export function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'shop'>('home');
@@ -15,27 +19,29 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeNotification, setActiveNotification] = useState<string | null>(null);
 
-  // Cart State with LocalStorage Persistence
-  const [cartItems, setCartItems] = useState<CartItem[]>(() => {
-    try {
-      const savedCart = localStorage.getItem('hf_cart_items');
-      return savedCart ? JSON.parse(savedCart) : [];
-    } catch {
-      return [];
-    }
-  });
+  // User Auth & Modal States
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isMyOrdersModalOpen, setIsMyOrdersModalOpen] = useState<boolean>(false);
 
+  // Cart State (Guest: sessionStorage | Logged-In: DB/localStorage)
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
 
+  // Check logged-in user on mount
   useEffect(() => {
-    try {
-      localStorage.setItem('hf_cart_items', JSON.stringify(cartItems));
-    } catch (err) {
-      console.error('Failed to save cart to localStorage', err);
-    }
-  }, [cartItems]);
+    fetchCurrentUser().then((u) => {
+      setUser(u);
+      setCartItems(getStoredCart(!!u));
+    });
+  }, []);
 
-  // Sync hash URL navigation (e.g. #shop)
+  // Save cart whenever cartItems or user state changes
+  useEffect(() => {
+    saveCartItems(cartItems, !!user);
+  }, [cartItems, user]);
+
+  // Sync hash URL navigation (e.g. #shop, #track)
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
@@ -43,6 +49,8 @@ export function App() {
         setCurrentPage('shop');
       } else if (hash === '#home' || hash === '') {
         setCurrentPage('home');
+      } else if (hash.startsWith('#track')) {
+        setIsMyOrdersModalOpen(true);
       }
     };
 
@@ -51,6 +59,7 @@ export function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  // Bottom Toast Notification
   const showToast = (message: string) => {
     setActiveNotification(message);
     setTimeout(() => {
@@ -93,7 +102,21 @@ export function App() {
     handleNavigatePage('shop', 'all', '');
   };
 
-  // Cart Operations
+  // Auth Callbacks
+  const handleAuthSuccess = (loggedUser: UserProfile) => {
+    setUser(loggedUser);
+    setCartItems(getStoredCart(true));
+    showToast(`Welcome back, ${loggedUser.firstName}!`);
+  };
+
+  const handleUserLogout = () => {
+    logoutCustomer();
+    setUser(null);
+    setCartItems(getStoredCart(false));
+    showToast('Logged out successfully');
+  };
+
+  // Cart Operations: Add to Cart (Shows interactive Toast) vs Order Now (Opens Cart Directly)
   const handleAddToCart = (newItem: Omit<CartItem, 'id' | 'quantity'>) => {
     const compositeId = `${newItem.productId}-${newItem.weight}`;
     setCartItems((prevItems) => {
@@ -105,7 +128,21 @@ export function App() {
       }
       return [...prevItems, { ...newItem, id: compositeId, quantity: 1 }];
     });
-    showToast('Cart updated');
+    showToast(`Added ${newItem.name} to cart!`);
+  };
+
+  const handleOrderNow = (newItem: Omit<CartItem, 'id' | 'quantity'>) => {
+    const compositeId = `${newItem.productId}-${newItem.weight}`;
+    setCartItems((prevItems) => {
+      const existingItem = prevItems.find((item) => item.id === compositeId);
+      if (existingItem) {
+        return prevItems.map((item) =>
+          item.id === compositeId ? { ...item, quantity: item.quantity + 1 } : item
+        );
+      }
+      return [...prevItems, { ...newItem, id: compositeId, quantity: 1 }];
+    });
+    setIsCartOpen(true);
   };
 
   const handleUpdateQuantity = (id: string, newQty: number) => {
@@ -123,23 +160,32 @@ export function App() {
 
   const handleClearCart = () => {
     setCartItems([]);
+    clearCartStorage(!!user);
     showToast('Cart cleared');
   };
 
+  const SHIPPING_FEE = 40;
   const totalCartItemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-  const cartGrandTotal = cartItems.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
+  const cartSubtotal = cartItems.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
+  const cartGrandTotal = cartSubtotal > 0 ? cartSubtotal + SHIPPING_FEE : 0;
 
   return (
     <div className="min-h-screen bg-white text-[#1F2937] font-sans flex flex-col justify-between">
       
       {/* Bottom Floating Toast Notification */}
       {activeNotification && (
-        <div className={`fixed ${cartItems.length > 0 && !isCartOpen ? 'bottom-24 sm:bottom-28' : 'bottom-8'} left-1/2 -translate-x-1/2 z-[60] bg-white text-[#1F2937] px-4 py-2 rounded-xl shadow-xl border border-gray-200/90 flex items-center gap-2.5 animate-in fade-in slide-in-from-bottom-4 duration-300 pointer-events-none`}>
-          <div className="w-5 h-5 rounded-full bg-[#F7FCE8] text-[#95CD1A] flex items-center justify-center shrink-0">
-            <CheckCircle className="w-3.5 h-3.5 text-[#95CD1A]" />
+        <div
+          onClick={() => setIsCartOpen(true)}
+          className={`fixed ${cartItems.length > 0 && !isCartOpen ? 'bottom-24 sm:bottom-28' : 'bottom-8'} left-1/2 -translate-x-1/2 z-[60] bg-[#1F2937] text-white px-4.5 py-3 rounded-2xl shadow-2xl border border-gray-700/80 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 cursor-pointer hover:bg-black transition-all`}
+        >
+          <div className="w-6 h-6 rounded-full bg-[#95CD1A] text-white flex items-center justify-center shrink-0 shadow-md">
+            <CheckCircle className="w-4 h-4 text-white" />
           </div>
-          <span className="text-xs font-bold text-[#1F2937] tracking-wide whitespace-nowrap">
+          <span className="text-xs sm:text-sm font-extrabold tracking-wide whitespace-nowrap">
             {activeNotification}
+          </span>
+          <span className="text-xs font-black text-[#95CD1A] underline ml-1">
+            View Cart →
           </span>
         </div>
       )}
@@ -163,7 +209,7 @@ export function App() {
                   {totalCartItemCount} {totalCartItemCount === 1 ? 'item' : 'items'} added
                 </span>
                 <span className="text-base sm:text-lg font-extrabold text-white tracking-tight leading-snug">
-                  ₹{cartGrandTotal} <span className="text-[10px] text-gray-400 font-normal">(Incl. GST)</span>
+                  ₹{cartGrandTotal} <span className="text-[10px] text-gray-400 font-normal">(Incl. Shipping & GST)</span>
                 </span>
               </div>
             </div>
@@ -188,6 +234,26 @@ export function App() {
         onNavigate={(page) => handleNavigatePage(page, 'all', '')}
         cartItemCount={totalCartItemCount}
         onOpenCart={() => setIsCartOpen(true)}
+        onOpenTrackModal={() => setIsMyOrdersModalOpen(true)}
+        user={user}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onLogout={handleUserLogout}
+      />
+
+      {/* Auth Modal (Login / Sign Up) */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={handleAuthSuccess}
+      />
+
+      {/* Unified My Orders & Tracking Modal */}
+      <MyOrdersModal
+        isOpen={isMyOrdersModalOpen}
+        onClose={() => setIsMyOrdersModalOpen(false)}
+        user={user}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onExploreShop={() => handleNavigatePage('shop', 'all', '')}
       />
 
       {/* Sliding Cart Panel Drawer */}
@@ -199,6 +265,8 @@ export function App() {
         onRemoveItem={handleRemoveFromCart}
         onClearCart={handleClearCart}
         onExploreShop={() => handleNavigatePage('shop', 'all', '')}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        isLoggedIn={!!user}
       />
 
       {/* Main Page Routing View */}
@@ -212,7 +280,10 @@ export function App() {
               onViewInventory={handleViewInventory}
               onViewMenu={handleViewMenu}
             />
-            <CuratedProcessSection onAddToCart={handleAddToCart} />
+            <CuratedProcessSection
+              onAddToCart={handleAddToCart}
+              onOrderNow={handleOrderNow}
+            />
           </>
         ) : (
           /* Separate Shop Catalog Page View */
@@ -221,15 +292,18 @@ export function App() {
             initialSearchQuery={searchQuery}
             onNavigateHome={() => handleNavigatePage('home', 'all', '')}
             onAddToCart={handleAddToCart}
+            onOrderNow={handleOrderNow}
           />
         )}
       </main>
 
       {/* Persistent Footer */}
-      <Footer onNavigatePage={(page, categoryId) => handleNavigatePage(page, categoryId || 'all', '')} />
+      <Footer
+        onNavigatePage={(page, categoryId) => handleNavigatePage(page, categoryId || 'all', '')}
+        onOpenTrackModal={() => setIsMyOrdersModalOpen(true)}
+      />
     </div>
   );
 }
 
 export default App;
-

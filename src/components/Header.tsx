@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ArrowRight, ShoppingBag } from 'lucide-react';
+import { Menu, X, ArrowRight, ShoppingBag, User, LogOut, PackageCheck } from 'lucide-react';
+import type { UserProfile } from '../services/authService';
 
 interface HeaderProps {
   currentPage: 'home' | 'shop';
@@ -7,6 +8,10 @@ interface HeaderProps {
   onSearchClick?: () => void;
   cartItemCount?: number;
   onOpenCart?: () => void;
+  onOpenTrackModal?: () => void;
+  user?: UserProfile | null;
+  onOpenAuthModal?: () => void;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -14,6 +19,10 @@ export const Header: React.FC<HeaderProps> = ({
   onNavigate,
   cartItemCount = 0,
   onOpenCart,
+  onOpenTrackModal,
+  user = null,
+  onOpenAuthModal,
+  onLogout,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string>(currentPage === 'shop' ? 'shop' : 'home');
@@ -84,9 +93,9 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-xs w-full">
       <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between">
-        
+
         {/* Pure Clean Brand Logo */}
-        <div 
+        <div
           onClick={() => handleNavClick('home')}
           className="flex items-center cursor-pointer group py-1"
         >
@@ -99,13 +108,12 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Desktop Scrollspy Navigation Links */}
         <nav className="hidden md:flex items-center gap-8 text-base sm:text-lg font-extrabold text-gray-700">
-          
+
           {/* Home Link */}
           <button
             onClick={() => handleNavClick('home')}
-            className={`relative py-1 transition-all duration-200 cursor-pointer ${
-              activeSection === 'home' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
-            }`}
+            className={`relative py-1 transition-all duration-200 cursor-pointer ${activeSection === 'home' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+              }`}
           >
             <span>Home</span>
             {activeSection === 'home' && (
@@ -116,9 +124,8 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Categories Link */}
           <button
             onClick={() => handleNavClick('home', 'categories')}
-            className={`relative py-1 transition-all duration-200 cursor-pointer ${
-              activeSection === 'categories' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
-            }`}
+            className={`relative py-1 transition-all duration-200 cursor-pointer ${activeSection === 'categories' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+              }`}
           >
             <span>Categories</span>
             {activeSection === 'categories' && (
@@ -129,9 +136,8 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Our Method Link */}
           <button
             onClick={() => handleNavClick('home', 'process')}
-            className={`relative py-1 transition-all duration-200 cursor-pointer ${
-              activeSection === 'process' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
-            }`}
+            className={`relative py-1 transition-all duration-200 cursor-pointer ${activeSection === 'process' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+              }`}
           >
             <span>Our Method</span>
             {activeSection === 'process' && (
@@ -139,12 +145,20 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
+          {/* My Orders / Track Order Link */}
+          <button
+            onClick={onOpenTrackModal}
+            className="relative py-1 text-gray-700 hover:text-[#95CD1A] transition-all duration-200 cursor-pointer flex items-center gap-1.5 font-extrabold"
+          >
+            <PackageCheck className="w-4 h-4 text-[#95CD1A]" />
+            <span>{user ? 'My Orders' : 'Track Order'}</span>
+          </button>
+
           {/* Contact Us Link */}
           <button
             onClick={() => handleNavClick('home', 'footer')}
-            className={`relative py-1 transition-all duration-200 cursor-pointer ${
-              activeSection === 'footer' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
-            }`}
+            className={`relative py-1 transition-all duration-200 cursor-pointer ${activeSection === 'footer' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+              }`}
           >
             <span>Contact Us</span>
             {activeSection === 'footer' && (
@@ -153,13 +167,39 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </nav>
 
-        {/* Header Right Actions: Cart Icon Button & Shop Now CTA Button */}
-        <div className="flex items-center gap-3">
+        {/* Header Right Actions: Account/Login + Cart + Shop Now */}
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          
+          {/* User Account / Login Button */}
+          {user ? (
+            <div className="flex items-center gap-2 bg-gray-100 px-3.5 py-2.5 rounded-2xl">
+              <User className="w-4 h-4 text-[#95CD1A]" />
+              <span className="text-xs font-black text-[#1F2937] hidden sm:inline-block">
+                Hi, {user.firstName}
+              </span>
+              <button
+                onClick={onLogout}
+                title="Logout"
+                className="text-gray-400 hover:text-red-500 transition-colors p-1 cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onOpenAuthModal}
+              className="px-3.5 py-3 rounded-2xl bg-gray-100 text-[#1F2937] hover:bg-[#F7FCE8] hover:text-[#95CD1A] transition-all cursor-pointer font-extrabold text-xs sm:text-sm flex items-center gap-1.5"
+            >
+              <User className="w-4 h-4 text-[#95CD1A]" />
+              <span>Login</span>
+            </button>
+          )}
+
           {/* Cart Drawer Trigger Button */}
           <button
             onClick={onOpenCart}
             aria-label="View Cart"
-            className="relative px-4 py-3 rounded-2xl bg-gray-100 text-[#1F2937] hover:bg-[#F7FCE8] hover:text-[#95CD1A] transition-all cursor-pointer group shadow-2xs flex items-center gap-2 font-extrabold text-sm sm:text-base"
+            className="relative px-3.5 sm:px-4 py-3 rounded-2xl bg-gray-100 text-[#1F2937] hover:bg-[#F7FCE8] hover:text-[#95CD1A] transition-all cursor-pointer group shadow-2xs flex items-center gap-2 font-extrabold text-sm sm:text-base"
           >
             <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6 text-[#1F2937] group-hover:text-[#95CD1A] transition-colors" />
             <span>Cart</span>
@@ -172,11 +212,10 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => handleNavClick('shop')}
-            className={`hidden sm:inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl text-white font-extrabold text-base transition-all duration-300 shadow-md cursor-pointer ${
-              activeSection === 'shop'
+            className={`hidden sm:inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl text-white font-extrabold text-base transition-all duration-300 shadow-md cursor-pointer ${activeSection === 'shop'
                 ? 'bg-[#7EB30E] ring-4 ring-[#95CD1A]/30 scale-105 shadow-lg'
                 : 'bg-[#95CD1A] hover:bg-[#7EB30E] shadow-[#95CD1A]/25 hover:shadow-lg transform hover:-translate-y-0.5'
-            }`}
+              }`}
           >
             <ShoppingBag className="w-5 h-5 text-white" />
             <span>Shop Now</span>
@@ -201,36 +240,32 @@ export const Header: React.FC<HeaderProps> = ({
           <nav className="flex flex-col space-y-3 font-bold text-lg text-gray-800 text-center">
             <button
               onClick={() => handleNavClick('home')}
-              className={`py-2.5 border-b border-gray-100 ${
-                activeSection === 'home' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
-              }`}
+              className={`py-2.5 border-b border-gray-100 ${activeSection === 'home' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+                }`}
             >
               <span>Home</span>
             </button>
 
             <button
               onClick={() => handleNavClick('home', 'categories')}
-              className={`py-2.5 border-b border-gray-100 ${
-                activeSection === 'categories' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
-              }`}
+              className={`py-2.5 border-b border-gray-100 ${activeSection === 'categories' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+                }`}
             >
               <span>Categories</span>
             </button>
 
             <button
               onClick={() => handleNavClick('home', 'process')}
-              className={`py-2.5 border-b border-gray-100 ${
-                activeSection === 'process' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
-              }`}
+              className={`py-2.5 border-b border-gray-100 ${activeSection === 'process' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+                }`}
             >
               <span>Our Method</span>
             </button>
 
             <button
               onClick={() => handleNavClick('home', 'footer')}
-              className={`py-2.5 border-b border-gray-100 ${
-                activeSection === 'footer' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
-              }`}
+              className={`py-2.5 border-b border-gray-100 ${activeSection === 'footer' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
+                }`}
             >
               <span>Contact Us</span>
             </button>

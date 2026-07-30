@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import pkg from '@woocommerce/woocommerce-rest-api';
 import Razorpay from 'razorpay';
+import nodemailer from 'nodemailer';
 
 const WooCommerceRestApi = (pkg as any).default || pkg;
 
@@ -21,10 +22,11 @@ app.use(
 );
 app.use(express.json());
 
-// In-Memory Server Cache for Ultra-Fast Responses (<5ms)
+// In-Memory Caches & Transients
 let cachedProductsResponse: any = null;
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 30 * 1000;
+const userCartsMap = new Map<string, any[]>();
 
 function decodeHtmlEntities(str: string): string {
   if (!str) return '';
@@ -60,6 +62,66 @@ function getRazorpayClient() {
     key_id: keyId,
     key_secret: keySecret,
   });
+}
+
+// Transactional Email Dispatcher for Order Confirmation & Tracking
+async function sendOrderTrackingEmail(toEmail: string, customerName: string, wcOrderId: number, totalAmount: number, trackingLink: string) {
+  try {
+    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const smtpUser = process.env.SMTP_USER || '';
+    const smtpPass = process.env.SMTP_PASS || '';
+
+    if (!smtpUser || !smtpPass) {
+      console.log(`✉️ Email notification logged (SMTP credentials not configured): Order #${wcOrderId} for ${toEmail}. Track Link: ${trackingLink}`);
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: 587,
+      secure: false,
+      auth: { user: smtpUser, pass: smtpPass },
+    });
+
+    const mailOptions = {
+      from: `"Homemade Foods Madurai" <${smtpUser}>`,
+      to: toEmail,
+      subject: `🎉 Order Confirmation & Tracking - Order #${wcOrderId}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 12px; overflow: hidden;">
+          <div style="background-color: #95CD1A; padding: 24px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 24px;">Homemade Foods</h1>
+            <p style="color: #ffffff; margin: 4px 0 0 0; font-size: 14px;">Order Confirmed & Payment Received!</p>
+          </div>
+          <div style="padding: 24px; color: #1F2937;">
+            <p>Dear <strong>${customerName}</strong>,</p>
+            <p>Thank you for your order with Homemade Foods! Your delicious traditional South Indian food is being prepared in our kitchen.</p>
+            
+            <div style="background-color: #FAFBF6; border: 1px solid #ECF9CA; padding: 16px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 0 0 8px 0;"><strong>Order ID:</strong> #${wcOrderId}</p>
+              <p style="margin: 0 0 8px 0;"><strong>Total Amount Paid:</strong> ₹${totalAmount}</p>
+              <p style="margin: 0;"><strong>Status:</strong> Kitchen Preparation & Packing</p>
+            </div>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${trackingLink}" style="background-color: #95CD1A; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: bold; display: inline-block;">
+                Track Live Order Status →
+              </a>
+            </div>
+
+            <p style="font-size: 12px; color: #6B7280; text-align: center;">
+              Or copy this tracking URL: <a href="${trackingLink}">${trackingLink}</a>
+            </p>
+          </div>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✉️ Order tracking email sent successfully to ${toEmail}`);
+  } catch (err: any) {
+    console.warn('Email sending warning:', err.message);
+  }
 }
 
 // GET /api/v1/products
@@ -178,7 +240,92 @@ app.get('/api/v1/products', async (req, res) => {
   }
 });
 
-// GET /api/v1/products/categories
+// POST /api/v1/auth/login-signup (Smart Unified Login or Auto-Signup)
+app.post('/api/v1/auth/login-signup', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const wcApi = getWcApi();
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    let customer: any = null;
+
+    try {
+      const searchRes = await wcApi.get('customers', { email: cleanEmail });
+      if (searchRes.data && searchRes.data.length > 0) {
+        customer = searchRes.data[0];
+      }
+    } catch (err) {}
+
+    // If customer doesn't exist in WooCommerce yet, automatically create account!
+    if (!customer) {
+      const username = cleanEmail.split('@')[0] + '_' + Math.floor(1000 + Math.random() * 9000);
+      const customerPayload = {
+        email: cleanEmail,
+        first_name: cleanEmail.split('@')[0],
+        last_name: 'Customer',
+        username,
+        password,
+        billing: {
+          first_name: cleanEmail.split('@')[0],
+          last_name: 'Customer',
+          email: cleanEmail,
+          phone: '',
+          address_1: 'Madurai',
+          city: 'Madurai',
+          state: 'TN',
+          postcode: '625001',
+          country: 'IN',
+        },
+        shipping: {
+          first_name: cleanEmail.split('@')[0],
+          last_name: 'Customer',
+          address_1: 'Madurai',
+          city: 'Madurai',
+          state: 'TN',
+          postcode: '625001',
+          country: 'IN',
+        },
+      };
+
+      try {
+        const wcRes = await wcApi.post('customers', customerPayload);
+        customer = wcRes.data;
+      } catch (wcErr) {
+        customer = {
+          id: Date.now(),
+          email: cleanEmail,
+          first_name: cleanEmail.split('@')[0],
+          last_name: 'Customer',
+          billing: customerPayload.billing,
+          shipping: customerPayload.shipping,
+        };
+      }
+    }
+
+    const token = Buffer.from(`${customer.id}:${cleanEmail}:${Date.now()}`).toString('base64');
+
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: customer.id,
+        email: customer.email,
+        firstName: customer.first_name || customer.email.split('@')[0],
+        lastName: customer.last_name || '',
+        displayName: `${customer.first_name || customer.email.split('@')[0]} ${customer.last_name || ''}`.trim(),
+        phone: customer.billing?.phone || '',
+        billing: customer.billing || {},
+        shipping: customer.shipping || {},
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Authentication failed' });
+  }
+});
 app.get('/api/v1/products/categories', async (_req, res) => {
   try {
     const wcApi = getWcApi();
@@ -189,6 +336,261 @@ app.get('/api/v1/products/categories', async (_req, res) => {
       count: c.count,
     }));
     return res.json({ success: true, source: 'woocommerce', data: categories });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/v1/auth/register
+app.post('/api/v1/auth/register', async (req, res) => {
+  try {
+    const { email, password, firstName, lastName, phone, address, city, pincode } = req.body;
+    const wcApi = getWcApi();
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
+
+    const username = email.split('@')[0] + '_' + Math.floor(1000 + Math.random() * 9000);
+
+    const customerData = {
+      email: email.trim().toLowerCase(),
+      first_name: firstName || 'Customer',
+      last_name: lastName || '',
+      username,
+      password,
+      billing: {
+        first_name: firstName || 'Customer',
+        last_name: lastName || '',
+        email: email.trim().toLowerCase(),
+        phone: phone || '',
+        address_1: address || '',
+        city: city || 'Madurai',
+        state: 'TN',
+        postcode: pincode || '625001',
+        country: 'IN',
+      },
+      shipping: {
+        first_name: firstName || 'Customer',
+        last_name: lastName || '',
+        address_1: address || '',
+        city: city || 'Madurai',
+        state: 'TN',
+        postcode: pincode || '625001',
+        country: 'IN',
+      },
+    };
+
+    let userObj: any = null;
+    try {
+      const wcRes = await wcApi.post('customers', customerData);
+      userObj = wcRes.data;
+    } catch (wcErr: any) {
+      userObj = {
+        id: Date.now(),
+        email: email.trim().toLowerCase(),
+        first_name: firstName || 'Customer',
+        last_name: lastName || '',
+        username,
+        billing: customerData.billing,
+        shipping: customerData.shipping,
+      };
+    }
+
+    const token = Buffer.from(`${userObj.id}:${email.trim().toLowerCase()}:${Date.now()}`).toString('base64');
+
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: userObj.id,
+        email: userObj.email,
+        firstName: userObj.first_name,
+        lastName: userObj.last_name,
+        displayName: `${userObj.first_name} ${userObj.last_name}`.trim(),
+        phone: userObj.billing?.phone || phone || '',
+        billing: userObj.billing || customerData.billing,
+        shipping: userObj.shipping || customerData.shipping,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Registration failed' });
+  }
+});
+
+// POST /api/v1/auth/login
+app.post('/api/v1/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const wcApi = getWcApi();
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    let customer: any = null;
+
+    try {
+      const searchRes = await wcApi.get('customers', { email: cleanEmail });
+      if (searchRes.data && searchRes.data.length > 0) {
+        customer = searchRes.data[0];
+      }
+    } catch (err) {}
+
+    if (!customer) {
+      customer = {
+        id: Date.now(),
+        email: cleanEmail,
+        first_name: cleanEmail.split('@')[0],
+        last_name: 'Customer',
+        billing: { email: cleanEmail, first_name: cleanEmail.split('@')[0], phone: '9876543210', address_1: 'Madurai', city: 'Madurai', state: 'TN', postcode: '625001', country: 'IN' },
+        shipping: { email: cleanEmail, first_name: cleanEmail.split('@')[0], phone: '9876543210', address_1: 'Madurai', city: 'Madurai', state: 'TN', postcode: '625001', country: 'IN' },
+      };
+    }
+
+    const token = Buffer.from(`${customer.id}:${cleanEmail}:${Date.now()}`).toString('base64');
+
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: customer.id,
+        email: customer.email,
+        firstName: customer.first_name || 'Customer',
+        lastName: customer.last_name || '',
+        displayName: `${customer.first_name || 'Customer'} ${customer.last_name || ''}`.trim(),
+        phone: customer.billing?.phone || '9876543210',
+        billing: customer.billing,
+        shipping: customer.shipping,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Login failed' });
+  }
+});
+
+// GET /api/v1/auth/me
+app.get('/api/v1/auth/me', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const decoded = Buffer.from(token, 'base64').toString('utf-8');
+    const [idStr, email] = decoded.split(':');
+
+    const wcApi = getWcApi();
+    let customer: any = null;
+
+    if (idStr && !isNaN(parseInt(idStr)) && parseInt(idStr) < 10000000) {
+      try {
+        const wcRes = await wcApi.get(`customers/${idStr}`);
+        customer = wcRes.data;
+      } catch (err) {}
+    }
+
+    if (!customer) {
+      customer = {
+        id: idStr || Date.now(),
+        email: email || 'user@homemadefoods.in',
+        first_name: (email || 'Customer').split('@')[0],
+        last_name: '',
+        billing: { first_name: (email || 'Customer').split('@')[0], last_name: '', email: email || '', phone: '9876543210', address_1: 'Madurai', city: 'Madurai', state: 'TN', postcode: '625001' },
+        shipping: { first_name: (email || 'Customer').split('@')[0], last_name: '', address_1: 'Madurai', city: 'Madurai', state: 'TN', postcode: '625001' },
+      };
+    }
+
+    return res.json({
+      success: true,
+      user: {
+        id: customer.id,
+        email: customer.email,
+        firstName: customer.first_name,
+        lastName: customer.last_name,
+        displayName: `${customer.first_name} ${customer.last_name}`.trim(),
+        phone: customer.billing?.phone || '',
+        billing: customer.billing,
+        shipping: customer.shipping,
+      },
+    });
+  } catch (error: any) {
+    return res.status(401).json({ success: false, message: 'Invalid session token' });
+  }
+});
+
+// GET /api/v1/auth/my-orders
+app.get('/api/v1/auth/my-orders', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const decoded = Buffer.from(token, 'base64').toString('utf-8');
+    const [idStr, userEmail] = decoded.split(':');
+
+    const wcApi = getWcApi();
+    const statusStageMap: Record<string, { stage: number; label: string }> = {
+      pending: { stage: 1, label: 'Order Placed (Pending Payment)' },
+      processing: { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
+      on_hold: { stage: 2, label: 'Order On Hold' },
+      shipped: { stage: 3, label: 'Dispatched & Out for Delivery' },
+      completed: { stage: 4, label: 'Successfully Delivered' },
+      cancelled: { stage: 0, label: 'Order Cancelled' },
+      refunded: { stage: 0, label: 'Order Refunded' },
+      failed: { stage: 0, label: 'Payment Failed' },
+    };
+
+    let orders: any[] = [];
+    try {
+      const response = await wcApi.get('orders', { per_page: 50 });
+      orders = response.data;
+      if (userEmail) {
+        orders = orders.filter((o: any) =>
+          (o.billing?.email && o.billing.email.toLowerCase() === userEmail.toLowerCase()) ||
+          (o.customer_id && o.customer_id.toString() === idStr)
+        );
+      }
+    } catch (err) {}
+
+    const formattedOrders = orders.map((order: any) => {
+      const currentStatus = statusStageMap[order.status] || { stage: 2, label: order.status };
+      return {
+        id: order.id,
+        status: order.status,
+        statusLabel: currentStatus.label,
+        stage: currentStatus.stage,
+        total: order.total,
+        currency: order.currency_symbol || '₹',
+        dateCreated: order.date_created,
+        shippingAddress: `${order.shipping?.address_1 || order.billing?.address_1 || ''}, ${order.shipping?.city || order.billing?.city || ''}`,
+        items: order.line_items?.map((item: any) => ({
+          name: item.name,
+          quantity: item.quantity,
+          total: item.total,
+        })),
+      };
+    });
+
+    return res.json({ success: true, data: formattedOrders });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/v1/cart/sync
+app.post('/api/v1/cart/sync', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      const token = authHeader.replace('Bearer ', '');
+      userCartsMap.set(token, req.body.items || []);
+    }
+    return res.json({ success: true, message: 'Cart synced' });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -242,11 +644,20 @@ app.post('/api/v1/checkout/create-order', async (req, res) => {
         country: 'IN',
       },
       line_items: lineItems,
+      shipping_lines: [
+        {
+          method_id: 'flat_rate',
+          method_title: 'Flat Delivery Charge',
+          total: '40.00',
+        },
+      ],
       customer_note: notes || 'Order placed via Headless Storefront',
     };
 
     let wcOrderId = Date.now();
-    let totalAmountInRupees = items.reduce((sum: number, item: any) => sum + ((item.pricePerUnit || 50) * (item.quantity || 1)), 0);
+    const SHIPPING_FEE = 40;
+    const subtotal = items.reduce((sum: number, item: any) => sum + ((item.pricePerUnit || 50) * (item.quantity || 1)), 0);
+    let totalAmountInRupees = subtotal > 0 ? subtotal + SHIPPING_FEE : 0;
 
     try {
       const wcRes = await wcApi.post('orders', wcOrderPayload);
@@ -301,7 +712,7 @@ app.post('/api/v1/checkout/create-order', async (req, res) => {
 // POST /api/v1/checkout/verify-payment
 app.post('/api/v1/checkout/verify-payment', async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, wcOrderId } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, wcOrderId, customerEmail, customerName, totalAmount } = req.body;
     const keySecret = (process.env.RAZORPAY_KEY_SECRET || 'mw34w1wZGXkKlbZYTEDcMKu7').trim();
     const wcApi = getWcApi();
 
@@ -326,7 +737,13 @@ app.post('/api/v1/checkout/verify-payment', async (req, res) => {
       console.warn('WooCommerce order status update warning:', err.message);
     }
 
-    return res.json({ success: true, message: 'Payment verified', wcOrderId });
+    // Trigger Order Confirmation Email with Tracking Link
+    const trackingLink = `https://homefoods-lac.vercel.app/#track?id=${wcOrderId}`;
+    if (customerEmail && customerEmail.includes('@')) {
+      sendOrderTrackingEmail(customerEmail, customerName || 'Valued Customer', wcOrderId, totalAmount || 0, trackingLink);
+    }
+
+    return res.json({ success: true, message: 'Payment verified', wcOrderId, trackingLink });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -340,14 +757,32 @@ app.get('/api/v1/checkout/track/:id', async (req, res) => {
     const wcRes = await wcApi.get(`orders/${id}`);
     const order = wcRes.data;
 
+    const statusStageMap: Record<string, { stage: number; label: string }> = {
+      pending: { stage: 1, label: 'Order Placed (Pending Payment)' },
+      processing: { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
+      on_hold: { stage: 2, label: 'Order On Hold' },
+      shipped: { stage: 3, label: 'Dispatched & Out for Delivery' },
+      completed: { stage: 4, label: 'Successfully Delivered' },
+      cancelled: { stage: 0, label: 'Order Cancelled' },
+      refunded: { stage: 0, label: 'Order Refunded' },
+      failed: { stage: 0, label: 'Payment Failed' },
+    };
+
+    const currentStatus = statusStageMap[order.status] || { stage: 2, label: order.status };
+
     return res.json({
       success: true,
       data: {
         orderId: order.id,
         status: order.status,
+        statusLabel: currentStatus.label,
+        stage: currentStatus.stage,
         total: order.total,
+        currency: order.currency_symbol || '₹',
+        dateCreated: order.date_created,
         customerName: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim(),
         phone: order.billing?.phone || '',
+        shippingAddress: `${order.shipping?.address_1 || order.billing?.address_1 || ''}, ${order.shipping?.city || order.billing?.city || ''}`,
         items: order.line_items?.map((item: any) => ({ name: item.name, quantity: item.quantity })),
       },
     });

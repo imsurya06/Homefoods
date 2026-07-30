@@ -6,9 +6,10 @@ import { getLiveProducts, getCachedProductsSync } from '../services/productServi
 
 interface CuratedProcessSectionProps {
   onAddToCart?: (item: Omit<CartItem, 'id' | 'quantity'>) => void;
+  onOrderNow?: (item: Omit<CartItem, 'id' | 'quantity'>) => void;
 }
 
-export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ onAddToCart }) => {
+export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ onAddToCart, onOrderNow }) => {
   const [liveProducts, setLiveProducts] = useState<Product[]>(() => getCachedProductsSync().slice(0, 3));
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
 
@@ -146,15 +147,18 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
                   const priceInfo = calculatePriceDetails(currentVariant.basePrice, product.gstPercentage);
 
                   const handleOrderNow = () => {
-                    if (onAddToCart) {
-                      onAddToCart({
-                        productId: product.id,
-                        name: product.name,
-                        weight: currentVariant.weight,
-                        pricePerUnit: priceInfo.totalPrice,
-                        imageUrl: product.imageUrl,
-                        gstPercentage: product.gstPercentage,
-                      });
+                    const itemData = {
+                      productId: product.id,
+                      name: product.name,
+                      weight: currentVariant.weight,
+                      pricePerUnit: priceInfo.totalPrice,
+                      imageUrl: product.imageUrl,
+                      gstPercentage: product.gstPercentage,
+                    };
+                    if (onOrderNow) {
+                      onOrderNow(itemData);
+                    } else if (onAddToCart) {
+                      onAddToCart(itemData);
                     }
                   };
 

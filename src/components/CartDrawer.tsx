@@ -11,6 +11,8 @@ interface CartDrawerProps {
   onRemoveItem: (id: string) => void;
   onClearCart: () => void;
   onExploreShop?: () => void;
+  onOpenAuthModal?: () => void;
+  isLoggedIn?: boolean;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -21,6 +23,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onRemoveItem,
   onClearCart,
   onExploreShop,
+  onOpenAuthModal,
+  isLoggedIn = false,
 }) => {
   // Shipping & Contact Details State with LocalStorage persistence
   const [customerName, setCustomerName] = useState<string>(() => {
@@ -102,8 +106,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   if (!isOpen) return null;
 
+  const SHIPPING_FEE = 40;
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
-  const grandTotal = items.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
+  const subtotal = items.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
+  const grandTotal = subtotal > 0 ? subtotal + SHIPPING_FEE : 0;
 
   const handleOrderNow = async () => {
     setCheckoutError(null);
@@ -113,19 +119,45 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       return;
     }
 
+    // Enforce Mandatory Form Field Validation
+    if (!customerName.trim()) {
+      setCheckoutError('Full Name is mandatory');
+      return;
+    }
+    if (!mobileNumber.trim() || mobileNumber.trim().length < 10) {
+      setCheckoutError('Valid 10-digit Mobile Number is mandatory');
+      return;
+    }
+    if (!email.trim() || !email.includes('@')) {
+      setCheckoutError('Valid Email Address is mandatory');
+      return;
+    }
+    if (!shippingAddress.trim()) {
+      setCheckoutError('Shipping Address is mandatory');
+      return;
+    }
+    if (!city.trim()) {
+      setCheckoutError('City is mandatory');
+      return;
+    }
+    if (!pincode.trim() || pincode.trim().length < 6) {
+      setCheckoutError('Valid 6-digit Pincode is mandatory');
+      return;
+    }
+
     setIsProcessing(true);
 
     const payload: CheckoutPayload = {
       customerDetails: {
-        name: customerName.trim() || 'Guest Customer',
-        email: email.trim() || 'guest@homemadefoods.in',
-        phone: mobileNumber.trim() || '9999999999',
+        name: customerName.trim(),
+        email: email.trim(),
+        phone: mobileNumber.trim(),
       },
       shippingAddress: {
-        address: shippingAddress.trim() || 'Standard Delivery Address',
-        city: city.trim() || 'Madurai',
+        address: shippingAddress.trim(),
+        city: city.trim(),
         state: 'Tamil Nadu',
-        pincode: pincode.trim() || '625001',
+        pincode: pincode.trim(),
       },
       items,
     };
@@ -323,6 +355,29 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                 {/* Delivery & Shipping Details Input Form */}
                 <div className="pt-2">
+
+                  {/* Have an Account? Login Banner */}
+                  {!isLoggedIn && onOpenAuthModal && (
+                    <div className="mb-3 p-3.5 bg-[#F7FCE8] border border-[#95CD1A]/40 rounded-2xl flex items-center justify-between gap-3 text-left">
+                      <div>
+                        <span className="text-xs font-black text-[#1F2937] block">Have an account?</span>
+                        <span className="text-[11px] text-gray-500 font-medium leading-tight block">
+                          Login to auto-fill saved address
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onOpenAuthModal();
+                        }}
+                        className="px-3 py-1.5 bg-[#95CD1A] hover:bg-[#7EB30E] text-white text-xs font-extrabold rounded-xl transition-all shadow-xs shrink-0 cursor-pointer"
+                      >
+                        Continue with Account
+                      </button>
+                    </div>
+                  )}
+
                   <div className="p-4 bg-gray-50/90 rounded-2xl border border-gray-200/90 text-left space-y-3 shadow-2xs">
                     <div className="flex items-center gap-2 text-xs font-extrabold text-[#1F2937] uppercase tracking-wider">
                       <MapPin className="w-4 h-4 text-[#95CD1A]" />
@@ -430,7 +485,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs text-gray-500 font-bold">
                   <span>Subtotal ({totalQuantity} items)</span>
-                  <span>₹{grandTotal}</span>
+                  <span>₹{subtotal}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-gray-500 font-bold">
+                  <span>Delivery Charge</span>
+                  <span className="text-[#1F2937] font-extrabold">₹{SHIPPING_FEE}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs text-gray-500 font-bold">
                   <span>GST & Taxes</span>
@@ -446,7 +505,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </span>
                   </div>
                   <span className="text-[11px] text-gray-400 font-semibold">
-                    (Includes GST)
+                    (Includes ₹{SHIPPING_FEE} Shipping & GST)
                   </span>
                 </div>
               </div>

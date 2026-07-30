@@ -10,6 +10,7 @@ interface ShopCatalogProps {
   initialSearchQuery?: string;
   onNavigateHome?: () => void;
   onAddToCart?: (item: Omit<CartItem, 'id' | 'quantity'>) => void;
+  onOrderNow?: (item: Omit<CartItem, 'id' | 'quantity'>) => void;
 }
 
 export const ShopCatalog: React.FC<ShopCatalogProps> = ({
@@ -17,6 +18,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
   initialSearchQuery = '',
   onNavigateHome,
   onAddToCart,
+  onOrderNow,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
   const [searchQuery, setSearchQuery] = useState<string>(initialSearchQuery);
@@ -378,6 +380,22 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                     }
                   };
 
+                  const handleOrderNowClick = () => {
+                    const itemData = {
+                      productId: product.id,
+                      name: product.name,
+                      weight: currentVariant.weight,
+                      pricePerUnit: priceInfo.totalPrice,
+                      imageUrl: product.imageUrl,
+                      gstPercentage: product.gstPercentage,
+                    };
+                    if (onOrderNow) {
+                      onOrderNow(itemData);
+                    } else if (onAddToCart) {
+                      onAddToCart(itemData);
+                    }
+                  };
+
                   return (
                     <div
                       key={product.id}
@@ -447,22 +465,22 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
 
                         </div>
 
-                        {/* Dual Action Buttons: Add to Cart & Order Now */}
-                        <div className="pt-1 grid grid-cols-2 gap-2">
+                        {/* Dual Action Buttons: Add to Cart & Order Now (Stacked on mobile, 2 cols on desktop) */}
+                        <div className="pt-1 flex flex-col gap-2 sm:grid sm:grid-cols-2 sm:gap-2">
                           <button
                             onClick={handleAddToCartClick}
-                            className="w-full py-2.5 px-2 bg-[#F7FCE8] hover:bg-[#95CD1A] text-[#1F2937] hover:text-white font-extrabold text-xs rounded-xl border border-[#95CD1A]/40 transition-all duration-200 shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer text-center group/cartBtn"
+                            className="w-full py-2.5 px-3 bg-[#F7FCE8] hover:bg-[#95CD1A] text-[#1F2937] hover:text-white font-extrabold text-xs sm:text-xs rounded-xl border border-[#95CD1A]/40 transition-all duration-200 shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer text-center group/cartBtn"
                           >
                             <ShoppingBag className="w-3.5 h-3.5 text-[#95CD1A] group-hover/cartBtn:text-white shrink-0" />
-                            <span className="truncate">Add to Cart</span>
+                            <span className="whitespace-nowrap font-black">Add to Cart</span>
                           </button>
 
                           <button
-                            onClick={handleAddToCartClick}
-                            className="w-full py-2.5 px-2 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-xs rounded-xl transition-all duration-200 shadow-md shadow-[#95CD1A]/20 hover:shadow-lg transform hover:-translate-y-0.5 flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                            onClick={handleOrderNowClick}
+                            className="w-full py-2.5 px-3 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-xs sm:text-xs rounded-xl transition-all duration-200 shadow-md shadow-[#95CD1A]/20 hover:shadow-lg transform hover:-translate-y-0.5 flex items-center justify-center gap-1.5 cursor-pointer text-center"
                           >
                             <Zap className="w-3.5 h-3.5 text-white shrink-0 fill-white" />
-                            <span className="truncate">Order Now</span>
+                            <span className="whitespace-nowrap font-black">Order Now</span>
                           </button>
                         </div>
 

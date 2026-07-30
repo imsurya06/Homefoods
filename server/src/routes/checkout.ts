@@ -59,10 +59,17 @@ checkoutRouter.post('/create-order', async (req: Request, res: Response) => {
           address_1: shippingAddress?.address || billingAddress?.address || 'Street Address',
           city: shippingAddress?.city || billingAddress?.city || 'Madurai',
           state: shippingAddress?.state || billingAddress?.state || 'TN',
-          postcode: shippingAddress?.pincode || billingAddress?.pincode || '625001',
+          postcode: shippingAddress?.pincode || '625001',
           country: 'IN',
         },
         line_items: lineItems,
+        shipping_lines: [
+          {
+            method_id: 'flat_rate',
+            method_title: 'Flat Delivery Charge',
+            total: '40.00',
+          },
+        ],
         customer_note: notes || 'Order placed via Headless React Storefront',
       };
 
@@ -73,6 +80,10 @@ checkoutRouter.post('/create-order', async (req: Request, res: Response) => {
       const wcRes = await wcApi.post('orders', wcOrderPayload);
       wcOrderId = wcRes.data.id;
       totalAmountInRupees = parseFloat(wcRes.data.total);
+    } else {
+      const SHIPPING_FEE = 40;
+      const subtotal = items.reduce((sum: number, item: any) => sum + (item.pricePerUnit * item.quantity), 0);
+      totalAmountInRupees = subtotal > 0 ? subtotal + SHIPPING_FEE : 0;
     }
 
     // 2. Create Razorpay Order
