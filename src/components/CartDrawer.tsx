@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, ShoppingBag, Trash2, Plus, Minus, PhoneCall, ArrowRight, MapPin, Phone } from 'lucide-react';
-import { type CartItem, generateCartCheckoutWhatsAppUrl } from '../data/bestsellers';
+import { X, ShoppingBag, Trash2, Plus, Minus, ArrowRight, MapPin, Phone, Mail, CheckCircle2, AlertCircle } from 'lucide-react';
+import { type CartItem } from '../data/bestsellers';
+import { processRazorpayCheckout, type CheckoutPayload } from '../services/checkoutService';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -30,6 +31,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
   });
 
+  const [email, setEmail] = useState<string>(() => {
+    try {
+      return localStorage.getItem('hf_customer_email') || '';
+    } catch {
+      return '';
+    }
+  });
+
   const [mobileNumber, setMobileNumber] = useState<string>(() => {
     try {
       return localStorage.getItem('hf_mobile_number') || '';
@@ -46,15 +55,38 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
   });
 
+  const [city, setCity] = useState<string>(() => {
+    try {
+      return localStorage.getItem('hf_shipping_city') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [pincode, setPincode] = useState<string>(() => {
+    try {
+      return localStorage.getItem('hf_shipping_pincode') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [orderSuccess, setOrderSuccess] = useState<{ wcOrderId: number; paymentId: string } | null>(null);
+
   useEffect(() => {
     try {
       localStorage.setItem('hf_customer_name', customerName);
+      localStorage.setItem('hf_customer_email', email);
       localStorage.setItem('hf_mobile_number', mobileNumber);
       localStorage.setItem('hf_shipping_address', shippingAddress);
+      localStorage.setItem('hf_shipping_city', city);
+      localStorage.setItem('hf_shipping_pincode', pincode);
     } catch (err) {
       console.error('Failed to save shipping details to localStorage', err);
     }
-  }, [customerName, mobileNumber, shippingAddress]);
+  }, [customerName, email, mobileNumber, shippingAddress, city, pincode]);
 
   // Prevent background page from scrolling while drawer is open
   useEffect(() => {
@@ -73,11 +105,44 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
   const grandTotal = items.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
 
-  const whatsappCheckoutUrl = generateCartCheckoutWhatsAppUrl(items, {
-    customerName,
-    phone: mobileNumber,
-    address: shippingAddress,
-  });
+  const handleOrderNow = async () => {
+    setCheckoutError(null);
+
+    if (items.length === 0) {
+      setCheckoutError('Your cart is empty');
+      return;
+    }
+
+    setIsProcessing(true);
+
+    const payload: CheckoutPayload = {
+      customerDetails: {
+        name: customerName.trim() || 'Guest Customer',
+        email: email.trim() || 'guest@homemadefoods.in',
+        phone: mobileNumber.trim() || '9999999999',
+      },
+      shippingAddress: {
+        address: shippingAddress.trim() || 'Standard Delivery Address',
+        city: city.trim() || 'Madurai',
+        state: 'Tamil Nadu',
+        pincode: pincode.trim() || '625001',
+      },
+      items,
+    };
+
+    await processRazorpayCheckout(
+      payload,
+      (response) => {
+        setIsProcessing(false);
+        setOrderSuccess(response);
+        onClearCart();
+      },
+      (errorMsg) => {
+        setIsProcessing(false);
+        setCheckoutError(errorMsg);
+      }
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden text-[#1F2937]">
@@ -101,7 +166,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   Your Order Cart
                 </h2>
                 <span className="text-xs font-bold text-gray-600">
-                  {totalQuantity} {totalQuantity === 1 ? 'item' : 'items'} selected
+                  {orderSuccess ? 'Order Placed' : `${totalQuantity} ${totalQuantity === 1 ? 'item' : 'items'} selected`}
                 </span>
               </div>
             </div>
@@ -117,7 +182,38 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
           {/* Cart Items & Shipping Details Scrollable Content */}
           <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
-            {items.length === 0 ? (
+            
+            {/* Order Success View */}
+            {orderSuccess ? (
+              <div className="py-10 text-center space-y-4">
+                <div className="w-16 h-16 rounded-full bg-[#F7FCE8] text-[#95CD1A] flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-10 h-10" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-xl font-extrabold text-[#1F2937]">
+                    Order Placed Successfully!
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Thank you for your order. Order ID: <strong className="text-[#1F2937]">#{orderSuccess.wcOrderId}</strong>
+                  </p>
+                  <p className="text-[11px] text-gray-400 font-mono mt-1">
+                    Payment ID: {orderSuccess.paymentId}
+                  </p>
+                </div>
+
+                <div className="pt-4">
+                  <button
+                    onClick={() => {
+                      setOrderSuccess(null);
+                      onClose();
+                    }}
+                    className="w-full py-3 bg-[#95CD1A] hover:bg-[#7EB30E] text-white text-xs sm:text-sm font-extrabold rounded-xl shadow-md transition-all cursor-pointer"
+                  >
+                    Continue Shopping
+                  </button>
+                </div>
+              </div>
+            ) : items.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-12">
                 <div className="w-20 h-20 rounded-full bg-[#F7FCE8] text-[#95CD1A] flex items-center justify-center">
                   <ShoppingBag className="w-10 h-10" />
@@ -145,6 +241,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </div>
             ) : (
               <>
+                {/* Checkout Error Notice */}
+                {checkoutError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-xs text-red-700 font-semibold">
+                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                    <span>{checkoutError}</span>
+                  </div>
+                )}
+
+                {/* Items List */}
                 <div className="space-y-3">
                   {items.map((item) => {
                     const itemTotal = item.pricePerUnit * item.quantity;
@@ -227,7 +332,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     <div className="space-y-2.5 text-xs">
                       <div>
                         <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                          Full Name (Optional)
+                          Full Name
                         </label>
                         <input
                           type="text"
@@ -238,33 +343,79 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                          Mobile Number
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="tel"
-                            value={mobileNumber}
-                            onChange={(e) => setMobileNumber(e.target.value)}
-                            placeholder="e.g. +91 98765 43210"
-                            className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all"
-                          />
-                          <Phone className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                            Mobile Number
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="tel"
+                              value={mobileNumber}
+                              onChange={(e) => setMobileNumber(e.target.value)}
+                              placeholder="+91 9876543210"
+                              className="w-full pl-8 pr-2 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all"
+                            />
+                            <Phone className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                            Email Address
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="email"
+                              value={email}
+                              onChange={(e) => setEmail(e.target.value)}
+                              placeholder="name@email.com"
+                              className="w-full pl-8 pr-2 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all"
+                            />
+                            <Mail className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          </div>
                         </div>
                       </div>
 
                       <div>
                         <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                          Shipping / Delivery Address
+                          Shipping Address
                         </label>
                         <textarea
                           rows={2}
                           value={shippingAddress}
                           onChange={(e) => setShippingAddress(e.target.value)}
-                          placeholder="Door No, Street Name, Area, City, Pincode"
+                          placeholder="Door No, Street Name, Area"
                           className="w-full px-3 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium resize-none transition-all"
                         />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                            City
+                          </label>
+                          <input
+                            type="text"
+                            value={city}
+                            onChange={(e) => setCity(e.target.value)}
+                            placeholder="Madurai"
+                            className="w-full px-3 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                            Pincode
+                          </label>
+                          <input
+                            type="text"
+                            value={pincode}
+                            onChange={(e) => setPincode(e.target.value)}
+                            placeholder="625001"
+                            className="w-full px-3 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -274,7 +425,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           </div>
 
           {/* Cart Footer & Checkout Panel */}
-          {items.length > 0 && (
+          {items.length > 0 && !orderSuccess && (
             <div className="p-6 bg-white border-t border-gray-200 space-y-4 shadow-lg shrink-0">
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs text-gray-500 font-bold">
@@ -300,16 +451,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
               </div>
 
-              {/* Logic B WhatsApp Checkout CTA */}
-              <a
-                href={whatsappCheckoutUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-4 px-4 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm sm:text-base rounded-2xl transition-all duration-300 shadow-xl shadow-[#95CD1A]/30 hover:shadow-2xl transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2.5 cursor-pointer text-center"
+              {/* Headless E-Commerce "Order Now" CTA */}
+              <button
+                type="button"
+                onClick={handleOrderNow}
+                disabled={isProcessing}
+                className="w-full py-4 px-4 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm sm:text-base rounded-2xl transition-all duration-300 shadow-xl shadow-[#95CD1A]/30 hover:shadow-2xl transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2.5 cursor-pointer text-center disabled:opacity-50"
               >
-                <PhoneCall className="w-5 h-5 text-white shrink-0" />
-                <span>Send Order via WhatsApp</span>
-              </a>
+                {isProcessing ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+                ) : (
+                  <ShoppingBag className="w-5 h-5 text-white shrink-0" />
+                )}
+                <span>{isProcessing ? 'Processing Order...' : 'Order Now'}</span>
+              </button>
 
               <button
                 onClick={onClearCart}

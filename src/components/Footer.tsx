@@ -122,7 +122,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage }) => {
             </div>
           </div>
 
-          {/* Column 4: Direct WhatsApp Ordering (2 cols lg) */}
+          {/* Column 4: Direct Support Contact (2 cols lg) */}
           <div className="lg:col-span-2 space-y-3">
             <h4 className="font-serif-headline text-base font-extrabold text-[#1F2937] uppercase tracking-wider">
               Direct Contact
@@ -141,13 +141,11 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage }) => {
 
             <div className="pt-2">
               <a
-                href="https://wa.me/918667726345"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-3 bg-[#95CD1A] hover:bg-[#7EB30E] text-[#1F2937] font-extrabold text-xs rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer"
+                href="tel:+918667726345"
+                className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-3 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-xs rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer"
               >
-                <PhoneCall className="w-3.5 h-3.5 text-[#1F2937]" />
-                <span>WhatsApp Us</span>
+                <PhoneCall className="w-3.5 h-3.5 text-white" />
+                <span>Call Customer Support</span>
               </a>
             </div>
           </div>

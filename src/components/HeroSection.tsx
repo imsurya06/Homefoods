@@ -2,7 +2,8 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, ArrowRight, BookOpen, Layers, ChevronRight } from 'lucide-react';
 import { MarqueeTrustBar } from './MarqueeTrustBar';
 import { CATEGORIES, type Category } from '../data/categories';
-import { PRODUCTS, type Product } from '../data/products';
+import { type Product } from '../data/products';
+import { getLiveProducts, getCachedProductsSync } from '../services/productService';
 
 interface HeroSectionProps {
   onSearchSubmit?: (searchTerm: string) => void;
@@ -19,29 +20,34 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [liveProducts, setLiveProducts] = useState<Product[]>(() => getCachedProductsSync());
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    getLiveProducts().then((data) => {
+      if (data && data.length > 0) setLiveProducts(data);
+    });
+  }, []);
+
   const searchSuggestions = [
-    'Natural Honey',
-    'Nannari Sharbath',
-    'Garlic Thokku',
-    'Ragi Flour',
-    'Millet Cookies',
+    'Ragi',
+    'Malt',
+    'Flour',
   ];
 
   // Dynamic Matching Product Options for the Search Dropdown
   const dropdownProducts = useMemo(() => {
     if (!searchTerm.trim()) {
-      return PRODUCTS.slice(0, 5); // Featured recommendations
+      return liveProducts.slice(0, 5); // Featured recommendations
     }
     const query = searchTerm.toLowerCase().trim();
-    return PRODUCTS.filter((p: Product) => 
+    return liveProducts.filter((p: Product) => 
       p.name.toLowerCase().includes(query) ||
-      p.categoryName.toLowerCase().includes(query) ||
-      p.description.toLowerCase().includes(query) ||
-      p.ingredients.toLowerCase().includes(query)
+      (p.categoryName && p.categoryName.toLowerCase().includes(query)) ||
+      (p.description && p.description.toLowerCase().includes(query)) ||
+      (p.ingredients && p.ingredients.toLowerCase().includes(query))
     ).slice(0, 6);
-  }, [searchTerm]);
+  }, [searchTerm, liveProducts]);
 
   // Handle Outside Click to Close Dropdown
   useEffect(() => {
@@ -325,6 +331,15 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         {/* Straight Aligned Cards with Hover Lift Effect */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 sm:gap-8 items-stretch">
           {CATEGORIES.map((category: Category) => {
+            const catQuery = category.id.toLowerCase().trim().replace(/s$/, '');
+            const liveCount = liveProducts.filter((p) => {
+              const pCatId = (p.categoryId || '').toLowerCase().trim();
+              const pCatName = (p.categoryName || '').toLowerCase().trim();
+              return pCatId.includes(catQuery) || catQuery.includes(pCatId) || pCatName.includes(catQuery);
+            }).length;
+
+            const liveCountText = `${liveCount} ${liveCount === 1 ? 'Item' : 'Items'}`;
+
             return (
               <div
                 key={category.id}
@@ -342,7 +357,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   
                   <span className="absolute bottom-2 right-2 bg-black/75 backdrop-blur-xs text-white text-[10px] sm:text-xs font-bold px-2.5 py-0.5 rounded-md">
-                    {category.itemCount}
+                    {liveCountText}
                   </span>
                 </div>
 

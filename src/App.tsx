@@ -212,7 +212,7 @@ export function App() {
               onViewInventory={handleViewInventory}
               onViewMenu={handleViewMenu}
             />
-            <CuratedProcessSection />
+            <CuratedProcessSection onAddToCart={handleAddToCart} />
           </>
         ) : (
           /* Separate Shop Catalog Page View */

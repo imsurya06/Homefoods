@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, ChevronDown, X, ArrowLeft, Check, ShoppingBag, Zap } from 'lucide-react';
-import { PRODUCTS, CATEGORY_FILTERS, type Product } from '../data/products';
-import { calculatePriceDetails, generateBuyNowWhatsAppUrl, type CartItem } from '../data/bestsellers';
+import { Search, Filter, X, ArrowLeft, Check, ShoppingBag, Zap } from 'lucide-react';
+import { PRODUCTS, type Product } from '../data/products';
+import { getLiveProducts, getCachedProductsSync } from '../services/productService';
+import { calculatePriceDetails, type CartItem } from '../data/bestsellers';
+import { CustomDropdown } from './CustomDropdown';
 
 interface ShopCatalogProps {
   initialCategory?: string;
@@ -19,9 +21,27 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
   const [searchQuery, setSearchQuery] = useState<string>(initialSearchQuery);
   const [showInStockOnly, setShowInStockOnly] = useState<boolean>(false);
+  const [productsList, setProductsList] = useState<Product[]>(() => {
+    const cached = getCachedProductsSync();
+    return cached.length > 0 ? cached : PRODUCTS;
+  });
 
   // Track selected variant index for each product ID
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    getLiveProducts()
+      .then((data) => {
+        if (isMounted && data && data.length > 0) {
+          setProductsList(data);
+        }
+      })
+      .catch((err) => console.warn('Live products load error:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (initialCategory) {
@@ -32,6 +52,11 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
   useEffect(() => {
     setSearchQuery(initialSearchQuery);
   }, [initialSearchQuery]);
+
+  // Smoothly scroll window to top whenever category or search filter changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [selectedCategory, searchQuery]);
 
   const handleVariantChange = (productId: string, variantIdx: number) => {
     setSelectedVariants((prev) => ({
@@ -46,7 +71,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
 
   // Filter products: Global Search across all store items, with Category filter active when search is empty
   const filteredProducts = useMemo(() => {
-    return PRODUCTS.filter((product: Product) => {
+    return productsList.filter((product: Product) => {
       // In-Stock Filter
       if (showInStockOnly && !product.isAvailable) {
         return false;
@@ -55,22 +80,56 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
         const matchesName = product.name.toLowerCase().includes(query);
-        const matchesDesc = product.description.toLowerCase().includes(query);
-        const matchesIngr = product.ingredients.toLowerCase().includes(query);
-        const matchesCategory = product.categoryName.toLowerCase().includes(query);
+        const matchesDesc = product.description ? product.description.toLowerCase().includes(query) : false;
+        const matchesIngr = product.ingredients ? product.ingredients.toLowerCase().includes(query) : false;
+        const matchesCategory = product.categoryName ? product.categoryName.toLowerCase().includes(query) : false;
         return matchesName || matchesDesc || matchesIngr || matchesCategory;
       }
-      // Category Filter (applies when search bar is empty)
-      if (selectedCategory !== 'all' && product.categoryId !== selectedCategory) {
-        return false;
+      // Category Filter (applies when search bar is empty) - Flexible matching for home page cards & sidebar tabs
+      if (selectedCategory && selectedCategory !== 'all') {
+        const selCat = selectedCategory.toLowerCase().trim();
+        const prodCatId = (product.categoryId || '').toLowerCase().trim();
+        const prodCatName = (product.categoryName || '').toLowerCase().trim();
+
+        // Strip trailing 's' for simple singular/plural matching (e.g., 'flours' vs 'flour')
+        const selCatBase = selCat.endsWith('s') ? selCat.slice(0, -1) : selCat;
+
+        const isExactId = prodCatId === selCat;
+        const isSubstringMatch = prodCatId.includes(selCatBase) || selCatBase.includes(prodCatId);
+        const isNameMatch = prodCatName.includes(selCatBase) || selCatBase.includes(prodCatName);
+
+        if (!isExactId && !isSubstringMatch && !isNameMatch) {
+          return false;
+        }
       }
       return true;
     });
-  }, [selectedCategory, searchQuery, showInStockOnly]);
+  }, [productsList, selectedCategory, searchQuery, showInStockOnly]);
+
+  // Dynamically compute category filters based on live products
+  const categoryFilters = useMemo(() => {
+    const map = new Map<string, { id: string; label: string; count: number }>();
+    map.set('all', { id: 'all', label: 'All Products', count: productsList.length });
+    productsList.forEach((p) => {
+      if (p.categoryId && p.categoryId !== 'all') {
+        const existing = map.get(p.categoryId);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          map.set(p.categoryId, {
+            id: p.categoryId,
+            label: p.categoryName || p.categoryId,
+            count: 1,
+          });
+        }
+      }
+    });
+    return Array.from(map.values());
+  }, [productsList]);
 
   const activeCategoryInfo = useMemo(() => {
-    return CATEGORY_FILTERS.find((c) => c.id === selectedCategory) || CATEGORY_FILTERS[0];
-  }, [selectedCategory]);
+    return categoryFilters.find((c) => c.id === selectedCategory) || categoryFilters[0] || { id: 'all', label: 'All Products', count: productsList.length };
+  }, [categoryFilters, selectedCategory, productsList.length]);
 
   return (
     <section id="shop" className="w-full bg-white text-[#1F2937] py-8 sm:py-14 px-3 sm:px-8 lg:px-12">
@@ -105,7 +164,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
               Shop Traditional Delicacies
             </h1>
             <p className="text-xs sm:text-sm text-gray-500 mt-1 max-w-xl mx-auto">
-              Select product variants, check dynamic GST prices, and click "Order via WhatsApp" to place your order directly.
+              Select product variants, check dynamic GST prices, and click "Order Now" to place your order directly.
             </p>
           </div>
 
@@ -153,7 +212,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
 
         {/* Mobile-Only Horizontal Category Pills (Scrolly Pill Row) */}
         <div className="md:hidden mb-6 overflow-x-auto hide-scrollbar flex items-center gap-2.5 pb-2">
-          {CATEGORY_FILTERS.map((cat) => {
+          {categoryFilters.map((cat) => {
             const isActive = !searchQuery.trim() && selectedCategory === cat.id;
             return (
               <button
@@ -198,7 +257,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
               </span>
 
               <nav className="flex flex-col space-y-1.5 font-bold text-sm">
-                {CATEGORY_FILTERS.map((cat) => {
+                {categoryFilters.map((cat) => {
                   const isActive = !searchQuery.trim() && selectedCategory === cat.id;
                   return (
                     <button
@@ -217,7 +276,16 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                         <span>{cat.label}</span>
                       </span>
                       <span className={`text-xs font-mono font-normal ${isActive ? 'text-white/80' : 'text-gray-400'}`}>
-                        ({cat.id === 'all' ? PRODUCTS.length : PRODUCTS.filter(p => p.categoryId === cat.id).length})
+                        ({
+                          cat.id === 'all'
+                            ? productsList.length
+                            : productsList.filter((p) => {
+                                const catBase = cat.id.toLowerCase().replace(/s$/, '');
+                                const pCatId = (p.categoryId || '').toLowerCase();
+                                const pCatName = (p.categoryName || '').toLowerCase();
+                                return pCatId === cat.id || pCatId.includes(catBase) || pCatName.includes(catBase);
+                              }).length
+                        })
                       </span>
                     </button>
                   );
@@ -297,12 +365,6 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                   const currentVariantIdx = selectedVariants[product.id] ?? 0;
                   const currentVariant = product.variants[currentVariantIdx] || product.variants[0];
                   const priceInfo = calculatePriceDetails(currentVariant.basePrice, product.gstPercentage);
-                  const buyNowUrl = generateBuyNowWhatsAppUrl(
-                    product.name,
-                    currentVariant.weight,
-                    priceInfo.totalPrice
-                  );
-
                   const handleAddToCartClick = () => {
                     if (onAddToCart) {
                       onAddToCart({
@@ -355,26 +417,17 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                         {/* Weight Variant Selector & Price */}
                         <div className="pt-2 sm:pt-3 border-t border-gray-100 space-y-2.5">
 
-                          {/* Prominent Weight Selector Dropdown */}
+                          {/* Prominent Weight Selector Custom Dropdown */}
                           <div className="space-y-1">
-                            <label htmlFor={`variant-${product.id}`} className="text-xs font-extrabold text-gray-700 block">
+                            <label className="text-xs font-extrabold text-gray-700 block">
                               Weight:
                             </label>
-                            <div className="relative w-full">
-                              <select
-                                id={`variant-${product.id}`}
-                                value={currentVariantIdx}
-                                onChange={(e) => handleVariantChange(product.id, Number(e.target.value))}
-                                className="w-full appearance-none bg-gray-50 hover:bg-gray-100 border border-gray-300 text-gray-900 text-xs sm:text-sm font-extrabold py-2 px-3 pr-8 rounded-xl focus:outline-none focus:border-[#95CD1A] focus:ring-1 focus:ring-[#95CD1A] cursor-pointer shadow-2xs"
-                              >
-                                {product.variants.map((v, idx) => (
-                                  <option key={v.weight} value={idx}>
-                                    {v.weight} - ₹{v.basePrice}
-                                  </option>
-                                ))}
-                              </select>
-                              <ChevronDown className="w-4 h-4 text-gray-600 absolute right-2.5 top-2.5 pointer-events-none" />
-                            </div>
+                            <CustomDropdown
+                              id={`variant-${product.id}`}
+                              options={product.variants}
+                              selectedIndex={currentVariantIdx}
+                              onSelect={(idx) => handleVariantChange(product.id, idx)}
+                            />
                           </div>
 
                           {/* Dynamic Price Display */}
@@ -394,7 +447,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
 
                         </div>
 
-                        {/* Dual Action Buttons: Add to Cart & Buy Now */}
+                        {/* Dual Action Buttons: Add to Cart & Order Now */}
                         <div className="pt-1 grid grid-cols-2 gap-2">
                           <button
                             onClick={handleAddToCartClick}
@@ -404,15 +457,13 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                             <span className="truncate">Add to Cart</span>
                           </button>
 
-                          <a
-                            href={buyNowUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            onClick={handleAddToCartClick}
                             className="w-full py-2.5 px-2 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-xs rounded-xl transition-all duration-200 shadow-md shadow-[#95CD1A]/20 hover:shadow-lg transform hover:-translate-y-0.5 flex items-center justify-center gap-1.5 cursor-pointer text-center"
                           >
                             <Zap className="w-3.5 h-3.5 text-white shrink-0 fill-white" />
-                            <span className="truncate">Buy Now</span>
-                          </a>
+                            <span className="truncate">Order Now</span>
+                          </button>
                         </div>
 
                       </div>
