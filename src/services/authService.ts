@@ -62,6 +62,14 @@ export async function sendForgotPasswordOtp(email: string): Promise<{ success: b
   }
 }
 
+function safeGenerateToken(id: number, email: string): string {
+  try {
+    return btoa(encodeURIComponent(`${id}:${email}:${Date.now()}`));
+  } catch {
+    return `tok_${id}_${Date.now()}`;
+  }
+}
+
 export async function resetPasswordWithOtp(email: string, otp: string, newPassword: string): Promise<{ success: boolean; token: string; user: UserProfile }> {
   try {
     const res = await fetchApi<{ success: boolean; token: string; user: UserProfile }>('/auth/reset-password', {
@@ -85,7 +93,7 @@ export async function resetPasswordWithOtp(email: string, otp: string, newPasswo
       billing: { first_name: cleanEmail.split('@')[0], last_name: '', email: cleanEmail, phone: '', address_1: '', city: 'Madurai', state: 'TN', postcode: '625001' },
       shipping: { first_name: cleanEmail.split('@')[0], last_name: '', address_1: '', city: 'Madurai', state: 'TN', postcode: '625001' },
     };
-    const token = btoa(`${mockUser.id}:${cleanEmail}:${Date.now()}`);
+    const token = safeGenerateToken(mockUser.id, cleanEmail);
     localStorage.setItem('hf_auth_token', token);
     localStorage.setItem('hf_user_profile', JSON.stringify(mockUser));
     return { success: true, token, user: mockUser };
@@ -115,7 +123,7 @@ export async function loginOrSignupCustomer(email: string, password: string): Pr
       billing: { first_name: cleanEmail.split('@')[0], last_name: '', email: cleanEmail, phone: '', address_1: '', city: 'Madurai', state: 'TN', postcode: '625001' },
       shipping: { first_name: cleanEmail.split('@')[0], last_name: '', address_1: '', city: 'Madurai', state: 'TN', postcode: '625001' },
     };
-    const token = btoa(`${mockUser.id}:${cleanEmail}:${Date.now()}`);
+    const token = safeGenerateToken(mockUser.id, cleanEmail);
     localStorage.setItem('hf_auth_token', token);
     localStorage.setItem('hf_user_profile', JSON.stringify(mockUser));
     return { success: true, token, user: mockUser };
