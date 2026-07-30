@@ -624,11 +624,31 @@ app.get('/api/v1/auth/my-orders', async (req, res) => {
 
     const wcApi = getWcApi();
     const statusStageMap: Record<string, { stage: number; label: string }> = {
-      pending: { stage: 1, label: 'Order Placed (Pending Payment)' },
+      // Stage 1: Confirmed
+      pending: { stage: 1, label: 'Order Confirmed' },
+      'pending-payment': { stage: 1, label: 'Order Confirmed' },
+      confirmed: { stage: 1, label: 'Order Confirmed' },
+      'wc-confirmed': { stage: 1, label: 'Order Confirmed' },
+
+      // Stage 2: Kitchen
       processing: { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
-      on_hold: { stage: 2, label: 'Order On Hold' },
+      'on-hold': { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
+      on_hold: { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
+      kitchen: { stage: 2, label: 'Kitchen Preparation' },
+      'wc-kitchen': { stage: 2, label: 'Kitchen Preparation' },
+
+      // Stage 3: Dispatched
       shipped: { stage: 3, label: 'Dispatched & Out for Delivery' },
+      dispatched: { stage: 3, label: 'Dispatched & Out for Delivery' },
+      'wc-dispatched': { stage: 3, label: 'Dispatched & Out for Delivery' },
+      out_for_delivery: { stage: 3, label: 'Dispatched & Out for Delivery' },
+
+      // Stage 4: Delivered
       completed: { stage: 4, label: 'Successfully Delivered' },
+      delivered: { stage: 4, label: 'Successfully Delivered' },
+      'wc-delivered': { stage: 4, label: 'Successfully Delivered' },
+
+      // Cancelled / Refunded / Failed
       cancelled: { stage: 0, label: 'Order Cancelled' },
       refunded: { stage: 0, label: 'Order Refunded' },
       failed: { stage: 0, label: 'Payment Failed' },
@@ -854,11 +874,31 @@ app.get('/api/v1/checkout/track/:id', async (req, res) => {
     const order = wcRes.data;
 
     const statusStageMap: Record<string, { stage: number; label: string }> = {
-      pending: { stage: 1, label: 'Order Placed (Pending Payment)' },
+      // Stage 1: Confirmed
+      pending: { stage: 1, label: 'Order Confirmed' },
+      'pending-payment': { stage: 1, label: 'Order Confirmed' },
+      confirmed: { stage: 1, label: 'Order Confirmed' },
+      'wc-confirmed': { stage: 1, label: 'Order Confirmed' },
+
+      // Stage 2: Kitchen
       processing: { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
-      on_hold: { stage: 2, label: 'Order On Hold' },
+      'on-hold': { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
+      on_hold: { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
+      kitchen: { stage: 2, label: 'Kitchen Preparation' },
+      'wc-kitchen': { stage: 2, label: 'Kitchen Preparation' },
+
+      // Stage 3: Dispatched
       shipped: { stage: 3, label: 'Dispatched & Out for Delivery' },
+      dispatched: { stage: 3, label: 'Dispatched & Out for Delivery' },
+      'wc-dispatched': { stage: 3, label: 'Dispatched & Out for Delivery' },
+      out_for_delivery: { stage: 3, label: 'Dispatched & Out for Delivery' },
+
+      // Stage 4: Delivered
       completed: { stage: 4, label: 'Successfully Delivered' },
+      delivered: { stage: 4, label: 'Successfully Delivered' },
+      'wc-delivered': { stage: 4, label: 'Successfully Delivered' },
+
+      // Cancelled / Refunded / Failed
       cancelled: { stage: 0, label: 'Order Cancelled' },
       refunded: { stage: 0, label: 'Order Refunded' },
       failed: { stage: 0, label: 'Payment Failed' },

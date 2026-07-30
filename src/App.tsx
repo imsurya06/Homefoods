@@ -179,8 +179,12 @@ export function App() {
       {/* Bottom Floating Toast Notification */}
       {activeNotification && (
         <div
-          onClick={() => setIsCartOpen(true)}
-          className={`fixed ${cartItems.length > 0 && !isCartOpen ? 'bottom-24 sm:bottom-28' : 'bottom-8'} left-1/2 -translate-x-1/2 z-[60] bg-[#1F2937] text-white px-4.5 py-3 rounded-2xl shadow-2xl border border-gray-700/80 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 cursor-pointer hover:bg-black transition-all`}
+          onClick={() => {
+            if (activeNotification.toLowerCase().includes('cart') || activeNotification.toLowerCase().includes('item')) {
+              setIsCartOpen(true);
+            }
+          }}
+          className={`fixed ${cartItems.length > 0 && !isCartOpen ? 'bottom-24 sm:bottom-28' : 'bottom-8'} left-1/2 -translate-x-1/2 z-[60] bg-[#1F2937] text-white px-4.5 py-3 rounded-2xl shadow-2xl border border-gray-700/80 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 transition-all`}
         >
           <div className="w-6 h-6 rounded-full bg-[#95CD1A] text-white flex items-center justify-center shrink-0 shadow-md">
             <CheckCircle className="w-4 h-4 text-white" />
@@ -188,9 +192,11 @@ export function App() {
           <span className="text-xs sm:text-sm font-extrabold tracking-wide whitespace-nowrap">
             {activeNotification}
           </span>
-          <span className="text-xs font-black text-[#95CD1A] underline ml-1">
-            View Cart →
-          </span>
+          {(activeNotification.toLowerCase().includes('cart') || activeNotification.toLowerCase().includes('item')) && (
+            <span className="text-xs font-black text-[#95CD1A] underline ml-1 cursor-pointer">
+              View Cart →
+            </span>
+          )}
         </div>
       )}
 
