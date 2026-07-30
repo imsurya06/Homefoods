@@ -38,8 +38,8 @@ function decodeHtmlEntities(str: string): string {
 
 function getWcApi() {
   const storeUrl = process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com';
-  const consumerKey = process.env.WC_CONSUMER_KEY || '';
-  const consumerSecret = process.env.WC_CONSUMER_SECRET || '';
+  const consumerKey = process.env.WC_CONSUMER_KEY || 'ck_48a6c149fa81c87736460d25a0af0c9b439d8a49';
+  const consumerSecret = process.env.WC_CONSUMER_SECRET || 'cs_77c182f6d49a3626a55a57da825c54231ae3fb43';
 
   return new WooCommerceRestApi.default({
     url: storeUrl,
@@ -335,4 +335,6 @@ app.get('/health', (_req, res) => {
   });
 });
 
-export default app;
+export default (req: any, res: any) => {
+  return app(req, res);
+};
