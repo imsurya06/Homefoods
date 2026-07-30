@@ -78,6 +78,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [orderSuccess, setOrderSuccess] = useState<{ wcOrderId: number; paymentId: string } | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     try {
@@ -110,8 +111,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
   const grandTotal = subtotal > 0 ? subtotal + SHIPPING_FEE : 0;
-
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const handleOrderNow = async () => {
     setCheckoutError(null);

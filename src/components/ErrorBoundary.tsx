@@ -35,8 +35,8 @@ export class ErrorBoundary extends Component<Props, State> {
             <h2 className="text-xl font-extrabold text-[#1F2937]">
               Something went wrong
             </h2>
-            <p className="text-xs text-gray-500 leading-relaxed">
-              An unexpected error occurred during rendering. Don't worry, your cart items are saved!
+            <p className="text-xs text-red-500 font-mono bg-red-50 p-3 rounded-xl border border-red-100 max-w-xs mx-auto overflow-auto text-left">
+              {this.state.error?.message || 'Unknown render error'}
             </p>
             <button
               onClick={() => {
