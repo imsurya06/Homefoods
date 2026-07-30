@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { X, Search, PackageCheck, Truck, CheckCircle2, Clock, AlertCircle, ShoppingBag, Utensils, ArrowRight, User } from 'lucide-react';
 import { fetchCustomerOrders, type CustomerOrderHistoryItem, type UserProfile } from '../services/authService';
 import { fetchApi } from '../services/apiClient';
+import { trackSingleOrder } from '../services/checkoutService';
 
 interface MyOrdersModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: UserProfile | null;
-  onOpenAuthModal: () => void;
+  onOpenAuthModal?: () => void;
   onExploreShop?: () => void;
 }
 
@@ -35,25 +36,55 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
         localOrders = saved ? JSON.parse(saved) : [];
       } catch {}
 
+      const syncOrderStatuses = async (initialOrders: CustomerOrderHistoryItem[]) => {
+        const updatedList = [...initialOrders];
+        let hasChanges = false;
+
+        await Promise.all(
+          updatedList.map(async (ord, idx) => {
+            try {
+              const liveData = await trackSingleOrder(ord.id);
+              if (liveData && liveData.status) {
+                if (updatedList[idx].stage !== liveData.stage || updatedList[idx].status !== liveData.status) {
+                  updatedList[idx] = {
+                    ...updatedList[idx],
+                    status: liveData.status,
+                    statusLabel: liveData.statusLabel,
+                    stage: liveData.stage,
+                  };
+                  hasChanges = true;
+                }
+              }
+            } catch {}
+          })
+        );
+
+        if (hasChanges) {
+          try {
+            localStorage.setItem('hf_local_orders', JSON.stringify(updatedList));
+          } catch {}
+          setOrders([...updatedList]);
+        }
+      };
+
       fetchCustomerOrders()
         .then((remoteOrders) => {
           const remoteMap = new Map(remoteOrders.map((o) => [o.id.toString(), o]));
           const merged: CustomerOrderHistoryItem[] = [...remoteOrders];
 
-          // Append any local-only orders that have not synced to WooCommerce yet
           localOrders.forEach((lo) => {
             if (!remoteMap.has(lo.id.toString())) {
               merged.push(lo);
             }
           });
 
-          try {
-            localStorage.setItem('hf_local_orders', JSON.stringify(merged));
-          } catch {}
-
           setOrders(merged);
+          syncOrderStatuses(merged);
         })
-        .catch(() => setOrders(localOrders))
+        .catch(() => {
+          setOrders(localOrders);
+          syncOrderStatuses(localOrders);
+        })
         .finally(() => setLoading(false));
     }
   }, [isOpen, user]);
@@ -249,7 +280,7 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
               <button
                 onClick={() => {
                   onClose();
-                  onOpenAuthModal();
+                  if (onOpenAuthModal) onOpenAuthModal();
                 }}
                 className="px-3.5 py-1.5 bg-[#95CD1A] hover:bg-[#7EB30E] text-white text-xs font-extrabold rounded-xl shadow-xs transition-all cursor-pointer shrink-0"
               >

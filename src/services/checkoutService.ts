@@ -142,3 +142,13 @@ export async function processRazorpayCheckout(
     onError(err.message || 'Checkout failed to initialize.');
   }
 }
+
+export async function trackSingleOrder(orderId: number | string) {
+  try {
+    const res = await fetchApi<{ success: boolean; data: any }>(`/checkout/track/${orderId}`);
+    if (res.success && res.data) {
+      return res.data;
+    }
+  } catch {}
+  return null;
+}
