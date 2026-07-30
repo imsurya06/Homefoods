@@ -47,6 +47,10 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
             }
           });
 
+          try {
+            localStorage.setItem('hf_local_orders', JSON.stringify(merged));
+          } catch {}
+
           setOrders(merged);
         })
         .catch(() => setOrders(localOrders))

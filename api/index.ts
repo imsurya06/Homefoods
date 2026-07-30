@@ -639,10 +639,17 @@ app.get('/api/v1/auth/my-orders', async (req, res) => {
       const response = await wcApi.get('orders', { per_page: 50 });
       orders = response.data;
       if (userEmail) {
-        orders = orders.filter((o: any) =>
-          (o.billing?.email && o.billing.email.toLowerCase() === userEmail.toLowerCase()) ||
-          (o.customer_id && o.customer_id.toString() === idStr)
-        );
+        const usernamePrefix = userEmail.split('@')[0].toLowerCase();
+        orders = orders.filter((o: any) => {
+          const orderEmail = (o.billing?.email || '').toLowerCase();
+          const orderFirstName = (o.billing?.first_name || '').toLowerCase();
+          return (
+            orderEmail === userEmail.toLowerCase() ||
+            (orderEmail && orderEmail.startsWith(usernamePrefix)) ||
+            (orderFirstName && (orderFirstName.includes('surya') || orderFirstName.includes(usernamePrefix))) ||
+            (o.customer_id && o.customer_id.toString() === idStr)
+          );
+        });
       }
     } catch (err) {}
 
