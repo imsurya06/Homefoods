@@ -106,7 +106,7 @@ export function App() {
   const handleAuthSuccess = (loggedUser: UserProfile) => {
     setUser(loggedUser);
     setCartItems(getStoredCart(true));
-    showToast(`Welcome back, ${loggedUser.firstName}!`);
+    showToast(`Welcome to Homemade Foods, ${loggedUser.firstName}!`);
   };
 
   const handleUserLogout = () => {
@@ -128,7 +128,7 @@ export function App() {
       }
       return [...prevItems, { ...newItem, id: compositeId, quantity: 1 }];
     });
-    showToast(`Added ${newItem.name} to cart!`);
+    showToast('Item added to cart!');
   };
 
   const handleOrderNow = (newItem: Omit<CartItem, 'id' | 'quantity'>) => {
