@@ -163,19 +163,33 @@ export async function registerCustomer(payload: {
   return res;
 }
 
+export function getSavedUserProfile(): UserProfile | null {
+  try {
+    const token = localStorage.getItem('hf_auth_token');
+    const raw = localStorage.getItem('hf_user_profile');
+    if (token && raw) {
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return null;
+}
+
 export async function fetchCurrentUser(): Promise<UserProfile | null> {
   const token = getSavedToken();
   if (!token) return null;
+
+  const savedProfile = getSavedUserProfile();
+
   try {
     const res = await fetchApi<{ success: boolean; user: UserProfile }>('/auth/me');
     if (res.success && res.user) {
       localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
       return res.user;
     }
-    return null;
+    return savedProfile;
   } catch {
-    logoutCustomer();
-    return null;
+    // Preserve login session across page refreshes even if server is offline/connecting
+    return savedProfile;
   }
 }
 

@@ -10,7 +10,7 @@ import { MyOrdersModal } from './components/MyOrdersModal';
 import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
 import { type CartItem } from './data/bestsellers';
-import { fetchCurrentUser, logoutCustomer, type UserProfile } from './services/authService';
+import { fetchCurrentUser, logoutCustomer, getSavedUserProfile, type UserProfile } from './services/authService';
 import { getStoredCart, saveCartItems, clearCartStorage } from './services/cartStorage';
 
 export function App() {
@@ -19,20 +19,22 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeNotification, setActiveNotification] = useState<string | null>(null);
 
-  // User Auth & Modal States
-  const [user, setUser] = useState<UserProfile | null>(null);
+  // User Auth & Modal States with instant persistence across page refreshes
+  const [user, setUser] = useState<UserProfile | null>(() => getSavedUserProfile());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isMyOrdersModalOpen, setIsMyOrdersModalOpen] = useState<boolean>(false);
 
   // Cart State (Guest: sessionStorage | Logged-In: DB/localStorage)
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => getStoredCart(!!getSavedUserProfile()));
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
 
-  // Check logged-in user on mount
+  // Sync logged-in user details on mount
   useEffect(() => {
     fetchCurrentUser().then((u) => {
-      setUser(u);
-      setCartItems(getStoredCart(!!u));
+      if (u) {
+        setUser(u);
+        setCartItems(getStoredCart(true));
+      }
     });
   }, []);
 
