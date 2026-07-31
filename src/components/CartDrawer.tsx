@@ -714,7 +714,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <span className="text-gray-500 font-medium">Logged in users see all past order history automatically.</span>
                   {onOpenAuthModal && (
                     <button
-                      onClick={onOpenAuthModal}
+                      onClick={() => {
+                        onClose();
+                        onOpenAuthModal();
+                      }}
                       className="text-[#95CD1A] font-extrabold hover:underline whitespace-nowrap cursor-pointer ml-2"
                     >
                       Login

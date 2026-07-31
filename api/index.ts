@@ -117,6 +117,30 @@ function getOrderStatusDetails(status: string): { stage: number; label: string }
   return { stage: 2, label: status || 'Order Confirmed' };
 }
 
+// Retroactive Guest Order Linker: Links unassigned guest orders matching user email to WooCommerce customer account
+async function linkGuestOrdersToCustomer(email: string, customerId: string | number) {
+  if (!email || !customerId || !/^\d+$/.test(customerId.toString())) return;
+  try {
+    const ordersRes = await wcFetch('orders', { params: { per_page: 100 } });
+    if (ordersRes.ok && Array.isArray(ordersRes.data)) {
+      const cleanEmail = email.toLowerCase().trim();
+      const guestOrders = ordersRes.data.filter((o: any) => {
+        const oEmail = (o.billing?.email || '').toLowerCase().trim();
+        return oEmail === cleanEmail && (!o.customer_id || o.customer_id === 0);
+      });
+
+      for (const order of guestOrders) {
+        await wcFetch(`orders/${order.id}`, {
+          method: 'PUT',
+          body: { customer_id: parseInt(customerId.toString()) },
+        });
+      }
+    }
+  } catch (err: any) {
+    console.warn('Guest order linking warning:', err.message);
+  }
+}
+
 // Transactional Email Dispatcher for Order Confirmation & Tracking
 async function sendOrderTrackingEmail(options: {
   toEmail: string;
@@ -427,6 +451,9 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
       }
     }
 
+    // Retroactively claim any guest orders placed with this email address
+    linkGuestOrdersToCustomer(cleanEmail, customerId);
+
     const payloadStr = `${customerId}:${cleanEmail}:${Date.now()}`;
     const token = Buffer.from(payloadStr).toString('base64');
 
@@ -595,6 +622,10 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
       idStr = parts[0] || '';
       userEmail = parts[1] || '';
     } catch {}
+
+    if (userEmail && idStr) {
+      await linkGuestOrdersToCustomer(userEmail, idStr);
+    }
 
     let orders: any[] = [];
     try {
