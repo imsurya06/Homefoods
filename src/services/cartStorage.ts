@@ -4,14 +4,6 @@ import { fetchApi } from './apiClient';
 
 const GUEST_CART_KEY = 'hf_guest_cart';
 
-let lastUserActionTime = 0;
-let lastUserActionIsClear = false;
-
-export function recordUserCartAction(isClear = false) {
-  lastUserActionTime = Date.now();
-  lastUserActionIsClear = isClear;
-}
-
 export function getStoredCart(isLoggedIn: boolean): CartItem[] {
   if (!isLoggedIn) {
     try {
@@ -33,23 +25,8 @@ export function getStoredCart(isLoggedIn: boolean): CartItem[] {
 export async function fetchRemoteCart(): Promise<CartItem[]> {
   try {
     const token = getSavedToken();
-    if (!token) return getStoredCart(true);
+    if (!token) return getStoredCart(false);
 
-    const localItems = getStoredCart(true);
-    const timeSinceAction = Date.now() - lastUserActionTime;
-    const isActiveDevice = timeSinceAction < 4000;
-
-    // ACTIVE DEVICE: Protect local cart state for 4s after explicit user action on THIS device
-    if (isActiveDevice) {
-      if (lastUserActionIsClear) {
-        return [];
-      }
-      if (localItems.length > 0) {
-        return localItems;
-      }
-    }
-
-    // PASSIVE DEVICE: Sync directly with server's latest authoritative state across devices
     const res = await fetchApi<{ success: boolean; items: CartItem[] }>('/cart/get');
     if (res && res.success && Array.isArray(res.items)) {
       localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
@@ -61,12 +38,7 @@ export async function fetchRemoteCart(): Promise<CartItem[]> {
   return getStoredCart(true);
 }
 
-export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean, isExplicitUserAction = true) {
-  if (isExplicitUserAction) {
-    lastUserActionTime = Date.now();
-    lastUserActionIsClear = cartItems.length === 0;
-  }
-
+export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
   if (!isLoggedIn) {
     try {
       sessionStorage.setItem(GUEST_CART_KEY, JSON.stringify(cartItems));
@@ -91,8 +63,6 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean, isExpl
 }
 
 export function clearCartStorage(isLoggedIn: boolean) {
-  lastUserActionTime = Date.now();
-  lastUserActionIsClear = true;
   try {
     sessionStorage.removeItem(GUEST_CART_KEY);
     localStorage.setItem('hf_user_cart', JSON.stringify([]));

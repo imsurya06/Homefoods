@@ -36,13 +36,11 @@ export function App() {
     const syncUserAndCart = () => {
       fetchCurrentUser().then((u) => {
         if (!isMounted) return;
-        if (u) {
-          setUser(u);
-          fetchRemoteCart().then((remoteItems) => {
-            if (isMounted && remoteItems && Array.isArray(remoteItems)) {
-              setCartItems(remoteItems);
-            }
-          });
+        setUser(u);
+      });
+      fetchRemoteCart().then((remoteItems) => {
+        if (isMounted && remoteItems && Array.isArray(remoteItems)) {
+          setCartItems(remoteItems);
         }
       });
     };
@@ -50,14 +48,15 @@ export function App() {
     syncUserAndCart();
 
     const interval = setInterval(() => {
-      if (user) {
+      const token = localStorage.getItem('hf_auth_token');
+      if (token) {
         fetchRemoteCart().then((remoteItems) => {
           if (isMounted && remoteItems && Array.isArray(remoteItems)) {
             setCartItems(remoteItems);
           }
         });
       }
-    }, 3000);
+    }, 2000);
 
     const handleFocus = () => syncUserAndCart();
     const handleCartCleared = () => {
