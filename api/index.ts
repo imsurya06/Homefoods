@@ -885,32 +885,53 @@ app.post('/api/v1/checkout/verify-payment', async (req, res) => {
 app.get(['/api/v1/checkout/track/:id', '/api/checkout/track/:id', '/v1/checkout/track/:id', '/checkout/track/:id'], async (req, res) => {
   try {
     const { id } = req.params;
-    const cleanId = id.trim();
+    const rawInput = (id || '').trim();
+    const cleanId = rawInput.replace(/^#/, '').trim();
+    const searchCore = cleanId.replace(/^HF-/i, '').trim();
+    const searchLower = cleanId.toLowerCase();
+
     let order: any = null;
 
-    const isNumeric = /^\d+$/.test(cleanId);
-    if (isNumeric) {
+    // Strategy 1: Direct numeric order ID fetch
+    const numericId = searchCore.split('-')[0];
+    if (numericId && /^\d+$/.test(numericId)) {
       try {
-        const wcRes = await wcFetch(`orders/${cleanId}`);
-        if (wcRes.ok) order = wcRes.data;
+        const wcRes = await wcFetch(`orders/${numericId}`);
+        if (wcRes.ok && wcRes.data && wcRes.data.id) {
+          order = wcRes.data;
+        }
       } catch {}
     }
 
+    // Strategy 2: Search recent orders by ref code, ID, email, or phone
     if (!order) {
       try {
-        const recentOrdersRes = await wcFetch('orders', { params: { per_page: 50 } });
+        const recentOrdersRes = await wcFetch('orders', { params: { per_page: 100 } });
         if (recentOrdersRes.ok && Array.isArray(recentOrdersRes.data)) {
           order = recentOrdersRes.data.find((o: any) => {
-            if (o.id.toString() === cleanId) return true;
+            if (o.status === 'trash') return false;
+            const oIdStr = o.id.toString();
+            if (oIdStr === cleanId || oIdStr === searchCore) return true;
+            
             const refMeta = (o.meta_data || []).find((m: any) => m.key === '_order_ref_code');
-            return refMeta && refMeta.value === cleanId;
+            const refVal = (refMeta?.value || '').toLowerCase().trim();
+            if (refVal && (refVal === searchLower || refVal.includes(searchLower) || searchLower.includes(refVal))) return true;
+
+            const bEmail = (o.billing?.email || '').toLowerCase().trim();
+            if (bEmail && (bEmail === searchLower || (searchLower.includes('@') && bEmail.includes(searchLower)))) return true;
+
+            const bPhone = (o.billing?.phone || '').replace(/\D/g, '');
+            const searchPhone = searchLower.replace(/\D/g, '');
+            if (searchPhone && searchPhone.length >= 10 && bPhone.includes(searchPhone)) return true;
+
+            return false;
           });
         }
       } catch {}
     }
 
     if (!order) {
-      return res.status(404).json({ success: false, message: `Order #${cleanId} not found` });
+      return res.status(404).json({ success: false, message: `Order #${rawInput} not found. Please check Order ID.` });
     }
 
     const refCodeMeta = (order.meta_data || []).find((m: any) => m.key === '_order_ref_code');

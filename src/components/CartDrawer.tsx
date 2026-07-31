@@ -312,7 +312,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   const handleGuestSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanId = guestSearchInput.trim().replace(/^#/, '');
+    const rawQuery = guestSearchInput.trim();
+    const cleanId = rawQuery.replace(/^#/, '').trim();
     if (!cleanId) return;
 
     setGuestSearchLoading(true);
@@ -321,14 +322,44 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
     try {
       const data = await trackSingleOrder(cleanId);
-      if (data && data.orderId) {
+      if (data && data.orderId && !data.notFound) {
         setGuestSearchResult(data);
         setExpandedOrderId(data.orderId);
       } else {
-        setGuestSearchError(`No order found matching #${cleanId}. Please check Order ID.`);
+        let localFound: any = null;
+        try {
+          const saved = localStorage.getItem('hf_local_orders');
+          const localList: CustomerOrderHistoryItem[] = saved ? JSON.parse(saved) : [];
+          localFound = localList.find((lo) => {
+            const lId = lo.id ? lo.id.toString().toLowerCase() : '';
+            const lRef = lo.orderRefCode ? lo.orderRefCode.toLowerCase() : '';
+            const qLower = cleanId.toLowerCase();
+            return lId === qLower || lRef === qLower || lRef.includes(qLower) || qLower.includes(lRef);
+          });
+        } catch {}
+
+        if (localFound) {
+          setGuestSearchResult({
+            orderId: localFound.id,
+            orderRefCode: localFound.orderRefCode || `HF-${localFound.id}`,
+            status: localFound.status,
+            statusLabel: localFound.statusLabel,
+            stage: localFound.stage,
+            total: localFound.total,
+            currency: localFound.currency || '₹',
+            dateCreated: localFound.dateCreated,
+            customerName: 'Customer',
+            phone: '',
+            shippingAddress: localFound.shippingAddress || '',
+            items: localFound.items || [],
+          });
+          setExpandedOrderId(localFound.id);
+        } else {
+          setGuestSearchError(`No order found matching #${rawQuery}. Please check Order ID.`);
+        }
       }
     } catch {
-      setGuestSearchError(`Failed to fetch Order #${cleanId}. Please try again.`);
+      setGuestSearchError(`Failed to fetch Order #${rawQuery}. Please try again.`);
     } finally {
       setGuestSearchLoading(false);
     }
