@@ -63,6 +63,13 @@ export function App() {
     const handleCartCleared = () => {
       if (isMounted) setCartItems([]);
     };
+    const handleAccountDeleted = () => {
+      if (isMounted) {
+        setUser(null);
+        setCartItems([]);
+        setIsCartOpen(false);
+      }
+    };
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'hf_user_cart' && isMounted) {
         try {
@@ -74,6 +81,7 @@ export function App() {
 
     window.addEventListener('focus', handleFocus);
     window.addEventListener('hf_cart_cleared', handleCartCleared);
+    window.addEventListener('hf_account_deleted', handleAccountDeleted);
     window.addEventListener('storage', handleStorageChange);
 
     return () => {
@@ -81,6 +89,7 @@ export function App() {
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('hf_cart_cleared', handleCartCleared);
+      window.removeEventListener('hf_account_deleted', handleAccountDeleted);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, [user]);

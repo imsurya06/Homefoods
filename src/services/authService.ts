@@ -205,9 +205,10 @@ export async function fetchCurrentUser(): Promise<UserProfile | null> {
     }
   } catch (err: any) {
     if (err && (err.accountDeleted || err.status === 401 || (err.message && err.message.toLowerCase().includes('deleted')))) {
-      console.log('Account deleted from WordPress database by admin. Logging out session...');
+      console.log('Account deleted from WordPress database by admin. Wiping session & refreshing...');
       logoutCustomer();
       alert('Your account has been deleted by admin. Please create a new account to continue.');
+      window.location.href = '/';
       return null;
     }
   }
@@ -233,7 +234,9 @@ export function logoutCustomer() {
     localStorage.removeItem('hf_user_profile');
     localStorage.removeItem('hf_local_orders');
     localStorage.removeItem('hf_user_passwords');
+    localStorage.removeItem('hf_user_cart');
     sessionStorage.clear();
+    window.dispatchEvent(new CustomEvent('hf_account_deleted'));
   } catch (err) {
     console.error('Error logging out:', err);
   }
