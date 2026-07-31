@@ -346,8 +346,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
       />
 
-      <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col justify-between transform transition-transform duration-300">
+      <div className="absolute inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">
+        <div className="w-full sm:w-screen max-w-full sm:max-w-md bg-white shadow-2xl flex flex-col justify-between transform transition-transform duration-300">
           
           {/* Top Drawer Header with Segmented Tabs */}
           <div className="p-4 sm:p-5 bg-white border-b border-gray-100 shrink-0 space-y-3">
@@ -588,7 +588,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         <div>
                           <label className="block text-[11px] font-bold text-gray-600 mb-1">Mobile Number</label>
                           <div className="relative">
@@ -965,7 +965,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <span>GST & Taxes</span>
                   <span className="text-[#95CD1A] font-extrabold">Included</span>
                 </div>
-                <div className="pt-2 border-t border-gray-100 flex items-baseline justify-between">
+                <div className="pt-2 border-t border-gray-100 flex flex-wrap items-baseline justify-between gap-1">
                   <div>
                     <span className="text-xs font-extrabold text-gray-700 uppercase tracking-wider block">
                       Grand Total
