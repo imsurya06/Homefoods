@@ -575,21 +575,10 @@ app.get('/api/v1/auth/me', async (req, res) => {
 });
 
 // GET /api/v1/auth/my-orders
-app.get('/api/v1/auth/my-orders', async (req, res) => {
+app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', '/auth/my-orders'], async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    const token = authHeader.replace('Bearer ', '');
-    let userEmail = '';
-    let idStr = '';
-    try {
-      const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
-      const decoded = rawDecoded.includes('%') ? decodeURIComponent(rawDecoded) : rawDecoded;
-      const parts = decoded.split(':');
-      idStr = parts[0] || '';
-      userEmail = parts[1] || '';
-    } catch {}
 
     const token = authHeader.replace('Bearer ', '');
     let userEmail = '';
@@ -818,7 +807,7 @@ app.post('/api/v1/checkout/verify-payment', async (req, res) => {
 });
 
 // GET /api/v1/checkout/track/:id
-app.get('/api/v1/checkout/track/:id', async (req, res) => {
+app.get(['/api/v1/checkout/track/:id', '/api/checkout/track/:id', '/v1/checkout/track/:id', '/checkout/track/:id'], async (req, res) => {
   try {
     const { id } = req.params;
     const cleanId = id.trim();
