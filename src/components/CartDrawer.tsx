@@ -21,12 +21,14 @@ import { type CartItem } from '../data/bestsellers';
 import { processRazorpayCheckout, type CheckoutPayload, trackSingleOrder } from '../services/checkoutService';
 import { fetchCustomerOrders, type CustomerOrderHistoryItem, type UserProfile } from '../services/authService';
 import { fetchRemoteCart } from '../services/cartStorage';
+import { getCachedProductsSync } from '../services/productService';
 
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   items: CartItem[];
   onUpdateQuantity: (id: string, newQty: number) => void;
+  onUpdateItemWeight?: (oldId: string, newWeight: string, newPricePerUnit: number) => void;
   onRemoveItem: (id: string) => void;
   onClearCart: () => void;
   onExploreShop?: () => void;
@@ -42,6 +44,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onClose,
   items,
   onUpdateQuantity,
+  onUpdateItemWeight,
   onRemoveItem,
   onClearCart,
   onExploreShop,
@@ -52,6 +55,31 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   initialTab = 'cart',
 }) => {
   const [activeTab, setActiveTab] = useState<'cart' | 'orders'>(initialTab);
+
+  const getWeightOptionsForItem = (item: CartItem) => {
+    try {
+      const allProducts = getCachedProductsSync();
+      const matched = allProducts.find(
+        (p) => String(p.id) === String(item.productId) || p.name.trim().toLowerCase() === item.name.trim().toLowerCase()
+      );
+
+      if (matched && Array.isArray(matched.variants) && matched.variants.length > 0) {
+        const gstMultiplier = 1 + (matched.gstPercentage || item.gstPercentage || 5) / 100;
+        return matched.variants.map((v) => ({
+          weight: v.weight,
+          price: Math.round(v.basePrice * gstMultiplier),
+        }));
+      }
+    } catch {}
+
+    const basePrice = item.pricePerUnit;
+    return [
+      { weight: item.weight || '100gms', price: basePrice },
+      { weight: '200gms', price: Math.round(basePrice * 1.85) },
+      { weight: '500gms', price: Math.round(basePrice * 4.2) },
+      { weight: '1kg', price: Math.round(basePrice * 8.0) },
+    ].filter((v, idx, arr) => arr.findIndex((x) => x.weight === v.weight) === idx);
+  };
 
   // Sync activeTab when initialTab or isOpen changes
   useEffect(() => {
@@ -532,9 +560,28 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                               <h4 className="text-xs sm:text-sm font-extrabold text-[#1F2937] truncate leading-tight">
                                 {item.name}
                               </h4>
-                              <p className="text-[11px] text-gray-500 font-medium mt-0.5">
-                                Pack: <span className="font-bold text-gray-700">{item.weight}</span>
-                              </p>
+                              <div className="mt-1 flex items-center gap-1.5">
+                                <span className="text-[10px] uppercase font-bold text-gray-400">Pack:</span>
+                                <select
+                                  value={item.weight}
+                                  onChange={(e) => {
+                                    const selectedWeight = e.target.value;
+                                    const opts = getWeightOptionsForItem(item);
+                                    const chosen = opts.find((o) => o.weight === selectedWeight);
+                                    const newPrice = chosen ? chosen.price : item.pricePerUnit;
+                                    if (onUpdateItemWeight) {
+                                      onUpdateItemWeight(item.id, selectedWeight, newPrice);
+                                    }
+                                  }}
+                                  className="text-[11px] font-extrabold text-[#1F2937] bg-gray-100 hover:bg-gray-200 border border-gray-200/80 rounded-md px-1.5 py-0.5 outline-none cursor-pointer transition-all"
+                                >
+                                  {getWeightOptionsForItem(item).map((opt) => (
+                                    <option key={opt.weight} value={opt.weight}>
+                                      {opt.weight} (₹{opt.price})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
                               <p className="text-xs font-black text-[#95CD1A] font-numeric mt-0.5">
                                 ₹{item.pricePerUnit * item.quantity}
                               </p>

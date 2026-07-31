@@ -257,6 +257,35 @@ export function App() {
     showToast('Cart cleared');
   };
 
+  const handleUpdateItemWeight = (oldId: string, newWeight: string, newPricePerUnit: number) => {
+    setCartItems((prevItems) => {
+      const targetItem = prevItems.find((i) => i.id === oldId);
+      if (!targetItem) return prevItems;
+
+      const newId = `${targetItem.productId}-${newWeight}`;
+      if (newId === oldId) return prevItems;
+
+      const existingSameWeightItem = prevItems.find((i) => i.id === newId);
+
+      if (existingSameWeightItem) {
+        return prevItems
+          .filter((i) => i.id !== oldId)
+          .map((i) =>
+            i.id === newId
+              ? { ...i, quantity: i.quantity + targetItem.quantity }
+              : i
+          );
+      }
+
+      return prevItems.map((i) =>
+        i.id === oldId
+          ? { ...i, id: newId, weight: newWeight, pricePerUnit: newPricePerUnit }
+          : i
+      );
+    });
+    showToast('Pack weight updated');
+  };
+
   const SHIPPING_FEE = 40;
   const totalCartItemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const cartSubtotal = cartItems.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
@@ -294,30 +323,24 @@ export function App() {
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-[#95CD1A] text-white flex items-center justify-center font-bold relative shrink-0 shadow-md">
                 <ShoppingBag className="w-5 h-5 text-white" />
-                <span className="absolute -top-1.5 -right-1.5 bg-white text-[#1F2937] text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-gray-200">
+                <span className="absolute -top-1.5 -right-1.5 bg-white text-[#1F2937] text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#1F2937]">
                   {totalCartItemCount}
                 </span>
               </div>
-              <div className="text-left font-numeric">
-                <span className="text-xs text-gray-400 font-medium block leading-none">
-                  {totalCartItemCount} {totalCartItemCount === 1 ? 'item' : 'items'} added
-                </span>
-                <span className="text-base sm:text-lg font-extrabold text-white tracking-tight leading-snug">
-                  ₹{cartGrandTotal} <span className="text-[10px] text-gray-400 font-normal">(Incl. Shipping & GST)</span>
-                </span>
+              <div className="text-left">
+                <div className="text-xs font-black tracking-wide text-[#95CD1A] flex items-center gap-1.5">
+                  <span>{totalCartItemCount} {totalCartItemCount === 1 ? 'item' : 'items'} added</span>
+                </div>
+                <div className="text-sm font-black text-white font-numeric">
+                  ₹{cartGrandTotal} <span className="text-[10px] font-normal text-gray-400 font-sans">(Incl. Shipping & GST)</span>
+                </div>
               </div>
             </div>
 
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsCartOpen(true);
-              }}
-              className="px-4 py-2.5 bg-[#95CD1A] hover:bg-[#7EB30E] text-white text-xs sm:text-sm font-extrabold rounded-xl transition-all shadow-md flex items-center gap-1.5 shrink-0 cursor-pointer"
-            >
+            <div className="px-4 py-2 bg-[#95CD1A] group-hover:bg-[#83B812] text-white font-extrabold text-xs rounded-xl transition-colors flex items-center gap-1.5 shrink-0 shadow-md">
               <span>View Cart & Checkout</span>
-              <ArrowRight className="w-4 h-4 text-white stroke-[3] group-hover:translate-x-1 transition-transform" />
-            </button>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </div>
           </div>
         </div>
       )}
@@ -360,6 +383,7 @@ export function App() {
         onClose={() => setIsCartOpen(false)}
         items={cartItems}
         onUpdateQuantity={handleUpdateQuantity}
+        onUpdateItemWeight={handleUpdateItemWeight}
         onRemoveItem={handleRemoveFromCart}
         onClearCart={handleClearCart}
         onExploreShop={() => handleNavigatePage('shop', 'all', '')}
