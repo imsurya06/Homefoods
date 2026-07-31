@@ -316,6 +316,7 @@ export function App() {
         onClearCart={handleClearCart}
         onExploreShop={() => handleNavigatePage('shop', 'all', '')}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onSyncCart={(syncedItems) => setCartItems(syncedItems)}
         isLoggedIn={!!user}
         user={user}
         initialTab={cartDrawerInitialTab}

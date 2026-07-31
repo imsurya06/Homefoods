@@ -20,6 +20,7 @@ import {
 import { type CartItem } from '../data/bestsellers';
 import { processRazorpayCheckout, type CheckoutPayload, trackSingleOrder } from '../services/checkoutService';
 import { fetchCustomerOrders, type CustomerOrderHistoryItem, type UserProfile } from '../services/authService';
+import { fetchRemoteCart } from '../services/cartStorage';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ interface CartDrawerProps {
   onClearCart: () => void;
   onExploreShop?: () => void;
   onOpenAuthModal?: () => void;
+  onSyncCart?: (items: CartItem[]) => void;
   isLoggedIn?: boolean;
   user?: UserProfile | null;
   initialTab?: 'cart' | 'orders';
@@ -44,6 +46,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onClearCart,
   onExploreShop,
   onOpenAuthModal,
+  onSyncCart,
   isLoggedIn = false,
   user = null,
   initialTab = 'cart',
@@ -147,48 +150,50 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     };
   }, [isOpen]);
 
-  // Live Sync & 3-Second Ultra-Fast Polling for Orders Data Across Devices
+  // Live Sync & 3-Second Ultra-Fast Polling for Orders & Cart Data Across Devices
   useEffect(() => {
-    if (!isOpen || activeTab !== 'orders') return;
+    if (!isOpen) return;
 
     const hasToken = !!localStorage.getItem('hf_auth_token');
-    if (!user && !hasToken) {
-      setLoadingOrders(false);
-      setOrders([]);
-      return;
-    }
 
-    let isMounted = true;
-
-    const syncOrders = (showSpinner = false) => {
-      if (showSpinner) setLoadingOrders(true);
-      fetchCustomerOrders()
-        .then((remoteOrders) => {
-          if (isMounted) {
+    const syncData = () => {
+      if (activeTab === 'orders') {
+        if (!user && !hasToken) {
+          setLoadingOrders(false);
+          setOrders([]);
+          return;
+        }
+        fetchCustomerOrders()
+          .then((remoteOrders) => {
             const activeOrders = (remoteOrders || []).filter((o) => o.status !== 'trash');
             setOrders(activeOrders);
-          }
-        })
-        .catch(() => {
-          if (isMounted) setOrders([]);
-        })
-        .finally(() => {
-          if (isMounted) setLoadingOrders(false);
-        });
+          })
+          .catch(() => {
+            setOrders([]);
+          })
+          .finally(() => {
+            setLoadingOrders(false);
+          });
+      } else if (activeTab === 'cart') {
+        if (user || hasToken) {
+          fetchRemoteCart().then((remoteItems) => {
+            if (remoteItems && Array.isArray(remoteItems) && onSyncCart) {
+              onSyncCart(remoteItems);
+            }
+          });
+        }
+      }
     };
 
-    syncOrders(true);
+    syncData();
 
     // 3-second polling interval for zero-delay database updates across devices
-    const pollInterval = setInterval(() => {
-      syncOrders(false);
-    }, 3000);
+    const pollInterval = setInterval(syncData, 3000);
 
-    const handleFocus = () => syncOrders(false);
+    const handleFocus = () => syncData();
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      isMounted = false;
       clearInterval(pollInterval);
       window.removeEventListener('focus', handleFocus);
     };
@@ -743,7 +748,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <span>Your Order History ({orders.length})</span>
                 </div>
 
-                {loadingOrders ? (
+                {loadingOrders && orders.length === 0 ? (
                   <div className="py-12 text-center space-y-2">
                     <div className="w-6 h-6 border-2 border-[#95CD1A] border-t-transparent rounded-full animate-spin mx-auto" />
                     <p className="text-xs text-gray-400 font-bold">Loading your orders...</p>

@@ -25,9 +25,9 @@ export function getStoredCart(isLoggedIn: boolean): CartItem[] {
 export async function fetchRemoteCart(): Promise<CartItem[]> {
   try {
     const token = getSavedToken();
-    if (!token) return [];
+    if (!token) return getStoredCart(true);
     const res = await fetchApi<{ success: boolean; items: CartItem[] }>('/cart/get');
-    if (res.success && Array.isArray(res.items) && res.items.length > 0) {
+    if (res.success && Array.isArray(res.items)) {
       localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
       return res.items;
     }
