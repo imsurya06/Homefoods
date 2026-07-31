@@ -439,6 +439,8 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
       }
     } catch {}
 
+    const isExistingUser = !!customerUser;
+
     if (!customerUser) {
       const username = `${cleanEmail.split('@')[0]}_${Math.floor(1000 + Math.random() * 9000)}`;
       const customerPayload = {
@@ -475,6 +477,7 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
     return res.json({
       success: true,
       token,
+      isNewUser: !isExistingUser,
       user: {
         id: customerId,
         email: cleanEmail,

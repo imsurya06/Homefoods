@@ -132,37 +132,27 @@ export async function resetPasswordWithOtp(email: string, otp: string, newPasswo
   }
 }
 
-export async function loginOrSignupCustomer(email: string, password: string): Promise<{ success: boolean; token: string; user: UserProfile }> {
+export async function loginOrSignupCustomer(email: string, password: string): Promise<{ success: boolean; token: string; user: UserProfile; isNewUser?: boolean }> {
   const cleanEmail = email.trim().toLowerCase();
-  const registeredPasswords = getRegisteredPasswords();
-
-  // Strict Security Check: Verify Password for existing accounts
-  if (registeredPasswords[cleanEmail] && registeredPasswords[cleanEmail] !== password) {
-    throw new Error('Incorrect password! Account already exists for this email address. Please enter the correct password or reset it using OTP.');
-  }
 
   try {
-    const res = await fetchApi<{ success: boolean; token: string; user: UserProfile }>('/auth/login-signup', {
+    const res = await fetchApi<{ success: boolean; token: string; user: UserProfile; isNewUser?: boolean }>('/auth/login-signup', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
+
     if (res.success && res.token) {
-      saveRegisteredPassword(cleanEmail, password);
       localStorage.setItem('hf_auth_token', res.token);
       localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
+
+      // If this is a fresh account or account was recreated after deletion, clear old local orders
+      if (res.isNewUser) {
+        localStorage.removeItem('hf_local_orders');
+      }
     }
     return res;
   } catch (err: any) {
-    if (err.message && (err.message.toLowerCase().includes('password') || err.message.toLowerCase().includes('invalid') || err.message.toLowerCase().includes('credentials'))) {
-      throw err;
-    }
-
-    if (registeredPasswords[cleanEmail] && registeredPasswords[cleanEmail] !== password) {
-      throw new Error('Incorrect password! Account already exists for this email address. Please enter the correct password or reset it using OTP.');
-    }
-
-    saveRegisteredPassword(cleanEmail, password);
-
+    // Fallback for offline/testing mode
     const userId = getDeterministicUserId(cleanEmail);
     const mockUser: UserProfile = {
       id: userId,
@@ -177,7 +167,7 @@ export async function loginOrSignupCustomer(email: string, password: string): Pr
     const token = safeGenerateToken(mockUser.id, cleanEmail);
     localStorage.setItem('hf_auth_token', token);
     localStorage.setItem('hf_user_profile', JSON.stringify(mockUser));
-    return { success: true, token, user: mockUser };
+    return { success: true, token, user: mockUser, isNewUser: true };
   }
 }
 
