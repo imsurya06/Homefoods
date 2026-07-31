@@ -277,7 +277,7 @@ function filterProducts(list: any[], category?: any, search?: any, inStock?: any
 }
 
 // GET /api/v1/products & /products
-app.get(['/api/v1/products', '/products'], async (req, res) => {
+app.get(['/api/v1/products', '/api/products', '/v1/products', '/products'], async (req, res) => {
   try {
     const { category, search, inStock, forceRefresh } = req.query;
     const now = Date.now();
@@ -880,7 +880,7 @@ app.get('/api/v1/checkout/track/:id', async (req, res) => {
 });
 
 // GET /health & /api/v1/health
-app.get(['/health', '/api/v1/health'], (_req, res) => {
+app.get(['/health', '/api/health', '/api/v1/health', '/v1/health'], (_req, res) => {
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -888,6 +888,10 @@ app.get(['/health', '/api/v1/health'], (_req, res) => {
   });
 });
 
-export default (req: any, res: any) => {
-  return app(req, res);
-};
+// Express Error Handler Middleware
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error('Unhandled Express Error:', err);
+  res.status(500).json({ success: false, message: err?.message || 'Internal Server Error' });
+});
+
+export default app;
