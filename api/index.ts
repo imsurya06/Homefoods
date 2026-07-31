@@ -30,6 +30,7 @@ app.use((_req, res, next) => {
 let cachedProductsResponse: any = null;
 let lastCacheTime = 0;
 const userCartsMap = new Map<string, any[]>();
+const globalPasswordMap = new Map<string, string>();
 const recentCreatedOrdersMap = new Map<string, { wcOrderId: number; orderRefCode: string; razorpayOrderId: string; amount: number; amountInPaise: number; keyId: string; timestamp: number }>();
 
 function decodeHtmlEntities(str: string): string {
@@ -448,26 +449,28 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
       }
     } catch {}
 
-    const isExistingUser = !!customerUser;
+    const isExistingUser = !!customerUser || globalPasswordMap.has(cleanEmail);
+    const storedPass = globalPasswordMap.get(cleanEmail) || 
+      (customerUser?.meta_data || []).find((m: any) => m.key === '_customer_auth_pass')?.value;
 
-    if (isExistingUser && customerUser) {
-      const passMeta = (customerUser.meta_data || []).find((m: any) => m.key === '_customer_auth_pass');
-      const expectedPassword = passMeta?.value;
-
-      if (expectedPassword && expectedPassword !== cleanPassword) {
+    if (isExistingUser) {
+      if (storedPass && cleanPassword && storedPass !== cleanPassword) {
         return res.status(401).json({
           success: false,
-          message: 'Incorrect password! Account already exists for this email address. Please enter the correct password or click Forgot Password to reset.',
+          message: 'An account already exists for this email address. Please enter the correct password or click Forgot Password to reset.',
         });
       }
 
-      if (!expectedPassword && cleanPassword) {
-        try {
-          await wcFetch(`customers/${customerId}`, {
-            method: 'PUT',
-            body: { meta_data: [{ key: '_customer_auth_pass', value: cleanPassword }] },
-          });
-        } catch {}
+      if (cleanPassword) {
+        globalPasswordMap.set(cleanEmail, cleanPassword);
+        if (customerUser && !storedPass) {
+          try {
+            await wcFetch(`customers/${customerId}`, {
+              method: 'PUT',
+              body: { meta_data: [{ key: '_customer_auth_pass', value: cleanPassword }] },
+            });
+          } catch {}
+        }
       }
     }
 
@@ -492,6 +495,10 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
       } catch {
         customerId = getDeterministicUserId(cleanEmail);
         customerUser = { id: customerId, email: cleanEmail, first_name: firstName, last_name: lastName };
+      }
+
+      if (cleanPassword) {
+        globalPasswordMap.set(cleanEmail, cleanPassword);
       }
     }
 
