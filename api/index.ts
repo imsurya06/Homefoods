@@ -444,14 +444,22 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
     try {
       const searchRes = await wcFetch('customers', { params: { email: cleanEmail } });
       if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-        customerUser = searchRes.data[0];
-        customerId = customerUser.id.toString();
+        const found = searchRes.data[0];
+        customerId = found.id.toString();
+        try {
+          const fullCustRes = await wcFetch(`customers/${customerId}`);
+          customerUser = (fullCustRes.ok && fullCustRes.data) ? fullCustRes.data : found;
+        } catch {
+          customerUser = found;
+        }
       }
     } catch {}
 
     const isExistingUser = !!customerUser || globalPasswordMap.has(cleanEmail);
-    const storedPass = globalPasswordMap.get(cleanEmail) || 
-      (customerUser?.meta_data || []).find((m: any) => m.key === '_customer_auth_pass')?.value;
+    const passMeta = (customerUser?.meta_data || []).find((m: any) =>
+      m.key === 'hf_account_pass' || m.key === 'customer_auth_pass' || m.key === '_customer_auth_pass'
+    );
+    const storedPass = globalPasswordMap.get(cleanEmail) || passMeta?.value;
 
     if (isExistingUser) {
       if (storedPass && cleanPassword && storedPass !== cleanPassword) {
@@ -463,11 +471,17 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
 
       if (cleanPassword) {
         globalPasswordMap.set(cleanEmail, cleanPassword);
-        if (customerUser && !storedPass) {
+        if (customerUser) {
           try {
             await wcFetch(`customers/${customerId}`, {
               method: 'PUT',
-              body: { meta_data: [{ key: '_customer_auth_pass', value: cleanPassword }] },
+              body: {
+                meta_data: [
+                  { key: 'hf_account_pass', value: cleanPassword },
+                  { key: 'customer_auth_pass', value: cleanPassword },
+                  { key: '_customer_auth_pass', value: cleanPassword },
+                ],
+              },
             });
           } catch {}
         }
@@ -483,7 +497,11 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
         username,
         billing: { first_name: firstName, last_name: lastName, email: cleanEmail, phone: cleanPhone },
         shipping: { first_name: firstName, last_name: lastName },
-        meta_data: cleanPassword ? [{ key: '_customer_auth_pass', value: cleanPassword }] : [],
+        meta_data: cleanPassword ? [
+          { key: 'hf_account_pass', value: cleanPassword },
+          { key: 'customer_auth_pass', value: cleanPassword },
+          { key: '_customer_auth_pass', value: cleanPassword },
+        ] : [],
       };
 
       try {
@@ -527,6 +545,73 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message || 'Authentication failed' });
+  }
+});
+
+// POST /api/v1/cart/sync (Save user's cart items across devices)
+app.post('/api/v1/cart/sync', async (req, res) => {
+  try {
+    const { items } = req.body;
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.json({ success: false, message: 'No auth token' });
+
+    const token = authHeader.replace('Bearer ', '');
+    const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
+    const parts = rawDecoded.split(':');
+    const customerId = parts[0];
+    const email = parts[1]?.toLowerCase();
+
+    if (email) {
+      userCartsMap.set(email, items || []);
+      if (customerId && /^\d+$/.test(customerId)) {
+        wcFetch(`customers/${customerId}`, {
+          method: 'PUT',
+          body: { meta_data: [{ key: '_saved_cart', value: JSON.stringify(items || []) }] },
+        }).catch(() => {});
+      }
+    }
+
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/v1/cart/get (Fetch user's saved cart items across devices)
+app.get('/api/v1/cart/get', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.json({ success: true, items: [] });
+
+    const token = authHeader.replace('Bearer ', '');
+    const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
+    const parts = rawDecoded.split(':');
+    const customerId = parts[0];
+    const email = parts[1]?.toLowerCase();
+
+    if (!email) return res.json({ success: true, items: [] });
+
+    let items = userCartsMap.get(email);
+    if (!items || items.length === 0) {
+      if (customerId && /^\d+$/.test(customerId)) {
+        try {
+          const custRes = await wcFetch(`customers/${customerId}`);
+          if (custRes.ok && custRes.data) {
+            const cartMeta = (custRes.data.meta_data || []).find((m: any) => m.key === '_saved_cart');
+            if (cartMeta && cartMeta.value) {
+              items = typeof cartMeta.value === 'string' ? JSON.parse(cartMeta.value) : cartMeta.value;
+              if (Array.isArray(items)) {
+                userCartsMap.set(email, items);
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+
+    return res.json({ success: true, items: items || [] });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message, items: [] });
   }
 });
 

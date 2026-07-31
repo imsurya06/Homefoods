@@ -11,7 +11,7 @@ import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
 import { type CartItem } from './data/bestsellers';
 import { fetchCurrentUser, logoutCustomer, getSavedUserProfile, type UserProfile } from './services/authService';
-import { getStoredCart, saveCartItems, clearCartStorage } from './services/cartStorage';
+import { getStoredCart, fetchRemoteCart, saveCartItems, clearCartStorage } from './services/cartStorage';
 
 export function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'shop'>('home');
@@ -29,12 +29,16 @@ export function App() {
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [cartDrawerInitialTab, setCartDrawerInitialTab] = useState<'cart' | 'orders'>('cart');
 
-  // Sync logged-in user details on mount
+  // Sync logged-in user details & cart on mount
   useEffect(() => {
     fetchCurrentUser().then((u) => {
       if (u) {
         setUser(u);
-        setCartItems(getStoredCart(true));
+        fetchRemoteCart().then((remoteItems) => {
+          if (remoteItems && remoteItems.length > 0) {
+            setCartItems(remoteItems);
+          }
+        });
       }
     });
   }, []);
@@ -109,7 +113,13 @@ export function App() {
   // Auth Callbacks
   const handleAuthSuccess = (loggedUser: UserProfile) => {
     setUser(loggedUser);
-    setCartItems(getStoredCart(true));
+    fetchRemoteCart().then((remoteItems) => {
+      if (remoteItems && remoteItems.length > 0) {
+        setCartItems(remoteItems);
+      } else {
+        setCartItems(getStoredCart(true));
+      }
+    });
     showToast(`Welcome to Homemade Foods, ${loggedUser.firstName}!`);
   };
 

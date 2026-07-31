@@ -22,6 +22,21 @@ export function getStoredCart(isLoggedIn: boolean): CartItem[] {
   }
 }
 
+export async function fetchRemoteCart(): Promise<CartItem[]> {
+  try {
+    const token = getSavedToken();
+    if (!token) return [];
+    const res = await fetchApi<{ success: boolean; items: CartItem[] }>('/cart/get');
+    if (res.success && Array.isArray(res.items) && res.items.length > 0) {
+      localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
+      return res.items;
+    }
+  } catch (err) {
+    console.warn('Fetch remote cart warning:', err);
+  }
+  return getStoredCart(true);
+}
+
 export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
   if (!isLoggedIn) {
     try {
