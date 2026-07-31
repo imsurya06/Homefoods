@@ -206,11 +206,8 @@ export async function registerCustomer(payload: {
 
 export function getSavedUserProfile(): UserProfile | null {
   try {
-    const token = localStorage.getItem('hf_auth_token');
     const raw = localStorage.getItem('hf_user_profile');
-    if (token && raw) {
-      return JSON.parse(raw);
-    }
+    if (raw) return JSON.parse(raw);
   } catch {}
   return null;
 }
@@ -218,8 +215,6 @@ export function getSavedUserProfile(): UserProfile | null {
 export async function fetchCurrentUser(): Promise<UserProfile | null> {
   const token = getSavedToken();
   if (!token) return null;
-
-  const savedProfile = getSavedUserProfile();
 
   try {
     const res = await fetchApi<{ success: boolean; user: UserProfile; accountDeleted?: boolean }>('/auth/me');
@@ -231,17 +226,20 @@ export async function fetchCurrentUser(): Promise<UserProfile | null> {
       logoutCustomer();
       return null;
     }
-    return savedProfile;
+    return getSavedUserProfile();
   } catch (err: any) {
     if (err && (err.status === 401 || err.accountDeleted || (err.message && err.message.toLowerCase().includes('deleted')))) {
       logoutCustomer();
       return null;
     }
-    return savedProfile;
+    return getSavedUserProfile();
   }
 }
 
 export async function fetchCustomerOrders(): Promise<CustomerOrderHistoryItem[]> {
+  const token = getSavedToken();
+  if (!token) return [];
+
   try {
     const res = await fetchApi<{ success: boolean; data: CustomerOrderHistoryItem[]; accountDeleted?: boolean }>('/auth/my-orders');
     if ((res as any).accountDeleted || (res as any).status === 401) {
@@ -261,7 +259,9 @@ export function logoutCustomer() {
   try {
     localStorage.removeItem('hf_auth_token');
     localStorage.removeItem('hf_user_profile');
-    sessionStorage.removeItem('hf_guest_cart');
+    localStorage.removeItem('hf_local_orders');
+    localStorage.removeItem('hf_user_passwords');
+    sessionStorage.clear();
   } catch (err) {
     console.error('Error logging out:', err);
   }

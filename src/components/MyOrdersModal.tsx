@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { X, Search, PackageCheck, Truck, CheckCircle2, Clock, AlertCircle, ShoppingBag, Utensils, ArrowRight, User } from 'lucide-react';
 import { fetchCustomerOrders, type CustomerOrderHistoryItem, type UserProfile } from '../services/authService';
 import { fetchApi } from '../services/apiClient';
-import { trackSingleOrder } from '../services/checkoutService';
 
 interface MyOrdersModalProps {
   isOpen: boolean;
@@ -30,70 +29,13 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
     if (isOpen && user) {
       setLoading(true);
 
-      let localOrders: CustomerOrderHistoryItem[] = [];
-      try {
-        const saved = localStorage.getItem('hf_local_orders');
-        localOrders = saved ? JSON.parse(saved) : [];
-      } catch {}
-
-      const syncOrderStatuses = async (initialOrders: CustomerOrderHistoryItem[]) => {
-        let updatedList = [...initialOrders];
-        let hasChanges = false;
-
-        await Promise.all(
-          updatedList.map(async (ord, idx) => {
-            try {
-              const liveData = await trackSingleOrder(ord.id);
-              if (liveData) {
-                if (liveData.notFound || liveData.status === 'trash') {
-                  (updatedList[idx] as any)._isDeleted = true;
-                  hasChanges = true;
-                } else if (liveData.status) {
-                  if (updatedList[idx].stage !== liveData.stage || updatedList[idx].status !== liveData.status) {
-                    updatedList[idx] = {
-                      ...updatedList[idx],
-                      status: liveData.status,
-                      statusLabel: liveData.statusLabel,
-                      stage: liveData.stage,
-                    };
-                    hasChanges = true;
-                  }
-                }
-              }
-            } catch {}
-          })
-        );
-
-        // Filter out any trashed or deleted orders
-        const activeOrders = updatedList.filter((o) => !(o as any)._isDeleted && o.status !== 'trash');
-
-        if (hasChanges || activeOrders.length !== updatedList.length) {
-          try {
-            localStorage.setItem('hf_local_orders', JSON.stringify(activeOrders));
-          } catch {}
-          setOrders(activeOrders);
-        }
-      };
-
       fetchCustomerOrders()
         .then((remoteOrders) => {
-          const cleanRemote = remoteOrders.filter((o) => o.status !== 'trash');
-          const remoteMap = new Map(cleanRemote.map((o) => [o.id.toString(), o]));
-          const merged: CustomerOrderHistoryItem[] = [...cleanRemote];
-
-          localOrders.forEach((lo) => {
-            if (lo.status !== 'trash' && !remoteMap.has(lo.id.toString())) {
-              merged.push(lo);
-            }
-          });
-
-          setOrders(merged);
-          syncOrderStatuses(merged);
+          const activeOrders = (remoteOrders || []).filter((o) => o.status !== 'trash');
+          setOrders(activeOrders);
         })
         .catch(() => {
-          const activeLocal = localOrders.filter((lo) => lo.status !== 'trash');
-          setOrders(activeLocal);
-          syncOrderStatuses(activeLocal);
+          setOrders([]);
         })
         .finally(() => setLoading(false));
     }

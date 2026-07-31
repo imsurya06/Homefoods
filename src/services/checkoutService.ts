@@ -117,9 +117,9 @@ export async function processRazorpayCheckout(
                 items: payload.items.map((it: any) => ({ name: it.name, quantity: it.quantity, pricePerUnit: it.pricePerUnit, weight: it.weight, total: (it.pricePerUnit * it.quantity).toString() })),
                 shippingAddress: `${payload.shippingAddress.address}, ${payload.shippingAddress.city}`,
               };
-              const saved = localStorage.getItem('hf_local_orders');
+              const saved = sessionStorage.getItem('hf_guest_orders');
               const existingOrders = saved ? JSON.parse(saved) : [];
-              localStorage.setItem('hf_local_orders', JSON.stringify([newOrder, ...existingOrders]));
+              sessionStorage.setItem('hf_guest_orders', JSON.stringify([newOrder, ...existingOrders]));
             } catch (e) {}
 
             onSuccess({

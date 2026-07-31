@@ -152,87 +152,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     if (isOpen && activeTab === 'orders') {
       setLoadingOrders(true);
 
-      let localOrders: CustomerOrderHistoryItem[] = [];
-      try {
-        const saved = localStorage.getItem('hf_local_orders');
-        localOrders = saved ? JSON.parse(saved) : [];
-      } catch {}
-
-      const syncOrderStatuses = async (initialOrders: CustomerOrderHistoryItem[]) => {
-        let updatedList = [...initialOrders];
-        let hasChanges = false;
-
-        await Promise.all(
-          updatedList.map(async (ord, idx) => {
-            try {
-              const liveData = await trackSingleOrder(ord.id);
-              if (liveData) {
-                if (liveData.notFound || liveData.status === 'trash') {
-                  (updatedList[idx] as any)._isDeleted = true;
-                  hasChanges = true;
-                } else if (liveData.status) {
-                  if (updatedList[idx].stage !== liveData.stage || updatedList[idx].status !== liveData.status) {
-                    updatedList[idx] = {
-                      ...updatedList[idx],
-                      status: liveData.status,
-                      statusLabel: liveData.statusLabel,
-                      stage: liveData.stage,
-                    };
-                    hasChanges = true;
-                  }
-                }
-              }
-            } catch {}
-          })
-        );
-
-        const activeOrders = updatedList.filter((o) => !(o as any)._isDeleted && o.status !== 'trash');
-        if (hasChanges || activeOrders.length !== updatedList.length) {
-          try {
-            localStorage.setItem('hf_local_orders', JSON.stringify(activeOrders));
-          } catch {}
-          setOrders(activeOrders);
-        }
-      };
-
       fetchCustomerOrders()
         .then((remoteOrders) => {
-          const seenKeys = new Set<string>();
-          const merged: CustomerOrderHistoryItem[] = [];
-
-          const addUnique = (o: CustomerOrderHistoryItem) => {
-            if (!o || o.status === 'trash') return;
-            const idKey = o.id ? o.id.toString().toLowerCase().trim() : '';
-            const refKey = o.orderRefCode ? o.orderRefCode.toLowerCase().trim() : '';
-
-            if (idKey && seenKeys.has(idKey)) return;
-            if (refKey && seenKeys.has(refKey)) return;
-
-            if (idKey) seenKeys.add(idKey);
-            if (refKey) seenKeys.add(refKey);
-            merged.push(o);
-          };
-
-          remoteOrders.forEach(addUnique);
-          localOrders.forEach(addUnique);
-
-          setOrders(merged);
-          syncOrderStatuses(merged);
+          const activeOrders = (remoteOrders || []).filter((o) => o.status !== 'trash');
+          setOrders(activeOrders);
         })
         .catch(() => {
-          const seenKeys = new Set<string>();
-          const merged: CustomerOrderHistoryItem[] = [];
-          localOrders.forEach((lo) => {
-            if (!lo || lo.status === 'trash') return;
-            const idKey = lo.id ? lo.id.toString().toLowerCase().trim() : '';
-            const refKey = lo.orderRefCode ? lo.orderRefCode.toLowerCase().trim() : '';
-            if ((idKey && seenKeys.has(idKey)) || (refKey && seenKeys.has(refKey))) return;
-            if (idKey) seenKeys.add(idKey);
-            if (refKey) seenKeys.add(refKey);
-            merged.push(lo);
-          });
-          setOrders(merged);
-          syncOrderStatuses(merged);
+          setOrders([]);
         })
         .finally(() => setLoadingOrders(false));
     }
