@@ -423,7 +423,7 @@ function getDeterministicUserId(email: string): string {
 }
 
 // POST /api/v1/auth/login-signup (Instant Auto-Registration & Customer Login)
-app.post('/api/v1/auth/login-signup', async (req, res) => {
+app.post(['/api/v1/auth/login-signup', '/api/auth/login-signup', '/v1/auth/login-signup', '/auth/login-signup'], async (req, res) => {
   try {
     const { email, password, name, phone } = req.body;
     const cleanEmail = (email || '').trim().toLowerCase();
@@ -549,7 +549,7 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
 });
 
 // POST /api/v1/auth/login
-app.post('/api/v1/auth/login', async (req, res) => {
+app.post(['/api/v1/auth/login', '/api/auth/login', '/v1/auth/login', '/auth/login'], async (req, res) => {
   try {
     const { email, password } = req.body;
     const cleanEmail = (email || '').trim().toLowerCase();
@@ -692,7 +692,7 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
 });
 
 // GET /api/v1/auth/me
-app.get('/api/v1/auth/me', async (req, res) => {
+app.get(['/api/v1/auth/me', '/api/auth/me', '/v1/auth/me', '/auth/me'], async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ success: false, message: 'Unauthorized' });
@@ -831,7 +831,7 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
 });
 
 // POST /api/v1/checkout/create-order
-app.post('/api/v1/checkout/create-order', async (req, res) => {
+app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/checkout/create-order', '/checkout/create-order'], async (req, res) => {
   try {
     const { customerDetails, billingAddress, shippingAddress, items, couponCode, notes } = req.body;
     const razorpay = getRazorpayClient();
@@ -1001,7 +1001,7 @@ app.post('/api/v1/checkout/create-order', async (req, res) => {
 });
 
 // POST /api/v1/checkout/verify-payment
-app.post('/api/v1/checkout/verify-payment', async (req, res) => {
+app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v1/checkout/verify-payment', '/checkout/verify-payment'], async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, wcOrderId, orderRefCode, customerEmail, customerName, totalAmount, items, shippingAddress, phone } = req.body;
     const keySecret = (process.env.RAZORPAY_KEY_SECRET || 'mw34w1wZGXkKlbZYTEDcMKu7').trim();
