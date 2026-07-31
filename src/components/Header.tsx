@@ -215,9 +215,9 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          {/* 3. Clickable User Profile Icon Button (Placed LAST) */}
+          {/* 3. Clickable User Profile Icon Button (Desktop Only: hidden md:block) */}
           {user ? (
-            <div ref={userDropdownRef} className="relative">
+            <div ref={userDropdownRef} className="hidden md:block relative">
               <button
                 onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
                 title={user.displayName || 'User Profile'}
@@ -242,6 +242,7 @@ export const Header: React.FC<HeaderProps> = ({
                     }}
                     className="w-full px-4 py-2.5 text-xs font-bold text-gray-700 hover:bg-[#F7FCE8] hover:text-[#95CD1A] flex items-center gap-2 transition-colors cursor-pointer"
                   >
+                    <Package className="w-3.5 h-3.5" />
                     <span>My Orders & Live Tracking</span>
                   </button>
 
@@ -263,7 +264,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={onOpenAuthModal}
               aria-label="Account Login"
               title="Account Login / Signup"
-              className="p-3.5 rounded-2xl bg-gray-100 text-[#1F2937] hover:bg-[#F7FCE8] hover:text-[#95CD1A] transition-all cursor-pointer group shadow-2xs flex items-center justify-center"
+              className="hidden md:flex p-3.5 rounded-2xl bg-gray-100 text-[#1F2937] hover:bg-[#F7FCE8] hover:text-[#95CD1A] transition-all cursor-pointer group shadow-2xs items-center justify-center"
             >
               <User className="w-5 h-5 sm:w-6 sm:h-6 text-[#1F2937] group-hover:text-[#95CD1A] transition-colors" />
             </button>
@@ -284,6 +285,43 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Mobile Slide-Down Navigation Menu */}
       {isMobileMenuOpen && (
         <div className="md:hidden bg-white border-b border-gray-200 px-6 py-6 space-y-4 shadow-xl animate-in slide-in-from-top duration-300">
+          
+          {/* User Account Banner inside Mobile Hamburger Menu */}
+          {user ? (
+            <div className="bg-[#F7FCE8] p-4 rounded-2xl border border-[#ECF9CA] space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#95CD1A] text-white flex items-center justify-center shadow-xs">
+                  <User className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-left overflow-hidden">
+                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Logged In As</span>
+                  <span className="text-sm font-black text-[#1F2937] truncate block">{user.email}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  if (onLogout) onLogout();
+                }}
+                className="w-full py-2.5 rounded-xl bg-white text-red-600 font-extrabold text-xs flex items-center justify-center gap-1.5 border border-red-100 hover:bg-red-50 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Logout Account</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                if (onOpenAuthModal) onOpenAuthModal();
+              }}
+              className="w-full py-3 rounded-2xl bg-gray-100 text-[#1F2937] hover:bg-[#F7FCE8] hover:text-[#95CD1A] font-extrabold text-sm flex items-center justify-center gap-2 border border-gray-200 transition-colors cursor-pointer"
+            >
+              <User className="w-4 h-4 text-[#95CD1A]" />
+              <span>Login / Sign Up Account</span>
+            </button>
+          )}
+
           <nav className="flex flex-col space-y-3 font-bold text-lg text-gray-800 text-center">
             <button
               onClick={() => handleNavClick('home')}

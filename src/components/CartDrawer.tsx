@@ -272,6 +272,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         setIsProcessing(false);
         setOrderSuccess(response);
         onClearCart();
+        setActiveTab('orders');
+        if (response && response.wcOrderId) {
+          setExpandedOrderId(response.wcOrderId);
+        }
       },
       (errorMsg) => {
         setIsProcessing(false);
