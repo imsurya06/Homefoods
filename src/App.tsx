@@ -40,7 +40,15 @@ export function App() {
       });
       fetchRemoteCart().then((remoteItems) => {
         if (isMounted && remoteItems && Array.isArray(remoteItems)) {
-          setCartItems(remoteItems);
+          setCartItems((prev) => {
+            if (prev.length > 0 && remoteItems.length === 0) {
+              return prev;
+            }
+            if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
+              return prev;
+            }
+            return remoteItems;
+          });
         }
       });
     };
@@ -49,14 +57,22 @@ export function App() {
 
     const interval = setInterval(() => {
       const token = localStorage.getItem('hf_auth_token');
-      if (token) {
+      if (token && document.visibilityState === 'visible') {
         fetchRemoteCart().then((remoteItems) => {
           if (isMounted && remoteItems && Array.isArray(remoteItems)) {
-            setCartItems(remoteItems);
+            setCartItems((prev) => {
+              if (prev.length > 0 && remoteItems.length === 0) {
+                return prev;
+              }
+              if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
+                return prev;
+              }
+              return remoteItems;
+            });
           }
         });
       }
-    }, 2000);
+    }, 2500);
 
     const handleFocus = () => syncUserAndCart();
     const handleCartCleared = () => {
