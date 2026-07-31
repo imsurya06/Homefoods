@@ -284,29 +284,29 @@ export function App() {
       if (!targetItem) return prevItems;
 
       const newId = `${targetItem.productId}-${newWeight}`;
-      if (newId === oldId) return prevItems;
 
-      const existingSameWeightItem = prevItems.find((i) => i.id === newId);
-      let updated: CartItem[];
+      const updatedList = prevItems.map((i) =>
+        i.id === oldId
+          ? { ...i, id: newId, weight: newWeight, pricePerUnit: newPricePerUnit }
+          : i
+      );
 
-      if (existingSameWeightItem) {
-        updated = prevItems
-          .filter((i) => i.id !== oldId)
-          .map((i) =>
-            i.id === newId
-              ? { ...i, quantity: i.quantity + targetItem.quantity }
-              : i
-          );
-      } else {
-        updated = prevItems.map((i) =>
-          i.id === oldId
-            ? { ...i, id: newId, weight: newWeight, pricePerUnit: newPricePerUnit }
-            : i
-        );
+      const consolidatedMap = new Map<string, CartItem>();
+      for (const item of updatedList) {
+        if (consolidatedMap.has(item.id)) {
+          const existing = consolidatedMap.get(item.id)!;
+          consolidatedMap.set(item.id, {
+            ...existing,
+            quantity: existing.quantity + item.quantity,
+          });
+        } else {
+          consolidatedMap.set(item.id, { ...item });
+        }
       }
 
-      saveCartItems(updated, !!user);
-      return updated;
+      const finalItems = Array.from(consolidatedMap.values());
+      saveCartItems(finalItems, !!user);
+      return finalItems;
     });
     showToast('Pack weight updated');
   };

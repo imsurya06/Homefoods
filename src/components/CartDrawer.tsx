@@ -548,8 +548,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </div>
 
                     <div className="divide-y divide-gray-100 border-y border-gray-100">
-                      {items.map((item) => (
-                        <div key={item.id} className="py-3.5 flex items-center justify-between gap-3">
+                      {items.map((item, index) => (
+                        <div key={`${item.id}-${index}`} className="py-3.5 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <img
                               src={item.imageUrl}
