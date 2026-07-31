@@ -62,13 +62,17 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
 }
 
 export function clearCartStorage(isLoggedIn: boolean) {
-  if (!isLoggedIn) {
-    try {
-      sessionStorage.removeItem(GUEST_CART_KEY);
-    } catch {}
-  } else {
-    try {
-      localStorage.removeItem('hf_user_cart');
-    } catch {}
+  try {
+    sessionStorage.removeItem(GUEST_CART_KEY);
+    localStorage.setItem('hf_user_cart', JSON.stringify([]));
+    const token = getSavedToken();
+    if (isLoggedIn && token) {
+      fetchApi('/cart/sync', {
+        method: 'POST',
+        body: JSON.stringify({ items: [] }),
+      }).catch((err) => console.warn('Cart clear sync warning:', err));
+    }
+  } catch (err) {
+    console.error('Failed to clear cart storage:', err);
   }
 }
