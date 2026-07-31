@@ -16,8 +16,14 @@ app.use(
     origin: true,
     credentials: true,
   })
-);
 app.use(express.json());
+
+app.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
 
 // In-Memory Caches & Transients
 let cachedProductsResponse: any = null;
@@ -417,8 +423,10 @@ function getDeterministicUserId(email: string): string {
 // POST /api/v1/auth/login-signup (Instant Auto-Registration & Customer Login)
 app.post('/api/v1/auth/login-signup', async (req, res) => {
   try {
-    const { email, name, phone } = req.body;
+    const { email, password, name, phone } = req.body;
     const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPassword = (password || '').trim();
+
     if (!cleanEmail || !cleanEmail.includes('@')) {
       return res.status(400).json({ success: false, message: 'Valid email address is required' });
     }
@@ -441,6 +449,18 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
 
     const isExistingUser = !!customerUser;
 
+    if (isExistingUser && customerUser) {
+      const passMeta = (customerUser.meta_data || []).find((m: any) => m.key === '_customer_auth_pass');
+      if (passMeta && passMeta.value && cleanPassword) {
+        if (passMeta.value !== cleanPassword) {
+          return res.status(401).json({
+            success: false,
+            message: 'Incorrect password! Account already exists for this email address. Please enter the correct password or click Forgot Password to reset.',
+          });
+        }
+      }
+    }
+
     if (!customerUser) {
       const username = `${cleanEmail.split('@')[0]}_${Math.floor(1000 + Math.random() * 9000)}`;
       const customerPayload = {
@@ -450,6 +470,7 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
         username,
         billing: { first_name: firstName, last_name: lastName, email: cleanEmail, phone: cleanPhone },
         shipping: { first_name: firstName, last_name: lastName },
+        meta_data: cleanPassword ? [{ key: '_customer_auth_pass', value: cleanPassword }] : [],
       };
 
       try {
@@ -462,6 +483,13 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
         customerId = getDeterministicUserId(cleanEmail);
         customerUser = { id: customerId, email: cleanEmail, first_name: firstName, last_name: lastName };
       }
+    } else if (cleanPassword) {
+      try {
+        await wcFetch(`customers/${customerId}`, {
+          method: 'PUT',
+          body: { meta_data: [{ key: '_customer_auth_pass', value: cleanPassword }] },
+        });
+      } catch {}
     }
 
     if (!customerId) {

@@ -224,12 +224,14 @@ export async function fetchCurrentUser(): Promise<UserProfile | null> {
     }
     if ((res as any).accountDeleted || (res as any).status === 401) {
       logoutCustomer();
+      alert('Your account has been deleted by admin. Please sign up again to create a new account.');
       return null;
     }
     return getSavedUserProfile();
   } catch (err: any) {
     if (err && (err.status === 401 || err.accountDeleted || (err.message && err.message.toLowerCase().includes('deleted')))) {
       logoutCustomer();
+      alert('Your account has been deleted by admin. Please sign up again to create a new account.');
       return null;
     }
     return getSavedUserProfile();
@@ -244,12 +246,14 @@ export async function fetchCustomerOrders(): Promise<CustomerOrderHistoryItem[]>
     const res = await fetchApi<{ success: boolean; data: CustomerOrderHistoryItem[]; accountDeleted?: boolean }>('/auth/my-orders');
     if ((res as any).accountDeleted || (res as any).status === 401) {
       logoutCustomer();
+      alert('Your account has been deleted by admin. Please sign up again to create a new account.');
       return [];
     }
     return res.success && res.data ? res.data : [];
   } catch (err: any) {
     if (err && (err.status === 401 || err.accountDeleted || (err.message && err.message.toLowerCase().includes('deleted')))) {
       logoutCustomer();
+      alert('Your account has been deleted by admin. Please sign up again to create a new account.');
     }
     return [];
   }
