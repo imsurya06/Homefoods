@@ -150,26 +150,34 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     };
   }, [isOpen]);
 
-  // Live Sync & 3-Second Ultra-Fast Polling for Orders & Cart Data Across Devices
+  // Live Sync & 3-Second Ultra-Fast Polling for Orders & Cart Data Across Devices (Zero-Flicker)
   useEffect(() => {
     if (!isOpen) return;
 
     const hasToken = !!localStorage.getItem('hf_auth_token');
 
-    const syncData = () => {
+    const syncData = (isInitial = false) => {
       if (activeTab === 'orders') {
         if (!user && !hasToken) {
           setLoadingOrders(false);
           setOrders([]);
           return;
         }
+
+        // Only show spinner on initial load if we have 0 orders loaded
+        if (isInitial && orders.length === 0) {
+          setLoadingOrders(true);
+        }
+
         fetchCustomerOrders()
           .then((remoteOrders) => {
-            const activeOrders = (remoteOrders || []).filter((o) => o.status !== 'trash');
-            setOrders(activeOrders);
+            if (Array.isArray(remoteOrders)) {
+              const activeOrders = remoteOrders.filter((o) => o.status !== 'trash');
+              setOrders(activeOrders);
+            }
           })
-          .catch(() => {
-            setOrders([]);
+          .catch((err) => {
+            console.warn('Silent order poll warning:', err);
           })
           .finally(() => {
             setLoadingOrders(false);
@@ -185,12 +193,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       }
     };
 
-    syncData();
+    // Initial fetch with spinner if empty
+    syncData(true);
 
-    // 3-second polling interval for zero-delay database updates across devices
-    const pollInterval = setInterval(syncData, 3000);
+    // Silent background polling every 3 seconds (never shows spinner or wipes existing orders)
+    const pollInterval = setInterval(() => syncData(false), 3000);
 
-    const handleFocus = () => syncData();
+    const handleFocus = () => syncData(false);
     window.addEventListener('focus', handleFocus);
 
     return () => {

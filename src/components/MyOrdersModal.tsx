@@ -35,22 +35,20 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
       return;
     }
 
-    let isMounted = true;
-
     const loadOrders = (showSpinner = false) => {
-      if (showSpinner) setLoading(true);
+      if (showSpinner && orders.length === 0) setLoading(true);
       fetchCustomerOrders()
         .then((remoteOrders) => {
-          if (isMounted) {
-            const activeOrders = (remoteOrders || []).filter((o) => o.status !== 'trash');
+          if (Array.isArray(remoteOrders)) {
+            const activeOrders = remoteOrders.filter((o) => o.status !== 'trash');
             setOrders(activeOrders);
           }
         })
-        .catch(() => {
-          if (isMounted) setOrders([]);
+        .catch((err) => {
+          console.warn('Silent order poll warning:', err);
         })
         .finally(() => {
-          if (isMounted) setLoading(false);
+          setLoading(false);
         });
     };
 
@@ -64,7 +62,6 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      isMounted = false;
       clearInterval(pollInterval);
       window.removeEventListener('focus', handleFocus);
     };
