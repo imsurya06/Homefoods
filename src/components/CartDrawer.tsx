@@ -125,6 +125,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [guestSearchError, setGuestSearchError] = useState<string | null>(null);
   const [guestSearchLoading, setGuestSearchLoading] = useState<boolean>(false);
 
+  // Auto-fill checkout fields from logged-in user profile
+  useEffect(() => {
+    if (user && isOpen) {
+      if (user.email) setEmail(user.email);
+      if (user.displayName && user.displayName.trim() !== 'Customer') setCustomerName(user.displayName);
+      if (user.phone && !mobileNumber) setMobileNumber(user.phone);
+      if (user.billing?.address_1 && !shippingAddress) setShippingAddress(user.billing.address_1);
+      if (user.billing?.city && !city) setCity(user.billing.city);
+      if (user.billing?.postcode && !pincode) setPincode(user.billing.postcode);
+    }
+  }, [user, isOpen]);
+
   useEffect(() => {
     try {
       localStorage.setItem('hf_customer_name', customerName);

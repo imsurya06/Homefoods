@@ -703,20 +703,19 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
     const email = (parts[1] || '').trim().toLowerCase();
 
     if (email) {
+      if (req.body.isUserAction || (Array.isArray(items) && items.length > 0)) {
+        userCartLocks.delete(email);
+      }
+
       const lockExp = userCartLocks.get(email);
       const isLocked = lockExp && Date.now() < lockExp;
 
-      if (isLocked && Array.isArray(items) && items.length > 0) {
-        console.log(`🔒 Cart sync locked for ${email}. Rejecting stale items from secondary device.`);
+      if (isLocked && Array.isArray(items) && items.length > 0 && !req.body.isUserAction) {
+        console.log(`🔒 Cart sync locked for ${email}. Rejecting background stale items.`);
         return res.json({ success: true, cartCleared: true, items: [] });
       }
 
-      if (Array.isArray(items) && items.length === 0) {
-        userCartsMap.set(email, []);
-        userCartLocks.set(email, Date.now() + 60000);
-      } else {
-        userCartsMap.set(email, items || []);
-      }
+      userCartsMap.set(email, items || []);
 
       // Asynchronous background update to WooCommerce customer metadata
       wcFetch('customers', { params: { email } }).then((searchRes) => {
@@ -1135,7 +1134,7 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
     const cleanEmail = (customerEmail || '').trim().toLowerCase();
     if (cleanEmail) {
       userCartsMap.set(cleanEmail, []);
-      userCartLocks.set(cleanEmail, Date.now() + 60000);
+      userCartLocks.set(cleanEmail, Date.now() + 5000);
       wcFetch('customers', { params: { email: cleanEmail } }).then((searchRes) => {
         if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
           const wcId = searchRes.data[0].id;
