@@ -85,3 +85,34 @@ export function clearCartStorage(isLoggedIn: boolean) {
     console.error('Failed to clear cart storage:', err);
   }
 }
+
+export function mergeCartItems(accountItems: CartItem[], guestItems: CartItem[]): CartItem[] {
+  const safeAccount = Array.isArray(accountItems) ? accountItems : [];
+  const safeGuest = Array.isArray(guestItems) ? guestItems : [];
+
+  if (safeGuest.length === 0) return safeAccount;
+  if (safeAccount.length === 0) return safeGuest;
+
+  const mergedMap = new Map<string, CartItem>();
+
+  for (const item of safeAccount) {
+    if (item && item.id) {
+      mergedMap.set(item.id, { ...item });
+    }
+  }
+
+  for (const guestItem of safeGuest) {
+    if (!guestItem || !guestItem.id) continue;
+    if (mergedMap.has(guestItem.id)) {
+      const existing = mergedMap.get(guestItem.id)!;
+      mergedMap.set(guestItem.id, {
+        ...existing,
+        quantity: existing.quantity + (guestItem.quantity || 1),
+      });
+    } else {
+      mergedMap.set(guestItem.id, { ...guestItem });
+    }
+  }
+
+  return Array.from(mergedMap.values());
+}
