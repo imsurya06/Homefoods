@@ -6,7 +6,6 @@ import { ShopCatalog } from './components/ShopCatalog';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
 import { AuthModal } from './components/AuthModal';
-import { MyOrdersModal } from './components/MyOrdersModal';
 import { LogoutConfirmModal } from './components/LogoutConfirmModal';
 import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
@@ -23,7 +22,6 @@ export function App() {
   // User Auth & Modal States with instant persistence across page refreshes
   const [user, setUser] = useState<UserProfile | null>(() => getSavedUserProfile());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [isMyOrdersModalOpen, setIsMyOrdersModalOpen] = useState<boolean>(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState<boolean>(false);
 
   // Cart & Orders Drawer State
@@ -55,7 +53,8 @@ export function App() {
       } else if (hash === '#home' || hash === '') {
         setCurrentPage('home');
       } else if (hash.startsWith('#track')) {
-        setIsMyOrdersModalOpen(true);
+        setCartDrawerInitialTab('orders');
+        setIsCartOpen(true);
       }
     };
 
@@ -317,7 +316,10 @@ export function App() {
       {/* Persistent Footer */}
       <Footer
         onNavigatePage={(page, categoryId) => handleNavigatePage(page, categoryId || 'all', '')}
-        onOpenTrackModal={() => setIsMyOrdersModalOpen(true)}
+        onOpenTrackModal={() => {
+          setCartDrawerInitialTab('orders');
+          setIsCartOpen(true);
+        }}
       />
     </div>
   );

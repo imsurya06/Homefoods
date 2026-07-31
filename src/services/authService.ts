@@ -28,7 +28,8 @@ export interface UserProfile {
 }
 
 export interface CustomerOrderHistoryItem {
-  id: number;
+  id: number | string;
+  orderRefCode?: string;
   status: string;
   statusLabel: string;
   stage: number;

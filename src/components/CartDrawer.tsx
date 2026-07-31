@@ -15,9 +15,7 @@ import {
   Search,
   Clock,
   Truck,
-  AlertCircle,
   PackageCheck,
-  User,
 } from 'lucide-react';
 import { type CartItem } from '../data/bestsellers';
 import { processRazorpayCheckout, type CheckoutPayload, trackSingleOrder } from '../services/checkoutService';
