@@ -198,25 +198,15 @@ export async function fetchCurrentUser(): Promise<UserProfile | null> {
   if (!token) return null;
 
   try {
-    const res = await fetchApi<{ success: boolean; user: UserProfile; accountDeleted?: boolean }>('/auth/me');
-    if (res.success && res.user) {
+    const res = await fetchApi<{ success: boolean; user: UserProfile }>('/auth/me');
+    if (res && res.success && res.user) {
       localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
       return res.user;
     }
-    if ((res as any).accountDeleted || (res as any).status === 401) {
-      logoutCustomer();
-      alert('Your account has been deleted by admin. Please sign up again to create a new account.');
-      return null;
-    }
-    return getSavedUserProfile();
   } catch (err: any) {
-    if (err && (err.status === 401 || err.accountDeleted || (err.message && err.message.toLowerCase().includes('deleted')))) {
-      logoutCustomer();
-      alert('Your account has been deleted by admin. Please sign up again to create a new account.');
-      return null;
-    }
-    return getSavedUserProfile();
+    console.warn('Fetch current user session warning:', err);
   }
+  return getSavedUserProfile();
 }
 
 export async function fetchCustomerOrders(): Promise<CustomerOrderHistoryItem[]> {
@@ -224,18 +214,10 @@ export async function fetchCustomerOrders(): Promise<CustomerOrderHistoryItem[]>
   if (!token) return [];
 
   try {
-    const res = await fetchApi<{ success: boolean; data: CustomerOrderHistoryItem[]; accountDeleted?: boolean }>('/auth/my-orders');
-    if ((res as any).accountDeleted || (res as any).status === 401) {
-      logoutCustomer();
-      alert('Your account has been deleted by admin. Please sign up again to create a new account.');
-      return [];
-    }
-    return res.success && res.data ? res.data : [];
+    const res = await fetchApi<{ success: boolean; data: CustomerOrderHistoryItem[] }>('/auth/my-orders');
+    return res && res.success && Array.isArray(res.data) ? res.data : [];
   } catch (err: any) {
-    if (err && (err.status === 401 || err.accountDeleted || (err.message && err.message.toLowerCase().includes('deleted')))) {
-      logoutCustomer();
-      alert('Your account has been deleted by admin. Please sign up again to create a new account.');
-    }
+    console.warn('Fetch customer orders warning:', err);
     return [];
   }
 }

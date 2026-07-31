@@ -707,14 +707,12 @@ app.get(['/api/v1/auth/me', '/api/auth/me', '/v1/auth/me', '/auth/me'], async (r
     if (!emailStr) return res.status(401).json({ success: false, message: 'Invalid token' });
 
     let customerUser: any = null;
-    let foundByEmail = false;
 
     if (emailStr) {
       try {
         const searchRes = await wcFetch('customers', { params: { email: emailStr } });
         if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
           customerUser = searchRes.data[0];
-          foundByEmail = true;
         }
       } catch {}
     }
@@ -726,10 +724,6 @@ app.get(['/api/v1/auth/me', '/api/auth/me', '/v1/auth/me', '/auth/me'], async (r
           customerUser = wcRes.data;
         }
       } catch {}
-    }
-
-    if (!customerUser && !foundByEmail && /^\d+$/.test(idStr)) {
-      return res.status(401).json({ success: false, message: 'User account has been deleted from database', accountDeleted: true });
     }
 
     const fn = customerUser?.first_name || emailStr.split('@')[0];
