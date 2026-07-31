@@ -665,23 +665,36 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
 
     let orders: any[] = [];
     try {
-      const response = await wcFetch('orders', { params: { per_page: 50 } });
-      if (response.ok && Array.isArray(response.data)) {
-        orders = response.data;
-        orders = orders.filter((o: any) => {
-          if (o.status === 'trash') return false;
-          const orderEmail = (o.billing?.email || '').toLowerCase();
-          const orderCustId = o.customer_id ? o.customer_id.toString() : '';
-          const userCleanEmail = (userEmail || '').trim().toLowerCase();
-          const emailPrefix = userCleanEmail.split('@')[0];
-
-          return (
-            (userCleanEmail && orderEmail === userCleanEmail) ||
-            (idStr && orderCustId === idStr) ||
-            (emailPrefix && emailPrefix.length > 2 && orderEmail.startsWith(emailPrefix))
-          );
-        });
+      let list1: any[] = [];
+      if (/^\d+$/.test(idStr)) {
+        const r1 = await wcFetch('orders', { params: { customer: idStr, per_page: 100 } });
+        if (r1.ok && Array.isArray(r1.data)) list1 = r1.data;
       }
+
+      let list2: any[] = [];
+      const r2 = await wcFetch('orders', { params: { per_page: 100 } });
+      if (r2.ok && Array.isArray(r2.data)) list2 = r2.data;
+
+      const rawCombined = [...list1, ...list2];
+      const userCleanEmail = (userEmail || '').trim().toLowerCase();
+      const emailPrefix = userCleanEmail.split('@')[0];
+
+      const seenIds = new Set<string>();
+      orders = rawCombined.filter((o: any) => {
+        if (!o || !o.id || o.status === 'trash') return false;
+        const oId = o.id.toString();
+        if (seenIds.has(oId)) return false;
+        seenIds.add(oId);
+
+        const orderEmail = (o.billing?.email || '').toLowerCase();
+        const orderCustId = o.customer_id ? o.customer_id.toString() : '';
+
+        return (
+          (idStr && orderCustId === idStr) ||
+          (userCleanEmail && orderEmail === userCleanEmail) ||
+          (emailPrefix && emailPrefix.length > 2 && orderEmail.startsWith(emailPrefix))
+        );
+      });
     } catch {}
 
     const seenOrderIds = new Set<string>();
@@ -722,8 +735,26 @@ app.post('/api/v1/checkout/create-order', async (req, res) => {
     const { customerDetails, billingAddress, shippingAddress, items, couponCode, notes } = req.body;
     const razorpay = getRazorpayClient();
 
-    const rawEmail = (customerDetails?.email || billingAddress?.email || '').trim();
-    const customerEmail = rawEmail && rawEmail.includes('@') ? rawEmail : 'customer@homemadefoods.in';
+    let authUserEmail = '';
+    let authCustomerId = 0;
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      try {
+        const token = authHeader.replace('Bearer ', '');
+        const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
+        const decoded = rawDecoded.includes('%') ? decodeURIComponent(rawDecoded) : rawDecoded;
+        const parts = decoded.split(':');
+        if (parts[0] && /^\d+$/.test(parts[0])) {
+          authCustomerId = parseInt(parts[0]);
+        }
+        if (parts[1] && parts[1].includes('@')) {
+          authUserEmail = parts[1].trim().toLowerCase();
+        }
+      } catch {}
+    }
+
+    const rawEmail = (customerDetails?.email || billingAddress?.email || authUserEmail || '').trim();
+    const customerEmail = rawEmail && rawEmail.includes('@') ? rawEmail : (authUserEmail || 'customer@homemadefoods.in');
     const customerPhone = (customerDetails?.phone || billingAddress?.phone || '9876543210').trim();
     const fullName = (customerDetails?.name || billingAddress?.firstName || 'Customer').trim();
     const firstName = fullName.split(' ')[0] || 'Customer';
@@ -731,13 +762,15 @@ app.post('/api/v1/checkout/create-order', async (req, res) => {
 
     const orderRefCode = generateOrderRefCode();
 
-    let existingCustomerId = 0;
-    try {
-      const custRes = await wcFetch('customers', { params: { email: customerEmail } });
-      if (custRes.ok && Array.isArray(custRes.data) && custRes.data.length > 0) {
-        existingCustomerId = custRes.data[0].id;
-      }
-    } catch {}
+    let existingCustomerId = authCustomerId;
+    if (!existingCustomerId && customerEmail) {
+      try {
+        const custRes = await wcFetch('customers', { params: { email: customerEmail } });
+        if (custRes.ok && Array.isArray(custRes.data) && custRes.data.length > 0) {
+          existingCustomerId = custRes.data[0].id;
+        }
+      } catch {}
+    }
 
     const lineItems = items.map((item: any) => {
       const pid = parseInt(item.productId);
