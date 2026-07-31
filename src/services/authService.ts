@@ -219,23 +219,37 @@ export async function fetchCurrentUser(): Promise<UserProfile | null> {
   const savedProfile = getSavedUserProfile();
 
   try {
-    const res = await fetchApi<{ success: boolean; user: UserProfile }>('/auth/me');
+    const res = await fetchApi<{ success: boolean; user: UserProfile; accountDeleted?: boolean }>('/auth/me');
     if (res.success && res.user) {
       localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
       return res.user;
     }
+    if ((res as any).accountDeleted || (res as any).status === 401) {
+      logoutCustomer();
+      return null;
+    }
     return savedProfile;
-  } catch {
-    // Preserve login session across page refreshes even if server is offline/connecting
+  } catch (err: any) {
+    if (err && (err.status === 401 || err.accountDeleted || (err.message && err.message.toLowerCase().includes('deleted')))) {
+      logoutCustomer();
+      return null;
+    }
     return savedProfile;
   }
 }
 
 export async function fetchCustomerOrders(): Promise<CustomerOrderHistoryItem[]> {
   try {
-    const res = await fetchApi<{ success: boolean; data: CustomerOrderHistoryItem[] }>('/auth/my-orders');
+    const res = await fetchApi<{ success: boolean; data: CustomerOrderHistoryItem[]; accountDeleted?: boolean }>('/auth/my-orders');
+    if ((res as any).accountDeleted || (res as any).status === 401) {
+      logoutCustomer();
+      return [];
+    }
     return res.success && res.data ? res.data : [];
-  } catch {
+  } catch (err: any) {
+    if (err && (err.status === 401 || err.accountDeleted || (err.message && err.message.toLowerCase().includes('deleted')))) {
+      logoutCustomer();
+    }
     return [];
   }
 }

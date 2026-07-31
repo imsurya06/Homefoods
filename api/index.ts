@@ -583,7 +583,11 @@ app.get('/api/v1/auth/me', async (req, res) => {
     if (/^\d+$/.test(idStr)) {
       try {
         const wcRes = await wcFetch(`customers/${idStr}`);
-        if (wcRes.ok) customerUser = wcRes.data;
+        if (wcRes.ok && wcRes.data) {
+          customerUser = wcRes.data;
+        } else if (wcRes.status === 404) {
+          return res.status(401).json({ success: false, message: 'User account has been deleted from database', accountDeleted: true });
+        }
       } catch {}
     }
 
@@ -623,6 +627,20 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
       userEmail = parts[1] || '';
     } catch {}
 
+    if (!userEmail && !idStr) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    // Verify if user account was deleted from WordPress Admin
+    if (/^\d+$/.test(idStr)) {
+      try {
+        const checkCust = await wcFetch(`customers/${idStr}`);
+        if (checkCust.status === 404) {
+          return res.status(401).json({ success: false, message: 'User account has been deleted from database', accountDeleted: true, data: [] });
+        }
+      } catch {}
+    }
+
     if (userEmail && idStr) {
       await linkGuestOrdersToCustomer(userEmail, idStr);
     }
@@ -632,20 +650,17 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
       const response = await wcFetch('orders', { params: { per_page: 50 } });
       if (response.ok && Array.isArray(response.data)) {
         orders = response.data;
-        if (userEmail) {
-          const usernamePrefix = userEmail.split('@')[0].toLowerCase();
-          orders = orders.filter((o: any) => {
-            if (o.status === 'trash') return false;
-            const orderEmail = (o.billing?.email || '').toLowerCase();
-            const orderFirstName = (o.billing?.first_name || '').toLowerCase();
-            return (
-              orderEmail === userEmail.toLowerCase() ||
-              (orderEmail && orderEmail.startsWith(usernamePrefix)) ||
-              (orderFirstName && (orderFirstName.includes('surya') || orderFirstName.includes(usernamePrefix))) ||
-              (o.customer_id && o.customer_id.toString() === idStr)
-            );
-          });
-        }
+        orders = orders.filter((o: any) => {
+          if (o.status === 'trash') return false;
+          const orderEmail = (o.billing?.email || '').toLowerCase();
+          const orderCustId = o.customer_id ? o.customer_id.toString() : '';
+          
+          // Strict user isolation: match ONLY authenticated user's email or customer ID
+          return (
+            (userEmail && orderEmail === userEmail.toLowerCase()) ||
+            (idStr && orderCustId === idStr)
+          );
+        });
       }
     } catch {}
 
