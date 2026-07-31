@@ -4,6 +4,12 @@ import { fetchApi } from './apiClient';
 
 const GUEST_CART_KEY = 'hf_guest_cart';
 
+let lastLocalCartUpdate = 0;
+
+export function recordLocalCartUpdate() {
+  lastLocalCartUpdate = Date.now();
+}
+
 export function getStoredCart(isLoggedIn: boolean): CartItem[] {
   if (!isLoggedIn) {
     try {
@@ -26,10 +32,18 @@ export async function fetchRemoteCart(): Promise<CartItem[]> {
   try {
     const token = getSavedToken();
     if (!token) return getStoredCart(true);
+
+    const localItems = getStoredCart(true);
+    const isRecentLocalAction = Date.now() - lastLocalCartUpdate < 5000;
+
     const res = await fetchApi<{ success: boolean; items: CartItem[]; cartCleared?: boolean }>('/cart/get');
-    if (res.success && Array.isArray(res.items)) {
+    if (res && res.success && Array.isArray(res.items)) {
+      if (isRecentLocalAction && localItems.length > 0 && res.items.length === 0 && !res.cartCleared) {
+        return localItems;
+      }
+
       localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
-      if (res.cartCleared || res.items.length === 0) {
+      if (res.cartCleared) {
         window.dispatchEvent(new CustomEvent('hf_cart_cleared'));
       }
       return res.items;
@@ -41,6 +55,10 @@ export async function fetchRemoteCart(): Promise<CartItem[]> {
 }
 
 export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
+  if (Array.isArray(cartItems) && cartItems.length > 0) {
+    lastLocalCartUpdate = Date.now();
+  }
+
   if (!isLoggedIn) {
     try {
       sessionStorage.setItem(GUEST_CART_KEY, JSON.stringify(cartItems));
@@ -56,7 +74,7 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
     if (token) {
       fetchApi<{ success: boolean; cartCleared?: boolean; items?: CartItem[] }>('/cart/sync', {
         method: 'POST',
-        body: JSON.stringify({ items: cartItems }),
+        body: JSON.stringify({ items: cartItems, isUserAction: true }),
       }).then((res) => {
         if (res && res.cartCleared) {
           localStorage.setItem('hf_user_cart', JSON.stringify([]));
