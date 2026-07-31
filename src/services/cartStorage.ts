@@ -22,13 +22,26 @@ export function getStoredCart(isLoggedIn: boolean): CartItem[] {
   }
 }
 
+let isSyncingCart = false;
+
 export async function fetchRemoteCart(): Promise<CartItem[]> {
   try {
     const token = getSavedToken();
     if (!token) return getStoredCart(false);
 
+    const localItems = getStoredCart(true);
+
+    // If local cart is currently syncing to backend, protect local items from in-flight GET responses
+    if (isSyncingCart && localItems.length > 0) {
+      return localItems;
+    }
+
     const res = await fetchApi<{ success: boolean; items: CartItem[] }>('/cart/get');
     if (res && res.success && Array.isArray(res.items)) {
+      if (isSyncingCart && res.items.length === 0 && localItems.length > 0) {
+        return localItems;
+      }
+
       localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
       return res.items;
     }
@@ -52,10 +65,17 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
     localStorage.setItem('hf_user_cart', JSON.stringify(cartItems));
     const token = getSavedToken();
     if (token) {
+      isSyncingCart = true;
       fetchApi<{ success: boolean }>('/cart/sync', {
         method: 'POST',
         body: JSON.stringify({ items: cartItems, action: cartItems.length === 0 ? 'clear' : 'sync' }),
-      }).catch((err) => console.warn('Cart sync warning:', err));
+      })
+        .catch((err) => console.warn('Cart sync warning:', err))
+        .finally(() => {
+          setTimeout(() => {
+            isSyncingCart = false;
+          }, 1500);
+        });
     }
   } catch (err) {
     console.error('Failed to save user cart:', err);
@@ -63,6 +83,7 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
 }
 
 export function clearCartStorage(isLoggedIn: boolean) {
+  isSyncingCart = false;
   try {
     sessionStorage.removeItem(GUEST_CART_KEY);
     localStorage.setItem('hf_user_cart', JSON.stringify([]));
