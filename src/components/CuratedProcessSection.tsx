@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Award, Clock, Heart, Zap } from 'lucide-react';
 import { calculatePriceDetails, type CartItem } from '../data/bestsellers';
-import { type Product } from '../data/products';
+import { PRODUCTS, type Product } from '../data/products';
 import { getLiveProducts, getCachedProductsSync } from '../services/productService';
 
 interface CuratedProcessSectionProps {
@@ -10,7 +10,10 @@ interface CuratedProcessSectionProps {
 }
 
 export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ onAddToCart, onOrderNow }) => {
-  const [liveProducts, setLiveProducts] = useState<Product[]>(() => getCachedProductsSync().slice(0, 3));
+  const [liveProducts, setLiveProducts] = useState<Product[]>(() => {
+    const cached = getCachedProductsSync();
+    return cached && cached.length > 0 ? cached.slice(0, 3) : PRODUCTS.slice(0, 3);
+  });
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
 
   useEffect(() => {
