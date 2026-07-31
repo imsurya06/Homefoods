@@ -783,12 +783,16 @@ app.get(['/api/v1/auth/me', '/api/auth/me', '/v1/auth/me', '/auth/me'], async (r
     if (!emailStr) return res.status(401).json({ success: false, message: 'Invalid token' });
 
     let customerUser: any = null;
+    let checkedWc = false;
 
     if (emailStr) {
       try {
         const searchRes = await wcFetch('customers', { params: { email: emailStr } });
-        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-          customerUser = searchRes.data[0];
+        if (searchRes.ok) {
+          checkedWc = true;
+          if (Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+            customerUser = searchRes.data[0];
+          }
         }
       } catch {}
     }
@@ -796,10 +800,21 @@ app.get(['/api/v1/auth/me', '/api/auth/me', '/v1/auth/me', '/auth/me'], async (r
     if (!customerUser && /^\d+$/.test(idStr)) {
       try {
         const wcRes = await wcFetch(`customers/${idStr}`);
-        if (wcRes.ok && wcRes.data) {
-          customerUser = wcRes.data;
+        if (wcRes.ok) {
+          checkedWc = true;
+          if (wcRes.data && wcRes.data.id) {
+            customerUser = wcRes.data;
+          }
         }
       } catch {}
+    }
+
+    if (checkedWc && !customerUser) {
+      return res.status(401).json({
+        success: false,
+        accountDeleted: true,
+        message: 'Account has been deleted from WordPress database by admin.',
+      });
     }
 
     const fn = customerUser?.first_name || emailStr.split('@')[0];
@@ -808,8 +823,8 @@ app.get(['/api/v1/auth/me', '/api/auth/me', '/v1/auth/me', '/auth/me'], async (r
     return res.json({
       success: true,
       user: {
-        id: idStr,
-        email: emailStr,
+        id: customerUser?.id?.toString() || idStr,
+        email: customerUser?.email || emailStr,
         firstName: fn,
         lastName: ln,
         displayName: `${fn} ${ln}`.trim(),

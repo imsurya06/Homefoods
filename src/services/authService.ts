@@ -198,13 +198,17 @@ export async function fetchCurrentUser(): Promise<UserProfile | null> {
   if (!token) return null;
 
   try {
-    const res = await fetchApi<{ success: boolean; user: UserProfile }>('/auth/me');
+    const res = await fetchApi<{ success: boolean; user: UserProfile; accountDeleted?: boolean }>('/auth/me');
     if (res && res.success && res.user) {
       localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
       return res.user;
     }
   } catch (err: any) {
-    console.warn('Fetch current user session warning:', err);
+    if (err && (err.accountDeleted || err.status === 401 || (err.message && err.message.toLowerCase().includes('deleted')))) {
+      console.log('Account deleted from WordPress database by admin. Logging out session...');
+      logoutCustomer();
+      return null;
+    }
   }
   return getSavedUserProfile();
 }
