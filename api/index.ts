@@ -627,11 +627,11 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
 
     if (email) {
       userCartsMap.set(email, items || []);
-      try {
-        const searchRes = await wcFetch('customers', { params: { email } });
+      // Asynchronous background update to WooCommerce customer metadata
+      wcFetch('customers', { params: { email } }).then((searchRes) => {
         if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
           const wcId = searchRes.data[0].id;
-          await wcFetch(`customers/${wcId}`, {
+          wcFetch(`customers/${wcId}`, {
             method: 'PUT',
             body: {
               meta_data: [
@@ -639,9 +639,9 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
                 { key: '_saved_cart', value: JSON.stringify(items || []) },
               ],
             },
-          });
+          }).catch(() => {});
         }
-      } catch {}
+      }).catch(() => {});
     }
 
     return res.json({ success: true });
@@ -728,7 +728,6 @@ app.get('/api/v1/auth/me', async (req, res) => {
       } catch {}
     }
 
-    // Only flag account as deleted if email search returned NO users in WooCommerce AND user has a numeric ID
     if (!customerUser && !foundByEmail && /^\d+$/.test(idStr)) {
       return res.status(401).json({ success: false, message: 'User account has been deleted from database', accountDeleted: true });
     }
@@ -766,68 +765,46 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
       const decoded = rawDecoded.includes('%') ? decodeURIComponent(rawDecoded) : rawDecoded;
       const parts = decoded.split(':');
       idStr = parts[0] || '';
-      userEmail = parts[1] || '';
+      userEmail = (parts[1] || '').trim().toLowerCase();
     } catch {}
 
     if (!userEmail && !idStr) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    // Verify if user account was deleted from WordPress Admin
-    if (/^\d+$/.test(idStr)) {
-      try {
-        const checkCust = await wcFetch(`customers/${idStr}`);
-        if (checkCust.status === 404) {
-          return res.status(401).json({ success: false, message: 'User account has been deleted from database', accountDeleted: true, data: [] });
-        }
-      } catch {}
+    // Background asynchronous guest order linking (never blocks HTTP response)
+    if (userEmail && idStr && /^\d+$/.test(idStr)) {
+      linkGuestOrdersToCustomer(userEmail, idStr).catch(() => {});
     }
 
-    if (userEmail && idStr) {
-      await linkGuestOrdersToCustomer(userEmail, idStr);
-    }
-
-    let orders: any[] = [];
+    let rawOrders: any[] = [];
     try {
-      let list1: any[] = [];
-      if (/^\d+$/.test(idStr)) {
-        const r1 = await wcFetch('orders', { params: { customer: idStr, per_page: 100 } });
-        if (r1.ok && Array.isArray(r1.data)) list1 = r1.data;
+      const ordersRes = await wcFetch('orders', { params: { per_page: 100 } });
+      if (ordersRes.ok && Array.isArray(ordersRes.data)) {
+        rawOrders = ordersRes.data;
       }
-
-      let list2: any[] = [];
-      const r2 = await wcFetch('orders', { params: { per_page: 100 } });
-      if (r2.ok && Array.isArray(r2.data)) list2 = r2.data;
-
-      const rawCombined = [...list1, ...list2];
-      const userCleanEmail = (userEmail || '').trim().toLowerCase();
-      const emailPrefix = userCleanEmail.split('@')[0];
-
-      const seenIds = new Set<string>();
-      orders = rawCombined.filter((o: any) => {
-        if (!o || !o.id || o.status === 'trash') return false;
-        const oId = o.id.toString();
-        if (seenIds.has(oId)) return false;
-        seenIds.add(oId);
-
-        const orderEmail = (o.billing?.email || '').toLowerCase();
-        const orderCustId = o.customer_id ? o.customer_id.toString() : '';
-
-        return (
-          (idStr && orderCustId === idStr) ||
-          (userCleanEmail && orderEmail === userCleanEmail) ||
-          (emailPrefix && emailPrefix.length > 2 && orderEmail.startsWith(emailPrefix))
-        );
-      });
     } catch {}
 
+    const emailPrefix = userEmail ? userEmail.split('@')[0] : '';
     const seenOrderIds = new Set<string>();
     const formattedOrders: any[] = [];
 
-    for (const order of orders) {
-      const idKey = order.id ? order.id.toString() : '';
-      if (idKey && seenOrderIds.has(idKey)) continue;
-      if (idKey) seenOrderIds.add(idKey);
+    for (const order of rawOrders) {
+      if (!order || !order.id || order.status === 'trash') continue;
+      const oId = order.id.toString();
+      if (seenOrderIds.has(oId)) continue;
+
+      const orderEmail = (order.billing?.email || '').toLowerCase().trim();
+      const orderCustId = order.customer_id ? order.customer_id.toString() : '';
+
+      const isUserOrder = (
+        (idStr && orderCustId === idStr) ||
+        (userEmail && orderEmail === userEmail) ||
+        (emailPrefix && emailPrefix.length > 2 && orderEmail.startsWith(emailPrefix))
+      );
+
+      if (!isUserOrder) continue;
+      seenOrderIds.add(oId);
 
       const currentStatus = getOrderStatusDetails(order.status);
       const refMeta = (order.meta_data || []).find((m: any) => m.key === '_order_ref_code');
