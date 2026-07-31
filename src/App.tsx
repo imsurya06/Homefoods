@@ -101,22 +101,6 @@ export function App() {
     };
   }, [user]);
 
-  // Fetch latest cart immediately whenever Cart Drawer is opened
-  useEffect(() => {
-    if (isCartOpen) {
-      fetchRemoteCart().then((remoteItems) => {
-        if (remoteItems && Array.isArray(remoteItems)) {
-          setCartItems(remoteItems);
-        }
-      });
-    }
-  }, [isCartOpen]);
-
-  // Save cart whenever cartItems or user state changes
-  useEffect(() => {
-    saveCartItems(cartItems, !!user);
-  }, [cartItems, user]);
-
   // Sync hash URL navigation (e.g. #shop, #track)
   useEffect(() => {
     const handleHashChange = () => {
@@ -213,12 +197,16 @@ export function App() {
     const compositeId = `${newItem.productId}-${newItem.weight}`;
     setCartItems((prevItems) => {
       const existingItem = prevItems.find((item) => item.id === compositeId);
+      let updated: CartItem[];
       if (existingItem) {
-        return prevItems.map((item) =>
+        updated = prevItems.map((item) =>
           item.id === compositeId ? { ...item, quantity: item.quantity + 1 } : item
         );
+      } else {
+        updated = [...prevItems, { ...newItem, id: compositeId, quantity: 1 }];
       }
-      return [...prevItems, { ...newItem, id: compositeId, quantity: 1 }];
+      saveCartItems(updated, !!user);
+      return updated;
     });
     showToast('Item added to cart!');
   };
@@ -227,12 +215,16 @@ export function App() {
     const compositeId = `${newItem.productId}-${newItem.weight}`;
     setCartItems((prevItems) => {
       const existingItem = prevItems.find((item) => item.id === compositeId);
+      let updated: CartItem[];
       if (existingItem) {
-        return prevItems.map((item) =>
+        updated = prevItems.map((item) =>
           item.id === compositeId ? { ...item, quantity: item.quantity + 1 } : item
         );
+      } else {
+        updated = [...prevItems, { ...newItem, id: compositeId, quantity: 1 }];
       }
-      return [...prevItems, { ...newItem, id: compositeId, quantity: 1 }];
+      saveCartItems(updated, !!user);
+      return updated;
     });
     setIsCartOpen(true);
   };
@@ -242,11 +234,19 @@ export function App() {
       handleRemoveFromCart(id);
       return;
     }
-    setCartItems((prev) => prev.map((item) => (item.id === id ? { ...item, quantity: newQty } : item)));
+    setCartItems((prev) => {
+      const updated = prev.map((item) => (item.id === id ? { ...item, quantity: newQty } : item));
+      saveCartItems(updated, !!user);
+      return updated;
+    });
   };
 
   const handleRemoveFromCart = (id: string) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== id));
+    setCartItems((prev) => {
+      const updated = prev.filter((item) => item.id !== id);
+      saveCartItems(updated, !!user);
+      return updated;
+    });
     showToast('Cart updated');
   };
 
@@ -265,22 +265,26 @@ export function App() {
       if (newId === oldId) return prevItems;
 
       const existingSameWeightItem = prevItems.find((i) => i.id === newId);
+      let updated: CartItem[];
 
       if (existingSameWeightItem) {
-        return prevItems
+        updated = prevItems
           .filter((i) => i.id !== oldId)
           .map((i) =>
             i.id === newId
               ? { ...i, quantity: i.quantity + targetItem.quantity }
               : i
           );
+      } else {
+        updated = prevItems.map((i) =>
+          i.id === oldId
+            ? { ...i, id: newId, weight: newWeight, pricePerUnit: newPricePerUnit }
+            : i
+        );
       }
 
-      return prevItems.map((i) =>
-        i.id === oldId
-          ? { ...i, id: newId, weight: newWeight, pricePerUnit: newPricePerUnit }
-          : i
-      );
+      saveCartItems(updated, !!user);
+      return updated;
     });
     showToast('Pack weight updated');
   };
