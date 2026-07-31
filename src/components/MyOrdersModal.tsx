@@ -51,7 +51,7 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
 
     const pollInterval = setInterval(() => {
       loadOrders(false);
-    }, 10000);
+    }, 3000);
 
     const handleFocus = () => loadOrders(false);
     window.addEventListener('focus', handleFocus);

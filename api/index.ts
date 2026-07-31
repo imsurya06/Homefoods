@@ -612,6 +612,75 @@ app.post('/api/v1/auth/login', async (req, res) => {
   }
 });
 
+// POST /api/v1/cart/sync (Sync user cart items to database across devices)
+app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'], async (req, res) => {
+  try {
+    const { items } = req.body;
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.json({ success: false, message: 'No auth token' });
+
+    const token = authHeader.replace('Bearer ', '');
+    const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
+    const decoded = rawDecoded.includes('%') ? decodeURIComponent(rawDecoded) : rawDecoded;
+    const parts = decoded.split(':');
+    const customerId = parts[0];
+    const email = (parts[1] || '').trim().toLowerCase();
+
+    if (email) {
+      userCartsMap.set(email, items || []);
+      if (customerId && /^\d+$/.test(customerId)) {
+        wcFetch(`customers/${customerId}`, {
+          method: 'PUT',
+          body: { meta_data: [{ key: '_saved_cart', value: JSON.stringify(items || []) }] },
+        }).catch(() => {});
+      }
+    }
+
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/v1/cart/get (Fetch user cart items from database across devices)
+app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.json({ success: true, items: [] });
+
+    const token = authHeader.replace('Bearer ', '');
+    const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
+    const decoded = rawDecoded.includes('%') ? decodeURIComponent(rawDecoded) : rawDecoded;
+    const parts = decoded.split(':');
+    const customerId = parts[0];
+    const email = (parts[1] || '').trim().toLowerCase();
+
+    if (!email) return res.json({ success: true, items: [] });
+
+    let items = userCartsMap.get(email);
+    if (!items || items.length === 0) {
+      if (customerId && /^\d+$/.test(customerId)) {
+        try {
+          const custRes = await wcFetch(`customers/${customerId}`);
+          if (custRes.ok && custRes.data) {
+            const cartMeta = (custRes.data.meta_data || []).find((m: any) => m.key === '_saved_cart');
+            if (cartMeta && cartMeta.value) {
+              items = typeof cartMeta.value === 'string' ? JSON.parse(cartMeta.value) : cartMeta.value;
+              if (Array.isArray(items)) {
+                userCartsMap.set(email, items);
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+
+    return res.json({ success: true, items: items || [] });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message, items: [] });
+  }
+});
+
 // GET /api/v1/auth/me
 app.get('/api/v1/auth/me', async (req, res) => {
   try {

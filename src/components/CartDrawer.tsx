@@ -147,13 +147,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     };
   }, [isOpen]);
 
-  // Load & Sync Orders when Drawer or Orders Tab is opened with 10-Second Live Polling & Window Focus Refetch
+  // Live Sync & 3-Second Ultra-Fast Polling for Orders Data Across Devices
   useEffect(() => {
-    if (!isOpen || activeTab !== 'orders') return;
+    if (!isOpen || activeTab !== 'orders' || !user) return;
 
     let isMounted = true;
 
-    const loadOrders = (showSpinner = false) => {
+    const syncOrders = (showSpinner = false) => {
       if (showSpinner) setLoadingOrders(true);
       fetchCustomerOrders()
         .then((remoteOrders) => {
@@ -170,15 +170,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         });
     };
 
-    loadOrders(true);
+    syncOrders(true);
 
-    // Live polling every 10 seconds for instant WooCommerce status updates
+    // 3-second polling interval for zero-delay database updates across devices
     const pollInterval = setInterval(() => {
-      loadOrders(false);
-    }, 10000);
+      syncOrders(false);
+    }, 3000);
 
-    // Instant refetch when switching back to this window/screen
-    const handleFocus = () => loadOrders(false);
+    const handleFocus = () => syncOrders(false);
     window.addEventListener('focus', handleFocus);
 
     return () => {

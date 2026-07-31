@@ -29,19 +29,45 @@ export function App() {
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [cartDrawerInitialTab, setCartDrawerInitialTab] = useState<'cart' | 'orders'>('cart');
 
-  // Sync logged-in user details & cart on mount
+  // Sync logged-in user details & cart on mount and 3-second live polling across devices
   useEffect(() => {
-    fetchCurrentUser().then((u) => {
-      if (u) {
-        setUser(u);
+    let isMounted = true;
+
+    const syncUserAndCart = () => {
+      fetchCurrentUser().then((u) => {
+        if (!isMounted) return;
+        if (u) {
+          setUser(u);
+          fetchRemoteCart().then((remoteItems) => {
+            if (isMounted && remoteItems && Array.isArray(remoteItems)) {
+              setCartItems(remoteItems);
+            }
+          });
+        }
+      });
+    };
+
+    syncUserAndCart();
+
+    const interval = setInterval(() => {
+      if (user) {
         fetchRemoteCart().then((remoteItems) => {
-          if (remoteItems && remoteItems.length > 0) {
+          if (isMounted && remoteItems && Array.isArray(remoteItems)) {
             setCartItems(remoteItems);
           }
         });
       }
-    });
-  }, []);
+    }, 3000);
+
+    const handleFocus = () => syncUserAndCart();
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [user]);
 
   // Save cart whenever cartItems or user state changes
   useEffect(() => {
