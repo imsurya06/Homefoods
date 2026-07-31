@@ -16,6 +16,7 @@ app.use(
     origin: true,
     credentials: true,
   })
+);
 app.use(express.json());
 
 app.use((_req, res, next) => {
