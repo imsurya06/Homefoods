@@ -692,7 +692,7 @@ app.post(['/api/v1/auth/login', '/api/auth/login', '/v1/auth/login', '/auth/logi
 // POST /api/v1/cart/sync (Sync user cart items to database across devices)
 app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'], async (req, res) => {
   try {
-    const { items } = req.body;
+    const { items, action, isUserAction } = req.body;
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.json({ success: false, message: 'No auth token' });
 
@@ -703,15 +703,37 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
     const email = (parts[1] || '').trim().toLowerCase();
 
     if (email) {
-      if (req.body.isUserAction || (Array.isArray(items) && items.length > 0)) {
+      const isExplicitClear = action === 'clear' || (Array.isArray(items) && items.length === 0);
+
+      if (isExplicitClear) {
+        userCartsMap.set(email, []);
+        userCartLocks.set(email, Date.now() + 30000);
+        wcFetch('customers', { params: { email } }).then((searchRes) => {
+          if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+            const wcId = searchRes.data[0].id;
+            wcFetch(`customers/${wcId}`, {
+              method: 'PUT',
+              body: {
+                meta_data: [
+                  { key: 'hf_saved_cart', value: '[]' },
+                  { key: '_saved_cart', value: '[]' },
+                ],
+              },
+            }).catch(() => {});
+          }
+        }).catch(() => {});
+        return res.json({ success: true, cartCleared: true, items: [] });
+      }
+
+      if (action === 'add' || isUserAction) {
         userCartLocks.delete(email);
       }
 
       const lockExp = userCartLocks.get(email);
       const isLocked = lockExp && Date.now() < lockExp;
 
-      if (isLocked && Array.isArray(items) && items.length > 0 && !req.body.isUserAction) {
-        console.log(`🔒 Cart sync locked for ${email}. Rejecting background stale items.`);
+      if (isLocked) {
+        console.log(`🔒 Cart sync locked for ${email}. Rejecting background stale push from secondary device.`);
         return res.json({ success: true, cartCleared: true, items: [] });
       }
 

@@ -96,7 +96,7 @@ export function clearCartStorage(isLoggedIn: boolean) {
     if (isLoggedIn && token) {
       fetchApi('/cart/sync', {
         method: 'POST',
-        body: JSON.stringify({ items: [] }),
+        body: JSON.stringify({ items: [], action: 'clear', isUserAction: true }),
       }).catch((err) => console.warn('Cart clear sync warning:', err));
     }
   } catch (err) {
