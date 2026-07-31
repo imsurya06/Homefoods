@@ -498,220 +498,194 @@ app.post('/api/v1/auth/register', async (req, res) => {
   }
 });
 
-// POST /api/v1/auth/login
-app.post('/api/v1/auth/login', async (req, res) => {
+// Helper to generate secure, unguessable Order Reference Code (e.g. HF-84921-B4)
+function generateOrderRefCode(): string {
+  const randomNum = Math.floor(10000 + Math.random() * 90000);
+  const randomSuffix = Math.random().toString(36).substring(2, 4).toUpperCase();
+  return `HF-${randomNum}-${randomSuffix}`;
+}
+
+// Transactional Email Dispatcher for Order Confirmation & Tracking
+async function sendOrderTrackingEmail(options: {
+  toEmail: string;
+  customerName: string;
+  orderRefCode: string;
+  wcOrderId: number | string;
+  totalAmount: number;
+  items?: Array<{ name: string; quantity: number; pricePerUnit?: number; weight?: string }>;
+  shippingAddress?: string;
+  phone?: string;
+  trackingLink: string;
+}) {
   try {
-    const { email, password } = req.body;
-    const wcApi = getWcApi();
+    const { toEmail, customerName, orderRefCode, wcOrderId, totalAmount, items = [], shippingAddress = '', phone = '', trackingLink } = options;
+    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const smtpUser = process.env.SMTP_USER || '';
+    const smtpPass = process.env.SMTP_PASS || '';
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    if (!smtpUser || !smtpPass) {
+      console.log(`✉️ Email notification logged (SMTP credentials not configured): Order ${orderRefCode} (#${wcOrderId}) for ${toEmail}. Track Link: ${trackingLink}`);
+      return;
     }
 
-    const cleanEmail = email.trim().toLowerCase();
-    let customer: any = null;
-
-    try {
-      const searchRes = await wcApi.get('customers', { email: cleanEmail });
-      if (searchRes.data && searchRes.data.length > 0) {
-        customer = searchRes.data[0];
-      }
-    } catch (err) {}
-
-    if (!customer) {
-      customer = {
-        id: Date.now(),
-        email: cleanEmail,
-        first_name: cleanEmail.split('@')[0],
-        last_name: 'Customer',
-        billing: { email: cleanEmail, first_name: cleanEmail.split('@')[0], phone: '9876543210', address_1: 'Madurai', city: 'Madurai', state: 'TN', postcode: '625001', country: 'IN' },
-        shipping: { email: cleanEmail, first_name: cleanEmail.split('@')[0], phone: '9876543210', address_1: 'Madurai', city: 'Madurai', state: 'TN', postcode: '625001', country: 'IN' },
-      };
-    }
-
-    const token = Buffer.from(`${customer.id}:${cleanEmail}:${Date.now()}`).toString('base64');
-
-    return res.json({
-      success: true,
-      token,
-      user: {
-        id: customer.id,
-        email: customer.email,
-        firstName: customer.first_name || 'Customer',
-        lastName: customer.last_name || '',
-        displayName: `${customer.first_name || 'Customer'} ${customer.last_name || ''}`.trim(),
-        phone: customer.billing?.phone || '9876543210',
-        billing: customer.billing,
-        shipping: customer.shipping,
-      },
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: 587,
+      secure: false,
+      auth: { user: smtpUser, pass: smtpPass },
     });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message || 'Login failed' });
-  }
-});
 
-// GET /api/v1/auth/me
-app.get('/api/v1/auth/me', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ success: false, message: 'Unauthorized' });
-    }
+    const itemsHtml = items.length > 0
+      ? items.map((item) => `
+        <tr style="border-bottom: 1px solid #f0f0f0;">
+          <td style="padding: 12px 8px; font-weight: bold; color: #1F2937;">${item.name}</td>
+          <td style="padding: 12px 8px; text-align: center; color: #6B7280;">${item.weight || 'Standard'}</td>
+          <td style="padding: 12px 8px; text-align: center; font-weight: bold; color: #1F2937;">${item.quantity}</td>
+          <td style="padding: 12px 8px; text-align: right; font-weight: bold; color: #95CD1A;">₹${(item.pricePerUnit || 0) * item.quantity}</td>
+        </tr>
+      `).join('')
+      : `<tr><td colspan="4" style="padding: 12px; text-align: center; color: #6B7280;">Authentic Homemade South Indian Food Package</td></tr>`;
 
-    const token = authHeader.replace('Bearer ', '');
-    const decoded = Buffer.from(token, 'base64').toString('utf-8');
-    const [idStr, email] = decoded.split(':');
+    const mailOptions = {
+      from: `"Homemade Foods" <${smtpUser}>`,
+      to: toEmail,
+      subject: `🎉 Order Confirmed! Reference: ${orderRefCode}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Order Confirmation - Homemade Foods</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #F7FCE8; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1F2937;">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+            <tr>
+              <td align="center" style="padding: 20px 10px;">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.08); border: 1px solid #ECF9CA;">
+                  
+                  <!-- Top Banner Header -->
+                  <tr>
+                    <td align="center" style="background-color: #95CD1A; padding: 32px 24px; text-align: center;">
+                      <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 900; letter-spacing: -0.5px;">Homemade Foods</h1>
+                      <p style="color: #ffffff; margin: 6px 0 0 0; font-size: 14px; font-weight: 600; opacity: 0.95;">A taste of tradition in every bite.</p>
+                    </td>
+                  </tr>
 
-    const wcApi = getWcApi();
-    let customer: any = null;
+                  <!-- Main Content Area -->
+                  <tr>
+                    <td style="padding: 32px 28px;">
+                      
+                      <!-- Greeting & Success Message -->
+                      <h2 style="font-size: 22px; font-weight: 800; margin: 0 0 8px 0; color: #1F2937;">
+                        Thank you for your order, ${customerName}! 🎉
+                      </h2>
+                      <p style="font-size: 14px; color: #4B5563; line-height: 1.6; margin: 0 0 24px 0;">
+                        We have received your payment and our kitchen team has started preparing your fresh, traditional South Indian delicacies.
+                      </p>
 
-    if (idStr && !isNaN(parseInt(idStr)) && parseInt(idStr) < 10000000) {
-      try {
-        const wcRes = await wcApi.get(`customers/${idStr}`);
-        customer = wcRes.data;
-      } catch (err) {}
-    }
+                      <!-- Key Order Details Card -->
+                      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FAFBF6; border: 1px solid #ECF9CA; border-radius: 14px; padding: 18px; margin-bottom: 24px;">
+                        <tr>
+                          <td>
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                              <tr>
+                                <td style="padding-bottom: 8px; font-size: 13px; color: #6B7280;">Order Reference:</td>
+                                <td style="padding-bottom: 8px; font-size: 15px; font-weight: 900; color: #95CD1A; text-align: right;">${orderRefCode}</td>
+                              </tr>
+                              <tr>
+                                <td style="padding-bottom: 8px; font-size: 13px; color: #6B7280;">Store Order ID:</td>
+                                <td style="padding-bottom: 8px; font-size: 13px; font-weight: 800; color: #1F2937; text-align: right;">#${wcOrderId}</td>
+                              </tr>
+                              <tr>
+                                <td style="padding-bottom: 8px; font-size: 13px; color: #6B7280;">Payment Status:</td>
+                                <td style="padding-bottom: 8px; font-size: 13px; font-weight: 800; color: #10B981; text-align: right;">✓ Paid via Razorpay</td>
+                              </tr>
+                              <tr>
+                                <td style="font-size: 13px; color: #6B7280;">Current Status:</td>
+                                <td style="font-size: 13px; font-weight: 800; color: #1F2937; text-align: right;">🍳 Kitchen Prep & Packing</td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
 
-    if (!customer) {
-      customer = {
-        id: idStr || Date.now(),
-        email: email || 'user@homemadefoods.in',
-        first_name: (email || 'Customer').split('@')[0],
-        last_name: '',
-        billing: { first_name: (email || 'Customer').split('@')[0], last_name: '', email: email || '', phone: '9876543210', address_1: 'Madurai', city: 'Madurai', state: 'TN', postcode: '625001' },
-        shipping: { first_name: (email || 'Customer').split('@')[0], last_name: '', address_1: 'Madurai', city: 'Madurai', state: 'TN', postcode: '625001' },
-      };
-    }
+                      <!-- Items Breakdown Table -->
+                      <h3 style="font-size: 15px; font-weight: 800; margin: 0 0 12px 0; color: #1F2937; text-transform: uppercase; letter-spacing: 0.5px;">
+                        Order Items Summary
+                      </h3>
+                      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse; margin-bottom: 24px; font-size: 13px;">
+                        <thead>
+                          <tr style="background-color: #F9FAFB; border-bottom: 2px solid #E5E7EB;">
+                            <th align="left" style="padding: 10px 8px; font-weight: 800; color: #374151;">Food Item</th>
+                            <th align="center" style="padding: 10px 8px; font-weight: 800; color: #374151;">Pack</th>
+                            <th align="center" style="padding: 10px 8px; font-weight: 800; color: #374151;">Qty</th>
+                            <th align="right" style="padding: 10px 8px; font-weight: 800; color: #374151;">Price</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${itemsHtml}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <td colspan="3" align="right" style="padding: 12px 8px 4px 8px; font-size: 13px; color: #6B7280; font-weight: 600;">Delivery Charge:</td>
+                            <td align="right" style="padding: 12px 8px 4px 8px; font-size: 13px; font-weight: 800; color: #1F2937;">₹40</td>
+                          </tr>
+                          <tr>
+                            <td colspan="3" align="right" style="padding: 4px 8px 12px 8px; font-size: 16px; font-weight: 900; color: #1F2937;">Total Amount Paid:</td>
+                            <td align="right" style="padding: 4px 8px 12px 8px; font-size: 18px; font-weight: 900; color: #95CD1A;">₹${totalAmount}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
 
-    return res.json({
-      success: true,
-      user: {
-        id: customer.id,
-        email: customer.email,
-        firstName: customer.first_name,
-        lastName: customer.last_name,
-        displayName: `${customer.first_name} ${customer.last_name}`.trim(),
-        phone: customer.billing?.phone || '',
-        billing: customer.billing,
-        shipping: customer.shipping,
-      },
-    });
-  } catch (error: any) {
-    return res.status(401).json({ success: false, message: 'Invalid session token' });
-  }
-});
+                      ${shippingAddress ? `
+                      <!-- Delivery Address Card -->
+                      <div style="background-color: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; margin-bottom: 28px;">
+                        <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: 800; color: #374151; text-transform: uppercase;">Shipping Address</h4>
+                        <p style="margin: 0; font-size: 13px; color: #4B5563; line-height: 1.5;">
+                          <strong>${customerName}</strong> (${phone})<br/>
+                          ${shippingAddress}
+                        </p>
+                      </div>
+                      ` : ''}
 
-// GET /api/v1/auth/my-orders
-app.get('/api/v1/auth/my-orders', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ success: false, message: 'Unauthorized' });
-    }
+                      <!-- Track Live Order CTA Button -->
+                      <div style="text-align: center; margin: 32px 0 24px 0;">
+                        <a href="${trackingLink}" style="background-color: #95CD1A; color: #ffffff; padding: 16px 36px; text-decoration: none; border-radius: 14px; font-weight: 900; font-size: 15px; display: inline-block; box-shadow: 0 6px 20px rgba(149, 205, 26, 0.35);">
+                          🚚 Track Your Order Live →
+                        </a>
+                      </div>
 
-    const token = authHeader.replace('Bearer ', '');
-    let userEmail = '';
-    let idStr = '';
-    try {
-      const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
-      const decoded = rawDecoded.includes('%') ? decodeURIComponent(rawDecoded) : rawDecoded;
-      const parts = decoded.split(':');
-      idStr = parts[0] || '';
-      userEmail = parts[1] || '';
-    } catch {
-      userEmail = '';
-    }
+                      <p style="font-size: 12px; color: #9CA3AF; text-align: center; margin: 0;">
+                        Tracking link: <a href="${trackingLink}" style="color: #95CD1A;">${trackingLink}</a>
+                      </p>
 
-    const wcApi = getWcApi();
-    const statusStageMap: Record<string, { stage: number; label: string }> = {
-      // Stage 1: Confirmed
-      pending: { stage: 1, label: 'Order Confirmed' },
-      'pending-payment': { stage: 1, label: 'Order Confirmed' },
-      confirmed: { stage: 1, label: 'Order Confirmed' },
-      'wc-confirmed': { stage: 1, label: 'Order Confirmed' },
+                    </td>
+                  </tr>
 
-      // Stage 2: Kitchen
-      processing: { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
-      'on-hold': { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
-      on_hold: { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
-      kitchen: { stage: 2, label: 'Kitchen Preparation' },
-      'wc-kitchen': { stage: 2, label: 'Kitchen Preparation' },
+                  <!-- Footer -->
+                  <tr>
+                    <td align="center" style="background-color: #F9FAFB; padding: 20px 24px; border-top: 1px solid #E5E7EB; font-size: 12px; color: #6B7280; text-align: center;">
+                      <p style="margin: 0 0 4px 0; font-weight: 700; color: #374151;">Homemade Foods Madurai</p>
+                      <p style="margin: 0;">Handcrafted traditional delicacies • Madurai, Tamil Nadu, India</p>
+                    </td>
+                  </tr>
 
-      // Stage 3: Dispatched
-      shipped: { stage: 3, label: 'Dispatched & Out for Delivery' },
-      dispatched: { stage: 3, label: 'Dispatched & Out for Delivery' },
-      'wc-dispatched': { stage: 3, label: 'Dispatched & Out for Delivery' },
-      out_for_delivery: { stage: 3, label: 'Dispatched & Out for Delivery' },
-
-      // Stage 4: Delivered
-      completed: { stage: 4, label: 'Successfully Delivered' },
-      delivered: { stage: 4, label: 'Successfully Delivered' },
-      'wc-delivered': { stage: 4, label: 'Successfully Delivered' },
-
-      // Cancelled / Refunded / Failed
-      cancelled: { stage: 0, label: 'Order Cancelled' },
-      refunded: { stage: 0, label: 'Order Refunded' },
-      failed: { stage: 0, label: 'Payment Failed' },
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `,
     };
 
-    let orders: any[] = [];
-    try {
-      const response = await wcApi.get('orders', { per_page: 50 });
-      orders = response.data;
-      if (userEmail) {
-        const usernamePrefix = userEmail.split('@')[0].toLowerCase();
-        orders = orders.filter((o: any) => {
-          if (o.status === 'trash') return false;
-          const orderEmail = (o.billing?.email || '').toLowerCase();
-          const orderFirstName = (o.billing?.first_name || '').toLowerCase();
-          return (
-            orderEmail === userEmail.toLowerCase() ||
-            (orderEmail && orderEmail.startsWith(usernamePrefix)) ||
-            (orderFirstName && (orderFirstName.includes('surya') || orderFirstName.includes(usernamePrefix))) ||
-            (o.customer_id && o.customer_id.toString() === idStr)
-          );
-        });
-      }
-    } catch (err) {}
-
-    const formattedOrders = orders.map((order: any) => {
-      const currentStatus = statusStageMap[order.status] || { stage: 2, label: order.status };
-      return {
-        id: order.id,
-        status: order.status,
-        statusLabel: currentStatus.label,
-        stage: currentStatus.stage,
-        total: order.total,
-        currency: order.currency_symbol || '₹',
-        dateCreated: order.date_created,
-        shippingAddress: `${order.shipping?.address_1 || order.billing?.address_1 || ''}, ${order.shipping?.city || order.billing?.city || ''}`,
-        items: order.line_items?.map((item: any) => ({
-          name: item.name,
-          quantity: item.quantity,
-          total: item.total,
-        })),
-      };
-    });
-
-    return res.json({ success: true, data: formattedOrders });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
+    await transporter.sendMail(mailOptions);
+    console.log(`✉️ Professional order confirmation email sent to ${toEmail} for Order Ref ${orderRefCode}`);
+  } catch (err: any) {
+    console.warn('Email sending warning:', err.message);
   }
-});
-
-// POST /api/v1/cart/sync
-app.post('/api/v1/cart/sync', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '');
-      userCartsMap.set(token, req.body.items || []);
-    }
-    return res.json({ success: true, message: 'Cart synced' });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
+}
 
 // POST /api/v1/checkout/create-order
 app.post('/api/v1/checkout/create-order', async (req, res) => {

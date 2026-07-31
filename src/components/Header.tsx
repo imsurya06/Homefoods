@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, X, ArrowRight, ShoppingBag, User, LogOut } from 'lucide-react';
+import { Menu, X, ArrowRight, ShoppingBag, User, LogOut, Package } from 'lucide-react';
 import type { UserProfile } from '../services/authService';
 
 interface HeaderProps {
@@ -315,6 +315,17 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
             >
               <span>Contact Us</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                if (onOpenTrackModal) onOpenTrackModal();
+              }}
+              className="py-2.5 border-b border-gray-100 text-gray-800 hover:text-[#95CD1A] flex items-center justify-center gap-2 cursor-pointer font-extrabold"
+            >
+              <Package className="w-5 h-5 text-[#95CD1A]" />
+              <span>{user ? 'My Orders' : 'Track Order'}</span>
             </button>
           </nav>
 

@@ -26,9 +26,10 @@ export function App() {
   const [isMyOrdersModalOpen, setIsMyOrdersModalOpen] = useState<boolean>(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState<boolean>(false);
 
-  // Cart State (Guest: sessionStorage | Logged-In: DB/localStorage)
+  // Cart & Orders Drawer State
   const [cartItems, setCartItems] = useState<CartItem[]>(() => getStoredCart(!!getSavedUserProfile()));
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
+  const [cartDrawerInitialTab, setCartDrawerInitialTab] = useState<'cart' | 'orders'>('cart');
 
   // Sync logged-in user details on mount
   useEffect(() => {
@@ -243,8 +244,14 @@ export function App() {
         currentPage={currentPage}
         onNavigate={(page) => handleNavigatePage(page, 'all', '')}
         cartItemCount={totalCartItemCount}
-        onOpenCart={() => setIsCartOpen(true)}
-        onOpenTrackModal={() => setIsMyOrdersModalOpen(true)}
+        onOpenCart={() => {
+          setCartDrawerInitialTab('cart');
+          setIsCartOpen(true);
+        }}
+        onOpenTrackModal={() => {
+          setCartDrawerInitialTab('orders');
+          setIsCartOpen(true);
+        }}
         user={user}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onLogout={() => setIsLogoutConfirmOpen(true)}
@@ -264,16 +271,7 @@ export function App() {
         onConfirmLogout={handleUserLogout}
       />
 
-      {/* Unified My Orders & Tracking Modal */}
-      <MyOrdersModal
-        isOpen={isMyOrdersModalOpen}
-        onClose={() => setIsMyOrdersModalOpen(false)}
-        user={user}
-        onOpenAuthModal={() => setIsAuthModalOpen(true)}
-        onExploreShop={() => handleNavigatePage('shop', 'all', '')}
-      />
-
-      {/* Sliding Cart Panel Drawer */}
+      {/* Sliding Cart & Orders Panel Drawer */}
       <CartDrawer
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
@@ -284,6 +282,8 @@ export function App() {
         onExploreShop={() => handleNavigatePage('shop', 'all', '')}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         isLoggedIn={!!user}
+        user={user}
+        initialTab={cartDrawerInitialTab}
       />
 
       {/* Main Page Routing View */}

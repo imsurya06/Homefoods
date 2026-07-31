@@ -1,7 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { X, ShoppingBag, Trash2, Plus, Minus, ArrowRight, MapPin, Phone, Mail, CheckCircle2 } from 'lucide-react';
+import {
+  X,
+  ShoppingBag,
+  Trash2,
+  Plus,
+  Minus,
+  ArrowRight,
+  Phone,
+  Mail,
+  CheckCircle2,
+  Package,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  Clock,
+  Truck,
+  AlertCircle,
+  PackageCheck,
+  User,
+} from 'lucide-react';
 import { type CartItem } from '../data/bestsellers';
-import { processRazorpayCheckout, type CheckoutPayload } from '../services/checkoutService';
+import { processRazorpayCheckout, type CheckoutPayload, trackSingleOrder } from '../services/checkoutService';
+import { fetchCustomerOrders, type CustomerOrderHistoryItem, type UserProfile } from '../services/authService';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -13,6 +33,8 @@ interface CartDrawerProps {
   onExploreShop?: () => void;
   onOpenAuthModal?: () => void;
   isLoggedIn?: boolean;
+  user?: UserProfile | null;
+  initialTab?: 'cart' | 'orders';
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -25,7 +47,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onExploreShop,
   onOpenAuthModal,
   isLoggedIn = false,
+  user = null,
+  initialTab = 'cart',
 }) => {
+  const [activeTab, setActiveTab] = useState<'cart' | 'orders'>(initialTab);
+
+  // Sync activeTab when initialTab or isOpen changes
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, isOpen]);
+
   // Shipping & Contact Details State with LocalStorage persistence
   const [customerName, setCustomerName] = useState<string>(() => {
     try {
@@ -80,6 +113,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [orderSuccess, setOrderSuccess] = useState<{ wcOrderId: number; paymentId: string } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  // Orders Tab State
+  const [orders, setOrders] = useState<CustomerOrderHistoryItem[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState<boolean>(false);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | number | null>(null);
+
+  // Guest Order Tracking Search State
+  const [guestSearchInput, setGuestSearchInput] = useState<string>('');
+  const [guestSearchResult, setGuestSearchResult] = useState<any | null>(null);
+  const [guestSearchError, setGuestSearchError] = useState<string | null>(null);
+  const [guestSearchLoading, setGuestSearchLoading] = useState<boolean>(false);
+
   useEffect(() => {
     try {
       localStorage.setItem('hf_customer_name', customerName);
@@ -105,6 +149,73 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     };
   }, [isOpen]);
 
+  // Load & Sync Orders when Drawer or Orders Tab is opened
+  useEffect(() => {
+    if (isOpen && activeTab === 'orders') {
+      setLoadingOrders(true);
+
+      let localOrders: CustomerOrderHistoryItem[] = [];
+      try {
+        const saved = localStorage.getItem('hf_local_orders');
+        localOrders = saved ? JSON.parse(saved) : [];
+      } catch {}
+
+      const syncOrderStatuses = async (initialOrders: CustomerOrderHistoryItem[]) => {
+        let updatedList = [...initialOrders];
+        let hasChanges = false;
+
+        await Promise.all(
+          updatedList.map(async (ord, idx) => {
+            try {
+              const liveData = await trackSingleOrder(ord.id);
+              if (liveData && liveData.status) {
+                if (updatedList[idx].stage !== liveData.stage || updatedList[idx].status !== liveData.status) {
+                  updatedList[idx] = {
+                    ...updatedList[idx],
+                    status: liveData.status,
+                    statusLabel: liveData.statusLabel,
+                    stage: liveData.stage,
+                  };
+                  hasChanges = true;
+                }
+              }
+            } catch {}
+          })
+        );
+
+        const activeOrders = updatedList.filter((o) => o.status !== 'trash');
+        if (hasChanges || activeOrders.length !== updatedList.length) {
+          try {
+            localStorage.setItem('hf_local_orders', JSON.stringify(activeOrders));
+          } catch {}
+          setOrders(activeOrders);
+        }
+      };
+
+      fetchCustomerOrders()
+        .then((remoteOrders) => {
+          const cleanRemote = remoteOrders.filter((o) => o.status !== 'trash');
+          const remoteMap = new Map(cleanRemote.map((o) => [o.id.toString(), o]));
+          const merged: CustomerOrderHistoryItem[] = [...cleanRemote];
+
+          localOrders.forEach((lo) => {
+            if (lo.status !== 'trash' && !remoteMap.has(lo.id.toString())) {
+              merged.push(lo);
+            }
+          });
+
+          setOrders(merged);
+          syncOrderStatuses(merged);
+        })
+        .catch(() => {
+          const activeLocal = localOrders.filter((lo) => lo.status !== 'trash');
+          setOrders(activeLocal);
+          syncOrderStatuses(activeLocal);
+        })
+        .finally(() => setLoadingOrders(false));
+    }
+  }, [isOpen, activeTab, user]);
+
   if (!isOpen) return null;
 
   const SHIPPING_FEE = 40;
@@ -122,10 +233,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
 
     const errors: Record<string, string> = {};
-
-    // Enforce Mandatory Form Field Validation with Per-Field Error States
     if (!customerName.trim()) {
-      errors.customerName = 'Full Name is required';
+      errors.customerName = 'Full name is required';
     }
     if (!mobileNumber.trim() || mobileNumber.trim().length < 10) {
       errors.mobileNumber = 'Valid 10-digit mobile number required';
@@ -179,222 +288,278 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     );
   };
 
+  const handleGuestSearchSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanId = guestSearchInput.trim().replace(/^#/, '');
+    if (!cleanId) return;
+
+    setGuestSearchLoading(true);
+    setGuestSearchError(null);
+    setGuestSearchResult(null);
+
+    try {
+      const data = await trackSingleOrder(cleanId);
+      if (data && data.orderId) {
+        setGuestSearchResult(data);
+        setExpandedOrderId(data.orderId);
+      } else {
+        setGuestSearchError(`No order found matching #${cleanId}. Please check Order ID.`);
+      }
+    } catch {
+      setGuestSearchError(`Failed to fetch Order #${cleanId}. Please try again.`);
+    } finally {
+      setGuestSearchLoading(false);
+    }
+  };
+
+  const toggleAccordion = (orderId: string | number) => {
+    setExpandedOrderId((prev) => (prev === orderId ? null : orderId));
+  };
+
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden text-[#1F2937]">
-      {/* Dark Blurred Backdrop */}
+    <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
+      {/* Darkened Semi-Transparent Backdrop */}
       <div
         onClick={onClose}
-        className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-300 cursor-pointer"
+        className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
       />
 
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10 h-full">
-        <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col h-full overflow-hidden animate-in slide-in-from-right duration-300">
+      <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
+        <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col justify-between transform transition-transform duration-300">
           
-          {/* Cart Header */}
-          <div className="px-6 py-5 bg-[#F7FCE8] border-b border-gray-200/80 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-[#95CD1A] text-white rounded-xl shadow-xs">
-                <ShoppingBag className="w-5 h-5" />
-              </div>
-              <div>
-                <h2 className="text-lg font-extrabold text-[#1F2937] leading-tight">
-                  Your Order Cart
+          {/* Top Drawer Header with Segmented Tabs */}
+          <div className="p-4 sm:p-5 bg-white border-b border-gray-100 shrink-0 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-[#1F2937] tracking-tight">
+                  {activeTab === 'cart' ? 'Your Shopping Cart' : 'My Orders & Tracking'}
                 </h2>
-                <span className="text-xs font-bold text-gray-600">
-                  {orderSuccess ? 'Order Placed' : `${totalQuantity} ${totalQuantity === 1 ? 'item' : 'items'} selected`}
-                </span>
               </div>
+              <button
+                onClick={onClose}
+                className="p-2 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl text-gray-500 hover:text-gray-800 hover:bg-white/80 transition-colors cursor-pointer"
-              aria-label="Close cart"
-            >
-              <X className="w-6 h-6" />
-            </button>
+            {/* Segmented Dual Tab Switcher: Cart vs Your Orders */}
+            <div className="flex border border-gray-200 bg-gray-100/80 p-1 rounded-2xl gap-1">
+              <button
+                onClick={() => setActiveTab('cart')}
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  activeTab === 'cart'
+                    ? 'bg-white text-[#95CD1A] shadow-md border border-gray-100'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span>Shopping Cart</span>
+                {totalQuantity > 0 && (
+                  <span className="bg-[#95CD1A] text-white text-[10px] font-black px-1.5 py-0.2 rounded-full min-w-4.5 text-center">
+                    {totalQuantity}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab('orders')}
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  activeTab === 'orders'
+                    ? 'bg-white text-[#95CD1A] shadow-md border border-gray-100'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Package className="w-4 h-4" />
+                <span>Your Orders</span>
+                {orders.length > 0 && (
+                  <span className="bg-[#1F2937] text-white text-[10px] font-black px-1.5 py-0.2 rounded-full min-w-4.5 text-center">
+                    {orders.length}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
 
-          {/* Cart Items & Shipping Details Scrollable Content */}
-          <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
-            
-            {/* Order Success View */}
-            {orderSuccess ? (
-              <div className="py-10 text-center space-y-4">
-                <div className="w-16 h-16 rounded-full bg-[#F7FCE8] text-[#95CD1A] flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-10 h-10" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-xl font-extrabold text-[#1F2937]">
-                    Order Placed Successfully!
-                  </h3>
-                  <p className="text-xs text-gray-500">
-                    Thank you for your order. Order ID: <strong className="text-[#1F2937]">#{orderSuccess.wcOrderId}</strong>
-                  </p>
-                  <p className="text-[11px] text-gray-400 font-mono mt-1">
-                    Payment ID: {orderSuccess.paymentId}
-                  </p>
-                </div>
+          {/* TAB 1: SHOPPING CART CONTENT */}
+          {activeTab === 'cart' && (
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+              {orderSuccess ? (
+                /* Order Placed Success Confirmation View */
+                <div className="py-8 text-center space-y-4 animate-in zoom-in-95 duration-300">
+                  <div className="w-16 h-16 bg-[#F7FCE8] text-[#95CD1A] rounded-full flex items-center justify-center mx-auto border-2 border-[#ECF9CA] shadow-md">
+                    <CheckCircle2 className="w-10 h-10 stroke-[2.5]" />
+                  </div>
 
-                <div className="pt-4">
+                  <div className="space-y-1">
+                    <span className="text-xs font-extrabold uppercase tracking-widest text-[#95CD1A]">
+                      Payment Successful!
+                    </span>
+                    <h3 className="text-2xl font-black text-[#1F2937]">
+                      Order #{(orderSuccess as any).orderRefCode || `HF-${orderSuccess.wcOrderId}`} Confirmed
+                    </h3>
+                    <p className="text-xs text-gray-500 max-w-xs mx-auto">
+                      Thank you! Your delicious South Indian delicacies are now being prepared in our kitchen.
+                    </p>
+                  </div>
+
+                  <div className="bg-[#FAFBF6] p-4 rounded-2xl border border-[#ECF9CA] text-left text-xs space-y-2 font-medium">
+                    <div className="flex justify-between border-b border-gray-200/60 pb-2">
+                      <span className="text-gray-500">Order Reference:</span>
+                      <span className="font-extrabold text-[#95CD1A]">#{(orderSuccess as any).orderRefCode || `HF-${orderSuccess.wcOrderId}`}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-200/60 pb-2">
+                      <span className="text-gray-500">Razorpay Payment ID:</span>
+                      <span className="font-mono font-bold text-gray-700 truncate max-w-[180px]">{orderSuccess.paymentId}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Live Status:</span>
+                      <span className="font-bold text-[#95CD1A] flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" /> Kitchen Preparation
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 space-y-2">
+                    <button
+                      onClick={() => {
+                        setExpandedOrderId(orderSuccess.wcOrderId);
+                        setActiveTab('orders');
+                      }}
+                      className="w-full py-3.5 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Package className="w-4 h-4" />
+                      <span>Track Order Status Live →</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setOrderSuccess(null);
+                        onClose();
+                        if (onExploreShop) onExploreShop();
+                      }}
+                      className="w-full py-2.5 text-xs font-bold text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
+                    >
+                      Continue Shopping
+                    </button>
+                  </div>
+                </div>
+              ) : items.length === 0 ? (
+                /* Empty Cart State */
+                <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-12">
+                  <div className="w-20 h-20 bg-gray-50 text-gray-300 rounded-full flex items-center justify-center border border-gray-100 shadow-inner">
+                    <ShoppingBag className="w-10 h-10" />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-lg font-extrabold text-[#1F2937]">Your Cart is Empty</h3>
+                    <p className="text-xs text-gray-500 max-w-xs">
+                      Explore our hand-pounded spices, authentic thokku, and traditional snacks!
+                    </p>
+                  </div>
                   <button
                     onClick={() => {
-                      setOrderSuccess(null);
                       onClose();
+                      if (onExploreShop) onExploreShop();
                     }}
-                    className="w-full py-3 bg-[#95CD1A] hover:bg-[#7EB30E] text-white text-xs sm:text-sm font-extrabold rounded-xl shadow-md transition-all cursor-pointer"
+                    className="px-6 py-3 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-xs rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer mt-2"
                   >
-                    Continue Shopping
+                    <span>Browse Product Catalog</span>
+                    <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
-              </div>
-            ) : items.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-12">
-                <div className="w-20 h-20 rounded-full bg-[#F7FCE8] text-[#95CD1A] flex items-center justify-center">
-                  <ShoppingBag className="w-10 h-10" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-base font-extrabold text-[#1F2937]">
-                    Your Cart is Currently Empty
-                  </h3>
-                  <p className="text-xs text-gray-500 max-w-xs">
-                    Explore our traditional homemade delicacies and add items to your order cart.
-                  </p>
-                </div>
-                {onExploreShop && (
-                  <button
-                    onClick={() => {
-                      onClose();
-                      onExploreShop();
-                    }}
-                    className="mt-2 px-6 py-3 bg-[#95CD1A] hover:bg-[#7EB30E] text-white text-xs sm:text-sm font-extrabold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    <span>Explore Storefront</span>
-                    <ArrowRight className="w-4 h-4 stroke-[3]" />
-                  </button>
-                )}
-              </div>
-            ) : (
-              <>
-                {/* Items List */}
-                <div className="space-y-3">
-                  {items.map((item) => {
-                    const itemTotal = item.pricePerUnit * item.quantity;
-                    return (
-                      <div
-                        key={item.id}
-                        className="p-3.5 bg-gray-50/80 hover:bg-gray-50 rounded-2xl border border-gray-200/80 flex items-center gap-3.5 transition-all text-left"
-                      >
-                        {/* Thumbnail */}
-                        <img
-                          src={item.imageUrl}
-                          alt={item.name}
-                          className="w-16 h-16 rounded-xl object-cover bg-gray-200 shrink-0 border border-gray-100"
-                        />
+              ) : (
+                /* Cart Items List & Delivery Form */
+                <>
+                  {/* Cart Items List */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs font-extrabold text-gray-400 uppercase tracking-wider">
+                      <span>Selected Items ({totalQuantity})</span>
+                    </div>
 
-                        {/* Item Details */}
-                        <div className="flex flex-col justify-between grow min-w-0 space-y-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <h4 className="font-extrabold text-xs text-[#1F2937] truncate">
-                              {item.name}
-                            </h4>
+                    <div className="divide-y divide-gray-100 border-y border-gray-100">
+                      {items.map((item) => (
+                        <div key={item.id} className="py-3.5 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <img
+                              src={item.imageUrl}
+                              alt={item.name}
+                              className="w-12 h-12 rounded-xl object-cover bg-gray-100 shrink-0 border border-gray-100"
+                            />
+                            <div className="min-w-0 text-left">
+                              <h4 className="text-xs sm:text-sm font-extrabold text-[#1F2937] truncate leading-tight">
+                                {item.name}
+                              </h4>
+                              <p className="text-[11px] text-gray-500 font-medium mt-0.5">
+                                Pack: <span className="font-bold text-gray-700">{item.weight}</span>
+                              </p>
+                              <p className="text-xs font-black text-[#95CD1A] font-numeric mt-0.5">
+                                ₹{item.pricePerUnit * item.quantity}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-gray-50/50">
+                              <button
+                                onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
+                                className="px-2 py-1 text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="px-2 text-xs font-extrabold text-[#1F2937] font-numeric">
+                                {item.quantity}
+                              </span>
+                              <button
+                                onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                                className="px-2 py-1 text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+
                             <button
                               onClick={() => onRemoveItem(item.id)}
-                              className="text-gray-400 hover:text-red-500 transition-colors p-1 cursor-pointer"
+                              className="p-1.5 text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
                               title="Remove item"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
-
-                          <div className="flex items-center gap-2 text-[11px] font-semibold text-gray-500">
-                            <span className="bg-white px-2 py-0.5 rounded-md border border-gray-200 text-gray-700">
-                              {item.weight}
-                            </span>
-                            <span className="font-extrabold text-[#1F2937]">
-                              ₹{item.pricePerUnit} / unit
-                            </span>
-                          </div>
-
-                          {/* Quantity Counter & Subtotal */}
-                          <div className="pt-1 flex items-center justify-between">
-                            <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg p-0.5">
-                              <button
-                                onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
-                                className="p-1 hover:bg-gray-100 text-gray-700 rounded-md transition-colors cursor-pointer"
-                                title="Decrease"
-                              >
-                                <Minus className="w-3.5 h-3.5" />
-                              </button>
-                              <span className="w-6 text-center text-xs font-black text-[#1F2937]">
-                                {item.quantity}
-                              </span>
-                              <button
-                                onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                                className="p-1 hover:bg-gray-100 text-gray-700 rounded-md transition-colors cursor-pointer"
-                                title="Increase"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-
-                            <span className="text-sm font-black text-[#1F2937]">
-                              ₹{itemTotal}
-                            </span>
-                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Delivery & Shipping Details Input Form */}
-                <div className="pt-2">
-
-                  {/* Have an Account? Login Banner */}
-                  {!isLoggedIn && onOpenAuthModal && (
-                    <div className="mb-3 p-3.5 bg-[#F7FCE8] border border-[#95CD1A]/40 rounded-2xl flex items-center justify-between gap-3 text-left">
-                      <div>
-                        <span className="text-xs font-black text-[#1F2937] block">Have an account?</span>
-                        <span className="text-[11px] text-gray-500 font-medium leading-tight block">
-                          Login to auto-fill saved address
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onClose();
-                          onOpenAuthModal();
-                        }}
-                        className="px-3 py-1.5 bg-[#95CD1A] hover:bg-[#7EB30E] text-white text-xs font-extrabold rounded-xl transition-all shadow-xs shrink-0 cursor-pointer"
-                      >
-                        Continue with Account
-                      </button>
+                      ))}
                     </div>
-                  )}
+                  </div>
 
-                  <div className="p-4 bg-gray-50/90 rounded-2xl border border-gray-200/90 text-left space-y-3 shadow-2xs">
-                    <div className="flex items-center gap-2 text-xs font-extrabold text-[#1F2937] uppercase tracking-wider">
-                      <MapPin className="w-4 h-4 text-[#95CD1A]" />
-                      <span>Delivery & Shipping Details</span>
+                  {/* Customer Shipping & Contact Details Form */}
+                  <div className="pt-2 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase tracking-wider text-gray-400">
+                        Delivery & Shipping Details
+                      </span>
+                      {!isLoggedIn && onOpenAuthModal && (
+                        <button
+                          onClick={onOpenAuthModal}
+                          className="text-[11px] font-bold text-[#95CD1A] hover:underline cursor-pointer"
+                        >
+                          Login for Auto-Fill
+                        </button>
+                      )}
                     </div>
 
-                    <div className="space-y-2.5 text-xs">
+                    <div className="bg-gray-50/80 p-3.5 rounded-2xl border border-gray-200/80 space-y-3 text-left">
                       <div>
-                        <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                          Full Name
-                        </label>
+                        <label className="block text-[11px] font-bold text-gray-600 mb-1">Full Name</label>
                         <input
                           type="text"
                           value={customerName}
                           onChange={(e) => {
                             setCustomerName(e.target.value);
-                            if (fieldErrors.customerName) setFieldErrors(prev => ({ ...prev, customerName: '' }));
+                            if (fieldErrors.customerName) setFieldErrors((prev) => ({ ...prev, customerName: '' }));
                           }}
-                          placeholder="Enter your full name"
+                          placeholder="Full Name"
                           className={`w-full px-3 py-2 bg-white rounded-xl border ${
                             fieldErrors.customerName ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
-                          } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all`}
+                          } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all text-xs sm:text-sm`}
                         />
                         {fieldErrors.customerName && (
                           <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.customerName}</p>
@@ -403,23 +568,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                            Mobile Number
-                          </label>
+                          <label className="block text-[11px] font-bold text-gray-600 mb-1">Mobile Number</label>
                           <div className="relative">
                             <input
                               type="tel"
                               value={mobileNumber}
                               onChange={(e) => {
                                 setMobileNumber(e.target.value);
-                                if (fieldErrors.mobileNumber) setFieldErrors(prev => ({ ...prev, mobileNumber: '' }));
+                                if (fieldErrors.mobileNumber) setFieldErrors((prev) => ({ ...prev, mobileNumber: '' }));
                               }}
-                              placeholder="+91 9876543210"
-                              className={`w-full pl-8 pr-2 py-2 bg-white rounded-xl border ${
+                              placeholder="9876543210"
+                              className={`w-full pl-7 pr-2 py-2 bg-white rounded-xl border ${
                                 fieldErrors.mobileNumber ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
-                              } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all`}
+                              } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all text-xs`}
                             />
-                            <Phone className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                            <Phone className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
                           </div>
                           {fieldErrors.mobileNumber && (
                             <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.mobileNumber}</p>
@@ -427,23 +590,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                            Email Address
-                          </label>
+                          <label className="block text-[11px] font-bold text-gray-600 mb-1">Email Address</label>
                           <div className="relative">
                             <input
                               type="email"
                               value={email}
                               onChange={(e) => {
                                 setEmail(e.target.value);
-                                if (fieldErrors.email) setFieldErrors(prev => ({ ...prev, email: '' }));
+                                if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: '' }));
                               }}
                               placeholder="name@email.com"
-                              className={`w-full pl-8 pr-2 py-2 bg-white rounded-xl border ${
+                              className={`w-full pl-7 pr-2 py-2 bg-white rounded-xl border ${
                                 fieldErrors.email ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
-                              } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all`}
+                              } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all text-xs`}
                             />
-                            <Mail className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                            <Mail className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
                           </div>
                           {fieldErrors.email && (
                             <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.email}</p>
@@ -452,20 +613,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       </div>
 
                       <div>
-                        <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                          Shipping Address
-                        </label>
+                        <label className="block text-[11px] font-bold text-gray-600 mb-1">Shipping Address</label>
                         <textarea
                           rows={2}
                           value={shippingAddress}
                           onChange={(e) => {
                             setShippingAddress(e.target.value);
-                            if (fieldErrors.shippingAddress) setFieldErrors(prev => ({ ...prev, shippingAddress: '' }));
+                            if (fieldErrors.shippingAddress) setFieldErrors((prev) => ({ ...prev, shippingAddress: '' }));
                           }}
                           placeholder="Door No, Street Name, Area"
                           className={`w-full px-3 py-2 bg-white rounded-xl border ${
                             fieldErrors.shippingAddress ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
-                          } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium resize-none transition-all`}
+                          } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium resize-none transition-all text-xs`}
                         />
                         {fieldErrors.shippingAddress && (
                           <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.shippingAddress}</p>
@@ -474,20 +633,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                            City
-                          </label>
+                          <label className="block text-[11px] font-bold text-gray-600 mb-1">City</label>
                           <input
                             type="text"
                             value={city}
                             onChange={(e) => {
                               setCity(e.target.value);
-                              if (fieldErrors.city) setFieldErrors(prev => ({ ...prev, city: '' }));
+                              if (fieldErrors.city) setFieldErrors((prev) => ({ ...prev, city: '' }));
                             }}
                             placeholder="Madurai"
                             className={`w-full px-3 py-2 bg-white rounded-xl border ${
                               fieldErrors.city ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
-                            } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all`}
+                            } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all text-xs`}
                           />
                           {fieldErrors.city && (
                             <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.city}</p>
@@ -495,20 +652,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                            Pincode
-                          </label>
+                          <label className="block text-[11px] font-bold text-gray-600 mb-1">Pincode</label>
                           <input
                             type="text"
                             value={pincode}
                             onChange={(e) => {
                               setPincode(e.target.value);
-                              if (fieldErrors.pincode) setFieldErrors(prev => ({ ...prev, pincode: '' }));
+                              if (fieldErrors.pincode) setFieldErrors((prev) => ({ ...prev, pincode: '' }));
                             }}
                             placeholder="625001"
                             className={`w-full px-3 py-2 bg-white rounded-xl border ${
                               fieldErrors.pincode ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
-                            } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all`}
+                            } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all text-xs`}
                           />
                           {fieldErrors.pincode && (
                             <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.pincode}</p>
@@ -517,14 +672,250 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       </div>
                     </div>
                   </div>
-                </div>
-              </>
-            )}
-          </div>
+                </>
+              )}
+            </div>
+          )}
 
-          {/* Cart Footer & Checkout Panel */}
-          {items.length > 0 && !orderSuccess && (
-            <div className="p-6 bg-white border-t border-gray-200 space-y-4 shadow-lg shrink-0">
+          {/* TAB 2: YOUR ORDERS & LIVE TRACKING CONTENT */}
+          {activeTab === 'orders' && (
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 text-left">
+              
+              {/* Quick Guest Order Tracking Input */}
+              <div className="bg-[#FAFBF6] p-3.5 rounded-2xl border border-[#ECF9CA] space-y-2">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#95CD1A] block">
+                  Track Any Order by ID
+                </span>
+                <form onSubmit={handleGuestSearchSubmit} className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={guestSearchInput}
+                      onChange={(e) => setGuestSearchInput(e.target.value)}
+                      placeholder="Enter Order ID (e.g. 118)"
+                      className="w-full pl-8 pr-2 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] text-xs font-bold font-numeric focus:outline-none"
+                    />
+                    <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={guestSearchLoading}
+                    className="px-3.5 py-2 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer shrink-0 disabled:opacity-50"
+                  >
+                    {guestSearchLoading ? 'Searching...' : 'Track'}
+                  </button>
+                </form>
+                {guestSearchError && (
+                  <p className="text-[11px] text-red-500 font-bold mt-1">{guestSearchError}</p>
+                )}
+              </div>
+
+              {/* Logged in prompt if guest */}
+              {!user && (
+                <div className="p-3 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-between text-xs">
+                  <span className="text-gray-500 font-medium">Logged in users see all past order history automatically.</span>
+                  {onOpenAuthModal && (
+                    <button
+                      onClick={onOpenAuthModal}
+                      className="text-[#95CD1A] font-extrabold hover:underline whitespace-nowrap cursor-pointer ml-2"
+                    >
+                      Login
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Orders List Container */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs font-extrabold text-gray-400 uppercase tracking-wider">
+                  <span>Your Order History ({orders.length})</span>
+                </div>
+
+                {loadingOrders ? (
+                  <div className="py-12 text-center space-y-2">
+                    <div className="w-6 h-6 border-2 border-[#95CD1A] border-t-transparent rounded-full animate-spin mx-auto" />
+                    <p className="text-xs text-gray-400 font-bold">Loading your orders...</p>
+                  </div>
+                ) : orders.length === 0 && !guestSearchResult ? (
+                  <div className="py-10 text-center space-y-3 bg-gray-50 rounded-2xl border border-gray-100 p-4">
+                    <Package className="w-10 h-10 text-gray-300 mx-auto" />
+                    <div>
+                      <h4 className="text-sm font-extrabold text-gray-700">No Orders Found</h4>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Placed an order recently? Enter your Order ID in the search box above to track it live!
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3.5">
+                    {orders.map((ord) => {
+                      const isExpanded = expandedOrderId === ord.id || expandedOrderId?.toString() === ord.id.toString();
+
+                      // Compute food names summary
+                      const foodNamesSummary = ord.items && ord.items.length > 0
+                        ? ord.items.map((i: any) => `${i.name}${i.quantity > 1 ? ` (${i.quantity}x)` : ''}`).join(', ')
+                        : 'Homemade South Indian Food Delicacies';
+
+                      // Status Stage Styling
+                      const stage = ord.stage ?? 2;
+                      const stageLabel = ord.statusLabel || ord.status || 'Order Confirmed';
+
+                      return (
+                        <div
+                          key={ord.id}
+                          className={`rounded-2xl border transition-all overflow-hidden ${
+                            isExpanded
+                              ? 'border-[#95CD1A] bg-white shadow-md'
+                              : 'border-gray-200 hover:border-[#95CD1A]/50 bg-white'
+                          }`}
+                        >
+                          {/* Order Summary Header Card (Always Visible) */}
+                          <div className="p-4 space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-black text-[#1F2937] font-numeric">
+                                    Order #{ord.orderRefCode || `HF-${ord.id}`}
+                                  </span>
+                                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#F7FCE8] text-[#95CD1A] border border-[#ECF9CA]">
+                                    {stageLabel}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-gray-500 font-medium mt-0.5">
+                                  {ord.dateCreated ? new Date(ord.dateCreated).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently Placed'}
+                                </p>
+                              </div>
+
+                              <div className="text-right shrink-0 font-numeric">
+                                <span className="text-sm font-black text-[#1F2937] block">
+                                  ₹{ord.total}
+                                </span>
+                                <span className="text-[10px] text-gray-400 font-bold">
+                                  {ord.items?.length || 1} {ord.items?.length === 1 ? 'Item' : 'Items'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Prominent Food Item Name Display */}
+                            <div className="pt-2 border-t border-gray-100 flex items-start gap-2">
+                              <span className="text-xs font-bold text-[#95CD1A] shrink-0">Items:</span>
+                              <span className="text-xs font-extrabold text-[#1F2937] line-clamp-2 leading-snug">
+                                {foodNamesSummary}
+                              </span>
+                            </div>
+
+                            {/* Dropdown Toggle Button */}
+                            <button
+                              onClick={() => toggleAccordion(ord.id)}
+                              className="w-full pt-2 flex items-center justify-between text-xs font-extrabold text-[#95CD1A] hover:text-[#7EB30E] transition-colors cursor-pointer"
+                            >
+                              <span>{isExpanded ? 'Hide Tracking Details' : 'View Tracking Details & Items'}</span>
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </button>
+                          </div>
+
+                          {/* Accordion Expanded Tracking Details */}
+                          {isExpanded && (
+                            <div className="px-4 pb-4 pt-3 bg-[#FAFBF6] border-t border-gray-100 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                              
+                              {/* 4-Step Visual Tracking Stepper */}
+                              <div className="space-y-2">
+                                <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400 block">
+                                  Live Delivery Progress
+                                </span>
+
+                                <div className="grid grid-cols-4 gap-1 relative text-center pt-2">
+                                  {/* Progress Line */}
+                                  <div className="absolute top-5 left-[12%] right-[12%] h-1 bg-gray-200 -z-0">
+                                    <div
+                                      className="h-full bg-[#95CD1A] transition-all duration-500"
+                                      style={{ width: `${Math.max(0, Math.min(100, ((stage - 1) / 3) * 100))}%` }}
+                                    />
+                                  </div>
+
+                                  {/* Step 1: Confirmed */}
+                                  <div className="flex flex-col items-center gap-1 relative z-10">
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                      stage >= 1 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
+                                    }`}>
+                                      <CheckCircle2 className="w-4 h-4" />
+                                    </div>
+                                    <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Confirmed</span>
+                                  </div>
+
+                                  {/* Step 2: Kitchen */}
+                                  <div className="flex flex-col items-center gap-1 relative z-10">
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                      stage >= 2 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
+                                    }`}>
+                                      <Clock className="w-4 h-4" />
+                                    </div>
+                                    <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Kitchen</span>
+                                  </div>
+
+                                  {/* Step 3: Dispatched */}
+                                  <div className="flex flex-col items-center gap-1 relative z-10">
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                      stage >= 3 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
+                                    }`}>
+                                      <Truck className="w-4 h-4" />
+                                    </div>
+                                    <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Dispatched</span>
+                                  </div>
+
+                                  {/* Step 4: Delivered */}
+                                  <div className="flex flex-col items-center gap-1 relative z-10">
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                      stage >= 4 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
+                                    }`}>
+                                      <PackageCheck className="w-4 h-4" />
+                                    </div>
+                                    <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Delivered</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Items Breakdown List */}
+                              {ord.items && ord.items.length > 0 && (
+                                <div className="space-y-1.5 pt-2 border-t border-gray-200/60">
+                                  <span className="text-[11px] font-extrabold text-gray-500 uppercase tracking-wider block">
+                                    Food Items Breakdown
+                                  </span>
+                                  <div className="divide-y divide-gray-200/60 bg-white rounded-xl p-2.5 border border-gray-200/80 text-xs">
+                                    {ord.items.map((it: any, i: number) => (
+                                      <div key={i} className="py-1 flex items-center justify-between">
+                                        <span className="font-extrabold text-gray-800">{it.name}</span>
+                                        <span className="font-bold text-gray-500 font-numeric">x{it.quantity}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Shipping Address */}
+                              {ord.shippingAddress && (
+                                <div className="pt-2 border-t border-gray-200/60 text-xs">
+                                  <span className="font-extrabold text-gray-500 uppercase tracking-wider block text-[10px] mb-0.5">
+                                    Delivery Address:
+                                  </span>
+                                  <span className="font-medium text-gray-700 block">{ord.shippingAddress}</span>
+                                </div>
+                              )}
+
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Cart Footer & Checkout Panel (Only Visible in Shopping Cart Tab) */}
+          {activeTab === 'cart' && items.length > 0 && !orderSuccess && (
+            <div className="p-4 sm:p-6 bg-white border-t border-gray-200 space-y-4 shadow-lg shrink-0">
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs text-gray-500 font-bold">
                   <span>Subtotal ({totalQuantity} items)</span>
@@ -557,7 +948,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <p className="text-xs text-red-500 font-extrabold text-center">{checkoutError}</p>
               )}
 
-              {/* Headless E-Commerce "Order Now" CTA */}
+              {/* Order Now CTA */}
               <button
                 type="button"
                 onClick={handleOrderNow}

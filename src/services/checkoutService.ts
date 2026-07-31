@@ -84,30 +84,37 @@ export async function processRazorpayCheckout(
       handler: async function (response: any) {
         try {
           // 4. Verify Signature on Server
-          const verifyRes = await fetchApi<{ success: boolean; paymentId: string }>('/checkout/verify-payment', {
+          const verifyRes = await fetchApi<{ success: boolean; paymentId: string; orderRefCode?: string; trackingLink?: string }>('/checkout/verify-payment', {
             method: 'POST',
             body: JSON.stringify({
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
               wcOrderId: orderRes.wcOrderId,
+              orderRefCode: orderRes.orderRefCode,
               customerEmail: payload.customerDetails.email,
               customerName: payload.customerDetails.name,
               totalAmount: orderRes.amount || (orderRes.amountInPaise ? orderRes.amountInPaise / 100 : 0),
+              items: payload.items,
+              shippingAddress: `${payload.shippingAddress.address}, ${payload.shippingAddress.city} - ${payload.shippingAddress.pincode}`,
+              phone: payload.customerDetails.phone,
             }),
           });
 
           if (verifyRes.success) {
             try {
+              const displayCode = orderRes.orderRefCode || `HF-${orderRes.wcOrderId}`;
               const newOrder = {
-                id: orderRes.wcOrderId,
+                id: displayCode,
+                wcOrderId: orderRes.wcOrderId,
+                orderRefCode: displayCode,
                 status: 'processing',
                 statusLabel: 'Order Confirmed & Kitchen Preparation',
                 stage: 2,
                 total: orderRes.amountInPaise ? (orderRes.amountInPaise / 100).toString() : '0',
                 currency: '₹',
                 dateCreated: new Date().toISOString(),
-                items: payload.items.map((it: any) => ({ name: it.name, quantity: it.quantity, total: (it.pricePerUnit * it.quantity).toString() })),
+                items: payload.items.map((it: any) => ({ name: it.name, quantity: it.quantity, pricePerUnit: it.pricePerUnit, weight: it.weight, total: (it.pricePerUnit * it.quantity).toString() })),
                 shippingAddress: `${payload.shippingAddress.address}, ${payload.shippingAddress.city}`,
               };
               const saved = localStorage.getItem('hf_local_orders');
