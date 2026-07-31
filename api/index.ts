@@ -462,14 +462,14 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
     const storedPass = globalPasswordMap.get(cleanEmail) || passMeta?.value;
 
     if (isExistingUser) {
-      if (storedPass && cleanPassword && storedPass !== cleanPassword) {
-        return res.status(401).json({
-          success: false,
-          message: 'An account already exists for this email address. Please enter the correct password or click Forgot Password to reset.',
-        });
-      }
-
-      if (cleanPassword) {
+      if (storedPass) {
+        if (cleanPassword !== storedPass) {
+          return res.status(401).json({
+            success: false,
+            message: 'An account already exists for this email address. Please enter the correct password or click Forgot Password to reset.',
+          });
+        }
+      } else if (cleanPassword) {
         globalPasswordMap.set(cleanEmail, cleanPassword);
         if (customerUser) {
           try {
@@ -548,140 +548,47 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
   }
 });
 
-// POST /api/v1/cart/sync (Save user's cart items across devices)
-app.post('/api/v1/cart/sync', async (req, res) => {
-  try {
-    const { items } = req.body;
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.json({ success: false, message: 'No auth token' });
-
-    const token = authHeader.replace('Bearer ', '');
-    const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
-    const parts = rawDecoded.split(':');
-    const customerId = parts[0];
-    const email = parts[1]?.toLowerCase();
-
-    if (email) {
-      userCartsMap.set(email, items || []);
-      if (customerId && /^\d+$/.test(customerId)) {
-        wcFetch(`customers/${customerId}`, {
-          method: 'PUT',
-          body: { meta_data: [{ key: '_saved_cart', value: JSON.stringify(items || []) }] },
-        }).catch(() => {});
-      }
-    }
-
-    return res.json({ success: true });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// GET /api/v1/cart/get (Fetch user's saved cart items across devices)
-app.get('/api/v1/cart/get', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.json({ success: true, items: [] });
-
-    const token = authHeader.replace('Bearer ', '');
-    const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
-    const parts = rawDecoded.split(':');
-    const customerId = parts[0];
-    const email = parts[1]?.toLowerCase();
-
-    if (!email) return res.json({ success: true, items: [] });
-
-    let items = userCartsMap.get(email);
-    if (!items || items.length === 0) {
-      if (customerId && /^\d+$/.test(customerId)) {
-        try {
-          const custRes = await wcFetch(`customers/${customerId}`);
-          if (custRes.ok && custRes.data) {
-            const cartMeta = (custRes.data.meta_data || []).find((m: any) => m.key === '_saved_cart');
-            if (cartMeta && cartMeta.value) {
-              items = typeof cartMeta.value === 'string' ? JSON.parse(cartMeta.value) : cartMeta.value;
-              if (Array.isArray(items)) {
-                userCartsMap.set(email, items);
-              }
-            }
-          }
-        } catch {}
-      }
-    }
-
-    return res.json({ success: true, items: items || [] });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, message: err.message, items: [] });
-  }
-});
-
-// POST /api/v1/auth/register
-app.post('/api/v1/auth/register', async (req, res) => {
-  try {
-    const { email, password, firstName, lastName, phone } = req.body;
-    const cleanEmail = (email || '').trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      return res.status(400).json({ success: false, message: 'Valid email address is required' });
-    }
-
-    const username = `${cleanEmail.split('@')[0]}_${Math.floor(1000 + Math.random() * 9000)}`;
-    const customerData = {
-      email: cleanEmail,
-      password: password || 'CustomerPass123!',
-      first_name: firstName || 'Valued',
-      last_name: lastName || 'Customer',
-      username,
-      billing: { first_name: firstName || 'Valued', last_name: lastName || 'Customer', email: cleanEmail, phone: phone || '' },
-    };
-
-    let createdUser: any = null;
-    try {
-      const wcRes = await wcFetch('customers', { method: 'POST', body: customerData });
-      if (wcRes.ok && wcRes.data) createdUser = wcRes.data;
-    } catch {}
-
-    if (!createdUser) {
-      createdUser = { id: `usr_${Date.now()}`, email: cleanEmail, first_name: firstName || 'Valued', last_name: lastName || 'Customer' };
-    }
-
-    const tokenPayload = `${createdUser.id}:${cleanEmail}:${Date.now()}`;
-    const token = Buffer.from(tokenPayload).toString('base64');
-
-    return res.json({
-      success: true,
-      token,
-      user: {
-        id: createdUser.id.toString(),
-        email: cleanEmail,
-        firstName: createdUser.first_name,
-        lastName: createdUser.last_name,
-        displayName: `${createdUser.first_name} ${createdUser.last_name}`.trim(),
-        phone: phone || '',
-      },
-    });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
 // POST /api/v1/auth/login
 app.post('/api/v1/auth/login', async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, password } = req.body;
     const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPassword = (password || '').trim();
     if (!cleanEmail || !cleanEmail.includes('@')) {
       return res.status(400).json({ success: false, message: 'Valid email address is required' });
     }
 
     let customerUser: any = null;
+    let customerId = '';
     try {
       const searchRes = await wcFetch('customers', { params: { email: cleanEmail } });
       if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-        customerUser = searchRes.data[0];
+        const found = searchRes.data[0];
+        customerId = found.id.toString();
+        try {
+          const fullRes = await wcFetch(`customers/${customerId}`);
+          customerUser = fullRes.ok && fullRes.data ? fullRes.data : found;
+        } catch {
+          customerUser = found;
+        }
       }
     } catch {}
 
-    const id = customerUser ? customerUser.id.toString() : `usr_${Date.now()}`;
+    const passMeta = (customerUser?.meta_data || []).find((m: any) =>
+      m.key === 'hf_account_pass' || m.key === 'customer_auth_pass' || m.key === '_customer_auth_pass'
+    );
+    const storedPass = globalPasswordMap.get(cleanEmail) || passMeta?.value;
+
+    if (customerUser || storedPass) {
+      if (storedPass && cleanPassword && storedPass !== cleanPassword) {
+        return res.status(401).json({
+          success: false,
+          message: 'An account already exists for this email address. Please enter the correct password or click Forgot Password to reset.',
+        });
+      }
+    }
+
+    const id = customerId || `usr_${Date.now()}`;
     const fn = customerUser?.first_name || cleanEmail.split('@')[0];
     const ln = customerUser?.last_name || '';
 
@@ -716,20 +623,35 @@ app.get('/api/v1/auth/me', async (req, res) => {
     const decoded = rawDecoded.includes('%') ? decodeURIComponent(rawDecoded) : rawDecoded;
     const parts = decoded.split(':');
     const idStr = parts[0] || '';
-    const emailStr = parts[1] || '';
+    const emailStr = (parts[1] || '').trim().toLowerCase();
 
     if (!emailStr) return res.status(401).json({ success: false, message: 'Invalid token' });
 
     let customerUser: any = null;
-    if (/^\d+$/.test(idStr)) {
+    let foundByEmail = false;
+
+    if (emailStr) {
+      try {
+        const searchRes = await wcFetch('customers', { params: { email: emailStr } });
+        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+          customerUser = searchRes.data[0];
+          foundByEmail = true;
+        }
+      } catch {}
+    }
+
+    if (!customerUser && /^\d+$/.test(idStr)) {
       try {
         const wcRes = await wcFetch(`customers/${idStr}`);
         if (wcRes.ok && wcRes.data) {
           customerUser = wcRes.data;
-        } else if (wcRes.status === 404) {
-          return res.status(401).json({ success: false, message: 'User account has been deleted from database', accountDeleted: true });
         }
       } catch {}
+    }
+
+    // Only flag account as deleted if email search returned NO users in WooCommerce AND user has a numeric ID
+    if (!customerUser && !foundByEmail && /^\d+$/.test(idStr)) {
+      return res.status(401).json({ success: false, message: 'User account has been deleted from database', accountDeleted: true });
     }
 
     const fn = customerUser?.first_name || emailStr.split('@')[0];

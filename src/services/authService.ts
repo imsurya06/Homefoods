@@ -135,40 +135,21 @@ export async function resetPasswordWithOtp(email: string, otp: string, newPasswo
 export async function loginOrSignupCustomer(email: string, password: string): Promise<{ success: boolean; token: string; user: UserProfile; isNewUser?: boolean }> {
   const cleanEmail = email.trim().toLowerCase();
 
-  try {
-    const res = await fetchApi<{ success: boolean; token: string; user: UserProfile; isNewUser?: boolean }>('/auth/login-signup', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
+  const res = await fetchApi<{ success: boolean; token: string; user: UserProfile; isNewUser?: boolean }>('/auth/login-signup', {
+    method: 'POST',
+    body: JSON.stringify({ email: cleanEmail, password }),
+  });
 
-    if (res.success && res.token) {
-      localStorage.setItem('hf_auth_token', res.token);
-      localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
+  if (res.success && res.token) {
+    localStorage.setItem('hf_auth_token', res.token);
+    localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
 
-      // If this is a fresh account or account was recreated after deletion, clear old local orders
-      if (res.isNewUser) {
-        localStorage.removeItem('hf_local_orders');
-      }
+    // If this is a fresh account or account was recreated after deletion, clear old local orders
+    if (res.isNewUser) {
+      localStorage.removeItem('hf_local_orders');
     }
-    return res;
-  } catch (err: any) {
-    // Fallback for offline/testing mode
-    const userId = getDeterministicUserId(cleanEmail);
-    const mockUser: UserProfile = {
-      id: userId,
-      email: cleanEmail,
-      firstName: cleanEmail.split('@')[0],
-      lastName: '',
-      displayName: cleanEmail.split('@')[0],
-      phone: '',
-      billing: { first_name: cleanEmail.split('@')[0], last_name: '', email: cleanEmail, phone: '', address_1: '', city: 'Madurai', state: 'TN', postcode: '625001' },
-      shipping: { first_name: cleanEmail.split('@')[0], last_name: '', address_1: '', city: 'Madurai', state: 'TN', postcode: '625001' },
-    };
-    const token = safeGenerateToken(mockUser.id, cleanEmail);
-    localStorage.setItem('hf_auth_token', token);
-    localStorage.setItem('hf_user_profile', JSON.stringify(mockUser));
-    return { success: true, token, user: mockUser, isNewUser: true };
   }
+  return res;
 }
 
 export async function loginCustomer(email: string, password: string): Promise<{ success: boolean; token: string; user: UserProfile }> {
