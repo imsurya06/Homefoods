@@ -24,31 +24,36 @@ export function getStoredCart(isLoggedIn: boolean): CartItem[] {
 
 let isSyncingCart = false;
 
-export async function fetchRemoteCart(): Promise<CartItem[]> {
+export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleared: boolean }> {
   try {
     const token = getSavedToken();
-    if (!token) return getStoredCart(false);
+    if (!token) return { items: getStoredCart(false), cartCleared: false };
 
     const localItems = getStoredCart(true);
 
     // If local cart is currently syncing to backend, protect local items from in-flight GET responses
     if (isSyncingCart && localItems.length > 0) {
-      return localItems;
+      return { items: localItems, cartCleared: false };
     }
 
-    const res = await fetchApi<{ success: boolean; items: CartItem[] }>('/cart/get');
+    const res = await fetchApi<{ success: boolean; items: CartItem[]; cartCleared?: boolean }>('/cart/get');
     if (res && res.success && Array.isArray(res.items)) {
       if (isSyncingCart && res.items.length === 0 && localItems.length > 0) {
-        return localItems;
+        return { items: localItems, cartCleared: false };
       }
 
-      localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
-      return res.items;
+      const cartCleared = !!res.cartCleared;
+      if (cartCleared) {
+        localStorage.setItem('hf_user_cart', JSON.stringify([]));
+      } else {
+        localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
+      }
+      return { items: res.items, cartCleared };
     }
   } catch (err) {
     console.warn('Fetch remote cart warning:', err);
   }
-  return getStoredCart(true);
+  return { items: getStoredCart(true), cartCleared: false };
 }
 
 export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {

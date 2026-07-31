@@ -709,10 +709,12 @@ function writeDiskCart(email: string, items: any[]) {
   } catch {}
 }
 
+const userCartClearFlags = new Map<string, boolean>();
+
 // POST /api/v1/cart/sync (Sync user cart items to database across devices)
 app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'], async (req, res) => {
   try {
-    const { items } = req.body;
+    const { items, action } = req.body;
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.json({ success: false, message: 'No auth token' });
 
@@ -724,6 +726,9 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
 
     if (email) {
       const validItems = Array.isArray(items) ? items : [];
+      const isClear = action === 'clear' || (validItems.length === 0 && req.body?.isUserAction);
+
+      userCartClearFlags.set(email, isClear);
       userCartsMap.set(email, validItems);
       writeDiskCart(email, validItems);
 
@@ -754,7 +759,7 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
 app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader) return res.json({ success: true, items: [] });
+    if (!authHeader) return res.json({ success: true, items: [], cartCleared: false });
 
     const token = authHeader.replace('Bearer ', '');
     const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
@@ -762,11 +767,13 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
     const parts = decoded.split(':');
     const email = (parts[1] || '').trim().toLowerCase();
 
-    if (!email) return res.json({ success: true, items: [] });
+    if (!email) return res.json({ success: true, items: [], cartCleared: false });
+
+    const cartCleared = userCartClearFlags.get(email) || false;
 
     // 1. Check in-memory map first
     if (userCartsMap.has(email)) {
-      return res.json({ success: true, items: userCartsMap.get(email) || [] });
+      return res.json({ success: true, items: userCartsMap.get(email) || [], cartCleared });
     }
 
     // 2. Check disk cache second
@@ -774,7 +781,7 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
     if (email in diskCarts) {
       const diskItems = diskCarts[email] || [];
       userCartsMap.set(email, diskItems);
-      return res.json({ success: true, items: diskItems });
+      return res.json({ success: true, items: diskItems, cartCleared });
     }
 
     // 3. Fallback to WooCommerce customer metadata for first-time load
@@ -799,9 +806,9 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
 
     userCartsMap.set(email, items);
     writeDiskCart(email, items);
-    return res.json({ success: true, items });
+    return res.json({ success: true, items, cartCleared });
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: err.message, items: [] });
+    return res.status(500).json({ success: false, message: err.message, items: [], cartCleared: false });
   }
 });
 

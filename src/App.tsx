@@ -38,9 +38,12 @@ export function App() {
         if (!isMounted) return;
         setUser(u);
       });
-      fetchRemoteCart().then((remoteItems) => {
+      fetchRemoteCart().then(({ items: remoteItems, cartCleared }) => {
         if (isMounted && remoteItems && Array.isArray(remoteItems)) {
           setCartItems((prev) => {
+            if (cartCleared) {
+              return [];
+            }
             if (prev.length > 0 && remoteItems.length === 0) {
               return prev;
             }
@@ -58,9 +61,12 @@ export function App() {
     const interval = setInterval(() => {
       const token = localStorage.getItem('hf_auth_token');
       if (token && document.visibilityState === 'visible') {
-        fetchRemoteCart().then((remoteItems) => {
+        fetchRemoteCart().then(({ items: remoteItems, cartCleared }) => {
           if (isMounted && remoteItems && Array.isArray(remoteItems)) {
             setCartItems((prev) => {
+              if (cartCleared) {
+                return [];
+              }
               if (prev.length > 0 && remoteItems.length === 0) {
                 return prev;
               }
@@ -184,7 +190,7 @@ export function App() {
     setUser(loggedUser);
     const guestCart = getStoredCart(false);
 
-    fetchRemoteCart().then((remoteItems) => {
+    fetchRemoteCart().then(({ items: remoteItems }) => {
       const accountCart = (remoteItems && remoteItems.length > 0) ? remoteItems : getStoredCart(true);
       if (guestCart && guestCart.length > 0) {
         const merged = mergeCartItems(accountCart, guestCart);
