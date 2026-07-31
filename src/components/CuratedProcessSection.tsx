@@ -27,7 +27,7 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
   };
 
   return (
-    <section id="process" className="w-full bg-white text-[#1F2937] py-20 md:py-28 px-4 sm:px-8 lg:px-12 border-t border-gray-100 relative overflow-hidden">
+    <section id="process" className="w-full bg-white text-[#1F2937] pt-8 md:pt-12 pb-16 md:pb-24 px-4 sm:px-8 lg:px-12 border-t border-gray-100 relative overflow-hidden">
 
       {/* Subtle Background Glow Accent */}
       <div className="absolute inset-0 pointer-events-none -z-0">
@@ -128,9 +128,6 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
                   Curated Signature Bestsellers
                 </h3>
               </div>
-              <span className="text-xs font-semibold text-[#1F2937] bg-[#F7FCE8] border border-[#ECF9CA] px-3 py-1 rounded-full">
-                Headless E-Commerce
-              </span>
             </div>
 
             {/* Loose, Airy Bestsellers Product Presentation */}

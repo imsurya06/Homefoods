@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Menu, X, ArrowRight, ShoppingBag, User, LogOut } from 'lucide-react';
 import type { UserProfile } from '../services/authService';
 
@@ -27,6 +27,23 @@ export const Header: React.FC<HeaderProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string>(currentPage === 'shop' ? 'shop' : 'home');
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close User Dropdown when clicking anywhere outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+        setIsUserDropdownOpen(false);
+      }
+    };
+
+    if (isUserDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isUserDropdownOpen]);
 
   // Scrollspy logic to automatically activate navbar links based on scroll position
   useEffect(() => {
@@ -167,10 +184,23 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </nav>
 
-        {/* Header Right Actions: Cart + Shop Now + User Profile Icon (Placed Last) */}
+        {/* Header Right Actions: Shop Now + Cart + User Profile Icon */}
         <div className="flex items-center gap-2.5 sm:gap-3 relative">
 
-          {/* 1. Cart Drawer Trigger Button */}
+          {/* 1. Shop Now CTA Button */}
+          <button
+            onClick={() => handleNavClick('shop')}
+            className={`hidden sm:inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl text-white font-extrabold text-base transition-all duration-300 shadow-md cursor-pointer ${activeSection === 'shop'
+                ? 'bg-[#7EB30E] ring-4 ring-[#95CD1A]/30 scale-105 shadow-lg'
+                : 'bg-[#95CD1A] hover:bg-[#7EB30E] shadow-[#95CD1A]/25 hover:shadow-lg transform hover:-translate-y-0.5'
+              }`}
+          >
+            <ShoppingBag className="w-5 h-5 text-white" />
+            <span>Shop Now</span>
+            <ArrowRight className="w-5 h-5 text-white stroke-[3]" />
+          </button>
+
+          {/* 2. Cart Drawer Trigger Button (Placed next to Profile Icon) */}
           <button
             onClick={onOpenCart}
             aria-label="View Cart"
@@ -185,22 +215,9 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          {/* 2. Shop Now CTA Button */}
-          <button
-            onClick={() => handleNavClick('shop')}
-            className={`hidden sm:inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl text-white font-extrabold text-base transition-all duration-300 shadow-md cursor-pointer ${activeSection === 'shop'
-                ? 'bg-[#7EB30E] ring-4 ring-[#95CD1A]/30 scale-105 shadow-lg'
-                : 'bg-[#95CD1A] hover:bg-[#7EB30E] shadow-[#95CD1A]/25 hover:shadow-lg transform hover:-translate-y-0.5'
-              }`}
-          >
-            <ShoppingBag className="w-5 h-5 text-white" />
-            <span>Shop Now</span>
-            <ArrowRight className="w-5 h-5 text-white stroke-[3]" />
-          </button>
-
           {/* 3. Clickable User Profile Icon Button (Placed LAST) */}
           {user ? (
-            <div className="relative">
+            <div ref={userDropdownRef} className="relative">
               <button
                 onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
                 title={user.displayName || 'User Profile'}

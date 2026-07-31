@@ -311,7 +311,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
 
       {/* 3. Organically Staggered Category Cards */}
-      <section id="categories" className="relative z-10 max-w-7xl mx-auto px-4 sm:px-8 lg:px-12 py-16 md:py-24">
+      <section id="categories" className="relative z-10 max-w-7xl mx-auto px-4 sm:px-8 lg:px-12 pt-8 md:pt-12 pb-6 md:pb-8">
         
         {/* Section Header */}
         <div className="flex flex-col sm:flex-row items-center sm:items-end justify-between mb-14 gap-4 pb-4 border-b border-gray-100 text-center sm:text-left">
