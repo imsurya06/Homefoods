@@ -928,8 +928,8 @@ app.get('/api/v1/checkout/track/:id', async (req, res) => {
   }
 });
 
-// GET /health
-app.get('/health', (_req, res) => {
+// GET /health & /api/v1/health
+app.get(['/health', '/api/v1/health'], (_req, res) => {
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
