@@ -192,23 +192,42 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
       fetchCustomerOrders()
         .then((remoteOrders) => {
-          const cleanRemote = remoteOrders.filter((o) => o.status !== 'trash');
-          const remoteMap = new Map(cleanRemote.map((o) => [o.id.toString(), o]));
-          const merged: CustomerOrderHistoryItem[] = [...cleanRemote];
+          const seenKeys = new Set<string>();
+          const merged: CustomerOrderHistoryItem[] = [];
 
-          localOrders.forEach((lo) => {
-            if (lo.status !== 'trash' && !remoteMap.has(lo.id.toString())) {
-              merged.push(lo);
-            }
-          });
+          const addUnique = (o: CustomerOrderHistoryItem) => {
+            if (!o || o.status === 'trash') return;
+            const idKey = o.id ? o.id.toString().toLowerCase().trim() : '';
+            const refKey = o.orderRefCode ? o.orderRefCode.toLowerCase().trim() : '';
+
+            if (idKey && seenKeys.has(idKey)) return;
+            if (refKey && seenKeys.has(refKey)) return;
+
+            if (idKey) seenKeys.add(idKey);
+            if (refKey) seenKeys.add(refKey);
+            merged.push(o);
+          };
+
+          remoteOrders.forEach(addUnique);
+          localOrders.forEach(addUnique);
 
           setOrders(merged);
           syncOrderStatuses(merged);
         })
         .catch(() => {
-          const activeLocal = localOrders.filter((lo) => lo.status !== 'trash');
-          setOrders(activeLocal);
-          syncOrderStatuses(activeLocal);
+          const seenKeys = new Set<string>();
+          const merged: CustomerOrderHistoryItem[] = [];
+          localOrders.forEach((lo) => {
+            if (!lo || lo.status === 'trash') return;
+            const idKey = lo.id ? lo.id.toString().toLowerCase().trim() : '';
+            const refKey = lo.orderRefCode ? lo.orderRefCode.toLowerCase().trim() : '';
+            if ((idKey && seenKeys.has(idKey)) || (refKey && seenKeys.has(refKey))) return;
+            if (idKey) seenKeys.add(idKey);
+            if (refKey) seenKeys.add(refKey);
+            merged.push(lo);
+          });
+          setOrders(merged);
+          syncOrderStatuses(merged);
         })
         .finally(() => setLoadingOrders(false));
     }

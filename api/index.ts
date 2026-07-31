@@ -649,12 +649,19 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
       }
     } catch {}
 
-    const formattedOrders = orders.map((order: any) => {
+    const seenOrderIds = new Set<string>();
+    const formattedOrders: any[] = [];
+
+    for (const order of orders) {
+      const idKey = order.id ? order.id.toString() : '';
+      if (idKey && seenOrderIds.has(idKey)) continue;
+      if (idKey) seenOrderIds.add(idKey);
+
       const currentStatus = getOrderStatusDetails(order.status);
       const refMeta = (order.meta_data || []).find((m: any) => m.key === '_order_ref_code');
       const orderRefCode = refMeta?.value || `HF-${order.id}`;
 
-      return {
+      formattedOrders.push({
         id: order.id,
         orderRefCode,
         status: order.status,
@@ -665,8 +672,8 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
         dateCreated: order.date_created,
         items: order.line_items?.map((item: any) => ({ name: item.name, quantity: item.quantity, total: item.total })),
         shippingAddress: `${order.shipping?.address_1 || order.billing?.address_1 || ''}, ${order.shipping?.city || order.billing?.city || ''}`,
-      };
-    });
+      });
+    }
 
     return res.json({ success: true, count: formattedOrders.length, data: formattedOrders });
   } catch (error: any) {
