@@ -569,29 +569,44 @@ app.get('/api/v1/auth/my-orders', async (req, res) => {
       userEmail = parts[1] || '';
     } catch {}
 
-    const statusStageMap: Record<string, { stage: number; label: string }> = {
-      pending: { stage: 1, label: 'Order Confirmed' },
-      'pending-payment': { stage: 1, label: 'Order Confirmed' },
-      confirmed: { stage: 1, label: 'Order Confirmed' },
-      'wc-confirmed': { stage: 1, label: 'Order Confirmed' },
+function getOrderStatusDetails(status: string): { stage: number; label: string } {
+  const s = (status || '').toLowerCase().trim().replace(/^wc-/, '');
 
-      processing: { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
-      'on-hold': { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
-      on_hold: { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
-      kitchen: { stage: 2, label: 'Kitchen Preparation' },
-      'wc-kitchen': { stage: 2, label: 'Kitchen Preparation' },
+  if (s === 'completed' || s === 'delivered') {
+    return { stage: 4, label: 'Successfully Delivered' };
+  }
+  if (s === 'dispatched' || s === 'shipped' || s === 'out_for_delivery' || s === 'out-for-delivery' || s.includes('dispatch') || s.includes('ship')) {
+    return { stage: 3, label: 'Dispatched & Out for Delivery' };
+  }
+  if (s === 'kitchen' || s === 'processing' || s === 'on-hold' || s === 'on_hold' || s.includes('kitchen') || s.includes('process')) {
+    return { stage: 2, label: 'Kitchen Preparation' };
+  }
+  if (s === 'pending' || s === 'pending-payment' || s === 'confirmed' || s === 'auto-draft') {
+    return { stage: 1, label: 'Order Confirmed' };
+  }
+  if (s === 'cancelled' || s === 'refunded' || s === 'failed') {
+    return { stage: 0, label: s === 'cancelled' ? 'Order Cancelled' : s === 'refunded' ? 'Order Refunded' : 'Payment Failed' };
+  }
 
-      shipped: { stage: 3, label: 'Dispatched & Out for Delivery' },
-      dispatched: { stage: 3, label: 'Dispatched & Out for Delivery' },
-      'wc-dispatched': { stage: 3, label: 'Dispatched & Out for Delivery' },
+  return { stage: 2, label: status || 'Order Confirmed' };
+}
 
-      completed: { stage: 4, label: 'Successfully Delivered' },
-      delivered: { stage: 4, label: 'Successfully Delivered' },
+// GET /api/v1/auth/my-orders
+app.get('/api/v1/auth/my-orders', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
-      cancelled: { stage: 0, label: 'Order Cancelled' },
-      refunded: { stage: 0, label: 'Order Refunded' },
-      failed: { stage: 0, label: 'Payment Failed' },
-    };
+    const token = authHeader.replace('Bearer ', '');
+    let userEmail = '';
+    let idStr = '';
+    try {
+      const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
+      const decoded = rawDecoded.includes('%') ? decodeURIComponent(rawDecoded) : rawDecoded;
+      const parts = decoded.split(':');
+      idStr = parts[0] || '';
+      userEmail = parts[1] || '';
+    } catch {}
 
     let orders: any[] = [];
     try {
@@ -616,7 +631,7 @@ app.get('/api/v1/auth/my-orders', async (req, res) => {
     } catch {}
 
     const formattedOrders = orders.map((order: any) => {
-      const currentStatus = statusStageMap[order.status] || { stage: 2, label: order.status };
+      const currentStatus = getOrderStatusDetails(order.status);
       const refMeta = (order.meta_data || []).find((m: any) => m.key === '_order_ref_code');
       const orderRefCode = refMeta?.value || `HF-${order.id}`;
 
@@ -843,19 +858,7 @@ app.get('/api/v1/checkout/track/:id', async (req, res) => {
     const refCodeMeta = (order.meta_data || []).find((m: any) => m.key === '_order_ref_code');
     const orderRefCode = refCodeMeta?.value || `HF-${order.id}`;
 
-    const statusStageMap: Record<string, { stage: number; label: string }> = {
-      pending: { stage: 1, label: 'Order Confirmed' },
-      'pending-payment': { stage: 1, label: 'Order Confirmed' },
-      confirmed: { stage: 1, label: 'Order Confirmed' },
-      'wc-confirmed': { stage: 1, label: 'Order Confirmed' },
-      processing: { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
-      'on-hold': { stage: 2, label: 'Order Confirmed & Kitchen Preparation' },
-      kitchen: { stage: 2, label: 'Kitchen Preparation' },
-      shipped: { stage: 3, label: 'Dispatched & Out for Delivery' },
-      completed: { stage: 4, label: 'Successfully Delivered' },
-    };
-
-    const currentStatus = statusStageMap[order.status] || { stage: 2, label: order.status };
+    const currentStatus = getOrderStatusDetails(order.status);
 
     return res.json({
       success: true,

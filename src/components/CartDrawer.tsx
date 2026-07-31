@@ -754,9 +754,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         ? ord.items.map((i: any) => `${i.name}${i.quantity > 1 ? ` (${i.quantity}x)` : ''}`).join(', ')
                         : 'Homemade South Indian Food Delicacies';
 
-                      // Status Stage Styling
-                      const stage = ord.stage ?? 2;
-                      const stageLabel = ord.statusLabel || ord.status || 'Order Confirmed';
+                      // Status Stage & Label Calculation
+                      const rawStatus = (ord.status || '').toLowerCase().trim();
+                      const rawLabel = (ord.statusLabel || '').toLowerCase().trim();
+
+                      let stage = ord.stage ?? 2;
+                      if (rawStatus.includes('dispatch') || rawStatus.includes('shipped') || rawStatus.includes('out_for_delivery') || rawLabel.includes('dispatch') || rawLabel.includes('shipped')) {
+                        stage = 3;
+                      } else if (rawStatus.includes('deliver') || rawStatus.includes('complete') || rawLabel.includes('deliver') || rawLabel.includes('complete')) {
+                        stage = 4;
+                      } else if (rawStatus.includes('kitchen') || rawStatus.includes('process') || rawStatus.includes('hold') || rawLabel.includes('kitchen') || rawLabel.includes('process')) {
+                        stage = 2;
+                      }
+
+                      const stageLabel = ord.statusLabel || (stage === 3 ? 'Dispatched' : stage === 4 ? 'Delivered' : stage === 2 ? 'Kitchen' : 'Confirmed');
 
                       return (
                         <div
