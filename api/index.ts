@@ -727,6 +727,17 @@ app.post('/api/v1/checkout/create-order', async (req, res) => {
     const firstName = fullName.split(' ')[0] || 'Customer';
     const lastName = fullName.split(' ').slice(1).join(' ') || 'Order';
 
+    // Lookup existing WooCommerce Customer ID by email if registered
+    let existingCustomerId = 0;
+    try {
+      const custRes = await wcApi.get('customers', { email: customerEmail });
+      if (custRes.data && Array.isArray(custRes.data) && custRes.data.length > 0) {
+        existingCustomerId = custRes.data[0].id;
+      }
+    } catch {
+      existingCustomerId = 0;
+    }
+
     const lineItems = items.map((item: any) => {
       const pid = parseInt(item.productId);
       return {
@@ -739,7 +750,8 @@ app.post('/api/v1/checkout/create-order', async (req, res) => {
       payment_method: 'razorpay',
       payment_method_title: 'Razorpay (UPI/Cards/NetBanking)',
       set_paid: false,
-      status: 'pending',
+      status: 'confirmed', // 'confirmed' is valid on admin.homemadefoodsmadurai.com
+      ...(existingCustomerId > 0 ? { customer_id: existingCustomerId } : {}),
       billing: {
         first_name: firstName,
         last_name: lastName,
@@ -781,6 +793,7 @@ app.post('/api/v1/checkout/create-order', async (req, res) => {
       if (wcRes.data && wcRes.data.id) {
         wcOrderId = wcRes.data.id;
         totalAmountInRupees = parseFloat(wcRes.data.total) || totalAmountInRupees;
+        console.log(`✅ WooCommerce Order #${wcOrderId} created successfully! Customer ID: ${existingCustomerId || 'Guest'}`);
       }
     } catch (wcErr: any) {
       console.warn('WooCommerce order creation warning:', wcErr?.response?.data || wcErr.message);
@@ -847,9 +860,10 @@ app.post('/api/v1/checkout/verify-payment', async (req, res) => {
     try {
       await wcApi.put(`orders/${wcOrderId}`, {
         set_paid: true,
-        status: 'processing',
+        status: 'kitchen',
         transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
       });
+      console.log(`✅ WooCommerce Order #${wcOrderId} status updated to 'kitchen' (Paid)!`);
     } catch (err: any) {
       console.warn('WooCommerce order status update warning:', err.message);
     }

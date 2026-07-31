@@ -91,6 +91,9 @@ export async function processRazorpayCheckout(
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
               wcOrderId: orderRes.wcOrderId,
+              customerEmail: payload.customerDetails.email,
+              customerName: payload.customerDetails.name,
+              totalAmount: orderRes.amount || (orderRes.amountInPaise ? orderRes.amountInPaise / 100 : 0),
             }),
           });
 
