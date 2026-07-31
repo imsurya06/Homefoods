@@ -3,6 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import Razorpay from 'razorpay';
 import nodemailer from 'nodemailer';
 
@@ -26,12 +28,44 @@ app.use((_req, res, next) => {
   next();
 });
 
-// In-Memory Caches & Transients
+// In-Memory & File Persistent Caches
 let cachedProductsResponse: any = null;
 let lastCacheTime = 0;
 const userCartsMap = new Map<string, any[]>();
 const globalPasswordMap = new Map<string, string>();
 const recentCreatedOrdersMap = new Map<string, { wcOrderId: number; orderRefCode: string; razorpayOrderId: string; amount: number; amountInPaise: number; keyId: string; timestamp: number }>();
+
+const PASS_FILE = path.join('/tmp', 'hf_passwords.json');
+
+function getSavedPassword(email: string): string | undefined {
+  const clean = (email || '').toLowerCase().trim();
+  if (!clean) return undefined;
+  if (globalPasswordMap.has(clean)) return globalPasswordMap.get(clean);
+  try {
+    if (fs.existsSync(PASS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(PASS_FILE, 'utf-8'));
+      if (data && data[clean]) {
+        globalPasswordMap.set(clean, data[clean]);
+        return data[clean];
+      }
+    }
+  } catch {}
+  return undefined;
+}
+
+function setSavedPassword(email: string, pass: string) {
+  const clean = (email || '').toLowerCase().trim();
+  if (!clean || !pass) return;
+  globalPasswordMap.set(clean, pass);
+  try {
+    let data: Record<string, string> = {};
+    if (fs.existsSync(PASS_FILE)) {
+      data = JSON.parse(fs.readFileSync(PASS_FILE, 'utf-8')) || {};
+    }
+    data[clean] = pass;
+    fs.writeFileSync(PASS_FILE, JSON.stringify(data), 'utf-8');
+  } catch {}
+}
 
 function decodeHtmlEntities(str: string): string {
   if (!str) return '';
@@ -455,27 +489,31 @@ app.post(['/api/v1/auth/login-signup', '/api/auth/login-signup', '/v1/auth/login
       }
     } catch {}
 
-    const isExistingUser = !!customerUser || globalPasswordMap.has(cleanEmail);
+    const companyPass = (customerUser?.billing?.company || '').startsWith('HF_PASS:')
+      ? customerUser.billing.company.replace('HF_PASS:', '')
+      : undefined;
     const passMeta = (customerUser?.meta_data || []).find((m: any) =>
       m.key === 'hf_account_pass' || m.key === 'customer_auth_pass' || m.key === '_customer_auth_pass'
     );
-    const storedPass = globalPasswordMap.get(cleanEmail) || passMeta?.value;
+    const storedPass = getSavedPassword(cleanEmail) || companyPass || passMeta?.value;
+    const isExistingUser = !!customerUser || !!storedPass;
 
     if (isExistingUser) {
       if (storedPass) {
         if (cleanPassword !== storedPass) {
           return res.status(401).json({
             success: false,
-            message: 'An account already exists for this email address. Please enter the correct password or click Forgot Password to reset.',
+            message: 'An account already exists for this email address. Please enter the correct password linked to your account.',
           });
         }
       } else if (cleanPassword) {
-        globalPasswordMap.set(cleanEmail, cleanPassword);
-        if (customerUser) {
+        setSavedPassword(cleanEmail, cleanPassword);
+        if (customerUser && customerId) {
           try {
             await wcFetch(`customers/${customerId}`, {
               method: 'PUT',
               body: {
+                billing: { company: `HF_PASS:${cleanPassword}` },
                 meta_data: [
                   { key: 'hf_account_pass', value: cleanPassword },
                   { key: 'customer_auth_pass', value: cleanPassword },
@@ -495,7 +533,13 @@ app.post(['/api/v1/auth/login-signup', '/api/auth/login-signup', '/v1/auth/login
         first_name: firstName,
         last_name: lastName,
         username,
-        billing: { first_name: firstName, last_name: lastName, email: cleanEmail, phone: cleanPhone },
+        billing: {
+          first_name: firstName,
+          last_name: lastName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          company: cleanPassword ? `HF_PASS:${cleanPassword}` : '',
+        },
         shipping: { first_name: firstName, last_name: lastName },
         meta_data: cleanPassword ? [
           { key: 'hf_account_pass', value: cleanPassword },
@@ -516,7 +560,7 @@ app.post(['/api/v1/auth/login-signup', '/api/auth/login-signup', '/v1/auth/login
       }
 
       if (cleanPassword) {
-        globalPasswordMap.set(cleanEmail, cleanPassword);
+        setSavedPassword(cleanEmail, cleanPassword);
       }
     }
 
@@ -574,17 +618,23 @@ app.post(['/api/v1/auth/login', '/api/auth/login', '/v1/auth/login', '/auth/logi
       }
     } catch {}
 
+    const companyPass = (customerUser?.billing?.company || '').startsWith('HF_PASS:')
+      ? customerUser.billing.company.replace('HF_PASS:', '')
+      : undefined;
     const passMeta = (customerUser?.meta_data || []).find((m: any) =>
       m.key === 'hf_account_pass' || m.key === 'customer_auth_pass' || m.key === '_customer_auth_pass'
     );
-    const storedPass = globalPasswordMap.get(cleanEmail) || passMeta?.value;
+    const storedPass = getSavedPassword(cleanEmail) || companyPass || passMeta?.value;
 
     if (customerUser || storedPass) {
       if (storedPass && cleanPassword && storedPass !== cleanPassword) {
         return res.status(401).json({
           success: false,
-          message: 'An account already exists for this email address. Please enter the correct password or click Forgot Password to reset.',
+          message: 'Incorrect password. An account already exists for this email address. Please enter the correct password linked to your account.',
         });
+      }
+      if (!storedPass && cleanPassword) {
+        setSavedPassword(cleanEmail, cleanPassword);
       }
     }
 
