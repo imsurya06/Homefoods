@@ -692,7 +692,7 @@ app.post(['/api/v1/auth/login', '/api/auth/login', '/v1/auth/login', '/auth/logi
 // POST /api/v1/cart/sync (Sync user cart items to database across devices)
 app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'], async (req, res) => {
   try {
-    const { items, action, isUserAction } = req.body;
+    const { items } = req.body;
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.json({ success: false, message: 'No auth token' });
 
@@ -703,31 +703,8 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
     const email = (parts[1] || '').trim().toLowerCase();
 
     if (email) {
-      const isExplicitClear = action === 'clear' || (Array.isArray(items) && items.length === 0);
-
-      if (isExplicitClear) {
-        userCartsMap.set(email, []);
-        userCartLocks.set(email, Date.now() + 5000);
-        wcFetch('customers', { params: { email } }).then((searchRes) => {
-          if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-            const wcId = searchRes.data[0].id;
-            wcFetch(`customers/${wcId}`, {
-              method: 'PUT',
-              body: {
-                meta_data: [
-                  { key: 'hf_saved_cart', value: '[]' },
-                  { key: '_saved_cart', value: '[]' },
-                ],
-              },
-            }).catch(() => {});
-          }
-        }).catch(() => {});
-        return res.json({ success: true, cartCleared: true, items: [] });
-      }
-
-      // Delete clear locks and accept new cart items immediately
-      userCartLocks.delete(email);
-      userCartsMap.set(email, items || []);
+      const validItems = Array.isArray(items) ? items : [];
+      userCartsMap.set(email, validItems);
 
       // Asynchronous background update to WooCommerce customer metadata
       wcFetch('customers', { params: { email } }).then((searchRes) => {
@@ -737,8 +714,8 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
             method: 'PUT',
             body: {
               meta_data: [
-                { key: 'hf_saved_cart', value: JSON.stringify(items || []) },
-                { key: '_saved_cart', value: JSON.stringify(items || []) },
+                { key: 'hf_saved_cart', value: JSON.stringify(validItems) },
+                { key: '_saved_cart', value: JSON.stringify(validItems) },
               ],
             },
           }).catch(() => {});
@@ -765,14 +742,6 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
     const email = (parts[1] || '').trim().toLowerCase();
 
     if (!email) return res.json({ success: true, items: [] });
-
-    const lockExp = userCartLocks.get(email);
-    const isLocked = lockExp && Date.now() < lockExp;
-
-    if (isLocked) {
-      userCartsMap.set(email, []);
-      return res.json({ success: true, items: [], cartCleared: true });
-    }
 
     let items = userCartsMap.get(email);
     if (!items || items.length === 0) {
