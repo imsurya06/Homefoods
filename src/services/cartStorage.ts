@@ -4,6 +4,14 @@ import { fetchApi } from './apiClient';
 
 const GUEST_CART_KEY = 'hf_guest_cart';
 
+let lastUserActionTime = 0;
+let lastUserActionIsClear = false;
+
+export function recordUserCartAction(isClear = false) {
+  lastUserActionTime = Date.now();
+  lastUserActionIsClear = isClear;
+}
+
 export function getStoredCart(isLoggedIn: boolean): CartItem[] {
   if (!isLoggedIn) {
     try {
@@ -28,12 +36,32 @@ export async function fetchRemoteCart(): Promise<CartItem[]> {
     if (!token) return getStoredCart(true);
 
     const localItems = getStoredCart(true);
+    const timeSinceAction = Date.now() - lastUserActionTime;
+
+    // During 10s after explicit user action, protect local state from stale remote responses
+    if (timeSinceAction < 10000) {
+      if (lastUserActionIsClear) {
+        return [];
+      }
+      if (localItems.length > 0) {
+        return localItems;
+      }
+    }
+
     const res = await fetchApi<{ success: boolean; items: CartItem[] }>('/cart/get');
     if (res && res.success && Array.isArray(res.items)) {
-      if (res.items.length > 0 || localItems.length === 0) {
-        localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
-        return res.items;
+      // If user recently cleared cart locally, don't let stale server items restore it!
+      if (lastUserActionIsClear && timeSinceAction < 15000 && res.items.length > 0) {
+        return [];
       }
+
+      // If local cart has more items than server due to recent additions, preserve local cart!
+      if (localItems.length > res.items.length && timeSinceAction < 15000) {
+        return localItems;
+      }
+
+      localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
+      return res.items;
     }
   } catch (err) {
     console.warn('Fetch remote cart warning:', err);
@@ -41,7 +69,12 @@ export async function fetchRemoteCart(): Promise<CartItem[]> {
   return getStoredCart(true);
 }
 
-export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
+export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean, isExplicitUserAction = true) {
+  if (isExplicitUserAction) {
+    lastUserActionTime = Date.now();
+    lastUserActionIsClear = cartItems.length === 0;
+  }
+
   if (!isLoggedIn) {
     try {
       sessionStorage.setItem(GUEST_CART_KEY, JSON.stringify(cartItems));
@@ -57,7 +90,7 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
     if (token) {
       fetchApi<{ success: boolean }>('/cart/sync', {
         method: 'POST',
-        body: JSON.stringify({ items: cartItems }),
+        body: JSON.stringify({ items: cartItems, action: cartItems.length === 0 ? 'clear' : 'sync' }),
       }).catch((err) => console.warn('Cart sync warning:', err));
     }
   } catch (err) {
@@ -66,6 +99,8 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
 }
 
 export function clearCartStorage(isLoggedIn: boolean) {
+  lastUserActionTime = Date.now();
+  lastUserActionIsClear = true;
   try {
     sessionStorage.removeItem(GUEST_CART_KEY);
     localStorage.setItem('hf_user_cart', JSON.stringify([]));
