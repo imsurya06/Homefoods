@@ -32,6 +32,7 @@ app.use((_req, res, next) => {
 let cachedProductsResponse: any = null;
 let lastCacheTime = 0;
 const userCartsMap = new Map<string, any[]>();
+const userCartLocks = new Map<string, number>();
 const globalPasswordMap = new Map<string, string>();
 const recentCreatedOrdersMap = new Map<string, { wcOrderId: number; orderRefCode: string; razorpayOrderId: string; amount: number; amountInPaise: number; keyId: string; timestamp: number }>();
 
@@ -702,7 +703,21 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
     const email = (parts[1] || '').trim().toLowerCase();
 
     if (email) {
-      userCartsMap.set(email, items || []);
+      const lockExp = userCartLocks.get(email);
+      const isLocked = lockExp && Date.now() < lockExp;
+
+      if (isLocked && Array.isArray(items) && items.length > 0) {
+        console.log(`🔒 Cart sync locked for ${email}. Rejecting stale items from secondary device.`);
+        return res.json({ success: true, cartCleared: true, items: [] });
+      }
+
+      if (Array.isArray(items) && items.length === 0) {
+        userCartsMap.set(email, []);
+        userCartLocks.set(email, Date.now() + 60000);
+      } else {
+        userCartsMap.set(email, items || []);
+      }
+
       // Asynchronous background update to WooCommerce customer metadata
       wcFetch('customers', { params: { email } }).then((searchRes) => {
         if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
@@ -739,6 +754,14 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
     const email = (parts[1] || '').trim().toLowerCase();
 
     if (!email) return res.json({ success: true, items: [] });
+
+    const lockExp = userCartLocks.get(email);
+    const isLocked = lockExp && Date.now() < lockExp;
+
+    if (isLocked) {
+      userCartsMap.set(email, []);
+      return res.json({ success: true, items: [], cartCleared: true });
+    }
 
     let items = userCartsMap.get(email);
     if (!items || items.length === 0) {
@@ -1108,6 +1131,26 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
         body: { set_paid: true, status: 'kitchen', transaction_id: razorpay_payment_id || `tx_${Date.now()}` },
       });
     } catch {}
+
+    const cleanEmail = (customerEmail || '').trim().toLowerCase();
+    if (cleanEmail) {
+      userCartsMap.set(cleanEmail, []);
+      userCartLocks.set(cleanEmail, Date.now() + 60000);
+      wcFetch('customers', { params: { email: cleanEmail } }).then((searchRes) => {
+        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+          const wcId = searchRes.data[0].id;
+          wcFetch(`customers/${wcId}`, {
+            method: 'PUT',
+            body: {
+              meta_data: [
+                { key: 'hf_saved_cart', value: '[]' },
+                { key: '_saved_cart', value: '[]' },
+              ],
+            },
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
 
     const displayOrderCode = orderRefCode || `HF-${wcOrderId}`;
     const trackingLink = `https://homefoods-lac.vercel.app/#track?id=${displayOrderCode}`;

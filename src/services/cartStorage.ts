@@ -26,9 +26,12 @@ export async function fetchRemoteCart(): Promise<CartItem[]> {
   try {
     const token = getSavedToken();
     if (!token) return getStoredCart(true);
-    const res = await fetchApi<{ success: boolean; items: CartItem[] }>('/cart/get');
+    const res = await fetchApi<{ success: boolean; items: CartItem[]; cartCleared?: boolean }>('/cart/get');
     if (res.success && Array.isArray(res.items)) {
       localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
+      if (res.cartCleared || res.items.length === 0) {
+        window.dispatchEvent(new CustomEvent('hf_cart_cleared'));
+      }
       return res.items;
     }
   } catch (err) {
@@ -51,9 +54,14 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
     localStorage.setItem('hf_user_cart', JSON.stringify(cartItems));
     const token = getSavedToken();
     if (token) {
-      fetchApi('/cart/sync', {
+      fetchApi<{ success: boolean; cartCleared?: boolean; items?: CartItem[] }>('/cart/sync', {
         method: 'POST',
         body: JSON.stringify({ items: cartItems }),
+      }).then((res) => {
+        if (res && res.cartCleared) {
+          localStorage.setItem('hf_user_cart', JSON.stringify([]));
+          window.dispatchEvent(new CustomEvent('hf_cart_cleared'));
+        }
       }).catch((err) => console.warn('Cart sync warning:', err));
     }
   } catch (err) {
@@ -65,6 +73,7 @@ export function clearCartStorage(isLoggedIn: boolean) {
   try {
     sessionStorage.removeItem(GUEST_CART_KEY);
     localStorage.setItem('hf_user_cart', JSON.stringify([]));
+    window.dispatchEvent(new CustomEvent('hf_cart_cleared'));
     const token = getSavedToken();
     if (isLoggedIn && token) {
       fetchApi('/cart/sync', {

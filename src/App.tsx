@@ -60,12 +60,28 @@ export function App() {
     }, 3000);
 
     const handleFocus = () => syncUserAndCart();
+    const handleCartCleared = () => {
+      if (isMounted) setCartItems([]);
+    };
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'hf_user_cart' && isMounted) {
+        try {
+          const parsed = e.newValue ? JSON.parse(e.newValue) : [];
+          setCartItems(parsed);
+        } catch {}
+      }
+    };
+
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('hf_cart_cleared', handleCartCleared);
+    window.addEventListener('storage', handleStorageChange);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('hf_cart_cleared', handleCartCleared);
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, [user]);
 
