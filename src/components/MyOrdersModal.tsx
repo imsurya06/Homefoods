@@ -44,23 +44,28 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
           updatedList.map(async (ord, idx) => {
             try {
               const liveData = await trackSingleOrder(ord.id);
-              if (liveData && liveData.status) {
-                if (updatedList[idx].stage !== liveData.stage || updatedList[idx].status !== liveData.status) {
-                  updatedList[idx] = {
-                    ...updatedList[idx],
-                    status: liveData.status,
-                    statusLabel: liveData.statusLabel,
-                    stage: liveData.stage,
-                  };
+              if (liveData) {
+                if (liveData.notFound || liveData.status === 'trash') {
+                  (updatedList[idx] as any)._isDeleted = true;
                   hasChanges = true;
+                } else if (liveData.status) {
+                  if (updatedList[idx].stage !== liveData.stage || updatedList[idx].status !== liveData.status) {
+                    updatedList[idx] = {
+                      ...updatedList[idx],
+                      status: liveData.status,
+                      statusLabel: liveData.statusLabel,
+                      stage: liveData.stage,
+                    };
+                    hasChanges = true;
+                  }
                 }
               }
             } catch {}
           })
         );
 
-        // Filter out any trashed orders
-        const activeOrders = updatedList.filter((o) => o.status !== 'trash');
+        // Filter out any trashed or deleted orders
+        const activeOrders = updatedList.filter((o) => !(o as any)._isDeleted && o.status !== 'trash');
 
         if (hasChanges || activeOrders.length !== updatedList.length) {
           try {

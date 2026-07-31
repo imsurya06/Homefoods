@@ -155,10 +155,15 @@ export async function processRazorpayCheckout(
 
 export async function trackSingleOrder(orderId: number | string) {
   try {
-    const res = await fetchApi<{ success: boolean; data: any }>(`/checkout/track/${orderId}`);
+    const res = await fetchApi<{ success: boolean; data: any; message?: string }>(`/checkout/track/${orderId}`);
     if (res.success && res.data) {
       return res.data;
     }
-  } catch {}
-  return null;
+    if (res && res.success === false) {
+      return { notFound: true, message: res.message || 'Order not found' };
+    }
+  } catch (err: any) {
+    return { notFound: true, message: err?.message || 'Order not found' };
+  }
+  return { notFound: true };
 }

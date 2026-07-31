@@ -166,22 +166,27 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           updatedList.map(async (ord, idx) => {
             try {
               const liveData = await trackSingleOrder(ord.id);
-              if (liveData && liveData.status) {
-                if (updatedList[idx].stage !== liveData.stage || updatedList[idx].status !== liveData.status) {
-                  updatedList[idx] = {
-                    ...updatedList[idx],
-                    status: liveData.status,
-                    statusLabel: liveData.statusLabel,
-                    stage: liveData.stage,
-                  };
+              if (liveData) {
+                if (liveData.notFound || liveData.status === 'trash') {
+                  (updatedList[idx] as any)._isDeleted = true;
                   hasChanges = true;
+                } else if (liveData.status) {
+                  if (updatedList[idx].stage !== liveData.stage || updatedList[idx].status !== liveData.status) {
+                    updatedList[idx] = {
+                      ...updatedList[idx],
+                      status: liveData.status,
+                      statusLabel: liveData.statusLabel,
+                      stage: liveData.stage,
+                    };
+                    hasChanges = true;
+                  }
                 }
               }
             } catch {}
           })
         );
 
-        const activeOrders = updatedList.filter((o) => o.status !== 'trash');
+        const activeOrders = updatedList.filter((o) => !(o as any)._isDeleted && o.status !== 'trash');
         if (hasChanges || activeOrders.length !== updatedList.length) {
           try {
             localStorage.setItem('hf_local_orders', JSON.stringify(activeOrders));
