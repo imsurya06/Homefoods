@@ -149,7 +149,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   // Live Sync & 3-Second Ultra-Fast Polling for Orders Data Across Devices
   useEffect(() => {
-    if (!isOpen || activeTab !== 'orders' || !user) return;
+    if (!isOpen || activeTab !== 'orders') return;
+
+    const hasToken = !!localStorage.getItem('hf_auth_token');
+    if (!user && !hasToken) {
+      setLoadingOrders(false);
+      setOrders([]);
+      return;
+    }
 
     let isMounted = true;
 

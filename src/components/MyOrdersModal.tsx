@@ -26,7 +26,14 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
   const [guestLoading, setGuestLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!isOpen || !user) return;
+    if (!isOpen) return;
+
+    const hasToken = !!localStorage.getItem('hf_auth_token');
+    if (!user && !hasToken) {
+      setLoading(false);
+      setOrders([]);
+      return;
+    }
 
     let isMounted = true;
 
