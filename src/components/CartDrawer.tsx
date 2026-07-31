@@ -147,21 +147,45 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     };
   }, [isOpen]);
 
-  // Load & Sync Orders when Drawer or Orders Tab is opened
+  // Load & Sync Orders when Drawer or Orders Tab is opened with 10-Second Live Polling & Window Focus Refetch
   useEffect(() => {
-    if (isOpen && activeTab === 'orders') {
-      setLoadingOrders(true);
+    if (!isOpen || activeTab !== 'orders') return;
 
+    let isMounted = true;
+
+    const loadOrders = (showSpinner = false) => {
+      if (showSpinner) setLoadingOrders(true);
       fetchCustomerOrders()
         .then((remoteOrders) => {
-          const activeOrders = (remoteOrders || []).filter((o) => o.status !== 'trash');
-          setOrders(activeOrders);
+          if (isMounted) {
+            const activeOrders = (remoteOrders || []).filter((o) => o.status !== 'trash');
+            setOrders(activeOrders);
+          }
         })
         .catch(() => {
-          setOrders([]);
+          if (isMounted) setOrders([]);
         })
-        .finally(() => setLoadingOrders(false));
-    }
+        .finally(() => {
+          if (isMounted) setLoadingOrders(false);
+        });
+    };
+
+    loadOrders(true);
+
+    // Live polling every 10 seconds for instant WooCommerce status updates
+    const pollInterval = setInterval(() => {
+      loadOrders(false);
+    }, 10000);
+
+    // Instant refetch when switching back to this window/screen
+    const handleFocus = () => loadOrders(false);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [isOpen, activeTab, user]);
 
   if (!isOpen) return null;

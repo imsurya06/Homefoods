@@ -26,19 +26,41 @@ export const MyOrdersModal: React.FC<MyOrdersModalProps> = ({
   const [guestLoading, setGuestLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    if (isOpen && user) {
-      setLoading(true);
+    if (!isOpen || !user) return;
 
+    let isMounted = true;
+
+    const loadOrders = (showSpinner = false) => {
+      if (showSpinner) setLoading(true);
       fetchCustomerOrders()
         .then((remoteOrders) => {
-          const activeOrders = (remoteOrders || []).filter((o) => o.status !== 'trash');
-          setOrders(activeOrders);
+          if (isMounted) {
+            const activeOrders = (remoteOrders || []).filter((o) => o.status !== 'trash');
+            setOrders(activeOrders);
+          }
         })
         .catch(() => {
-          setOrders([]);
+          if (isMounted) setOrders([]);
         })
-        .finally(() => setLoading(false));
-    }
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+    };
+
+    loadOrders(true);
+
+    const pollInterval = setInterval(() => {
+      loadOrders(false);
+    }, 10000);
+
+    const handleFocus = () => loadOrders(false);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [isOpen, user]);
 
   if (!isOpen) return null;

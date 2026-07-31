@@ -29,8 +29,8 @@ app.use((_req, res, next) => {
 // In-Memory Caches & Transients
 let cachedProductsResponse: any = null;
 let lastCacheTime = 0;
-const CACHE_TTL_MS = 60 * 1000;
 const userCartsMap = new Map<string, any[]>();
+const recentCreatedOrdersMap = new Map<string, { wcOrderId: number; orderRefCode: string; razorpayOrderId: string; amount: number; amountInPaise: number; keyId: string; timestamp: number }>();
 
 function decodeHtmlEntities(str: string): string {
   if (!str) return '';
@@ -452,13 +452,22 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
 
     if (isExistingUser && customerUser) {
       const passMeta = (customerUser.meta_data || []).find((m: any) => m.key === '_customer_auth_pass');
-      if (passMeta && passMeta.value && cleanPassword) {
-        if (passMeta.value !== cleanPassword) {
-          return res.status(401).json({
-            success: false,
-            message: 'Incorrect password! Account already exists for this email address. Please enter the correct password or click Forgot Password to reset.',
+      const expectedPassword = passMeta?.value;
+
+      if (expectedPassword && expectedPassword !== cleanPassword) {
+        return res.status(401).json({
+          success: false,
+          message: 'Incorrect password! Account already exists for this email address. Please enter the correct password or click Forgot Password to reset.',
+        });
+      }
+
+      if (!expectedPassword && cleanPassword) {
+        try {
+          await wcFetch(`customers/${customerId}`, {
+            method: 'PUT',
+            body: { meta_data: [{ key: '_customer_auth_pass', value: cleanPassword }] },
           });
-        }
+        } catch {}
       }
     }
 
@@ -484,13 +493,6 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
         customerId = getDeterministicUserId(cleanEmail);
         customerUser = { id: customerId, email: cleanEmail, first_name: firstName, last_name: lastName };
       }
-    } else if (cleanPassword) {
-      try {
-        await wcFetch(`customers/${customerId}`, {
-          method: 'PUT',
-          body: { meta_data: [{ key: '_customer_auth_pass', value: cleanPassword }] },
-        });
-      } catch {}
     }
 
     if (!customerId) {
@@ -812,6 +814,26 @@ app.post('/api/v1/checkout/create-order', async (req, res) => {
     const SHIPPING_FEE = 40;
     const subtotal = items.reduce((sum: number, item: any) => sum + ((item.pricePerUnit || 50) * (item.quantity || 1)), 0);
     let totalAmountInRupees = subtotal > 0 ? subtotal + SHIPPING_FEE : 0;
+    const amountInPaise = Math.round(totalAmountInRupees * 100);
+
+    // 45-Second Order Idempotency Deduplication Key
+    const idempotencyKey = `${customerEmail.toLowerCase()}_${amountInPaise}_${lineItems.map((i: any) => `${i.product_id}x${i.quantity}`).join('_')}`;
+    const now = Date.now();
+    const existingRecentOrder = recentCreatedOrdersMap.get(idempotencyKey);
+
+    if (existingRecentOrder && now - existingRecentOrder.timestamp < 45000) {
+      console.log(`⚡ Idempotency match: Reusing recently created Order #${existingRecentOrder.wcOrderId} for ${customerEmail}`);
+      return res.json({
+        success: true,
+        wcOrderId: existingRecentOrder.wcOrderId,
+        orderRefCode: existingRecentOrder.orderRefCode,
+        razorpayOrderId: existingRecentOrder.razorpayOrderId,
+        amount: existingRecentOrder.amount,
+        amountInPaise: existingRecentOrder.amountInPaise,
+        currency: 'INR',
+        keyId: existingRecentOrder.keyId,
+      });
+    }
 
     const wcOrderPayload: any = {
       payment_method: 'razorpay',
@@ -863,7 +885,6 @@ app.post('/api/v1/checkout/create-order', async (req, res) => {
       }
     } catch {}
 
-    const amountInPaise = Math.round(totalAmountInRupees * 100);
     const keyId = (process.env.RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E').trim();
 
     let rzpOrderId = `order_mock_${wcOrderId}`;
@@ -883,6 +904,16 @@ app.post('/api/v1/checkout/create-order', async (req, res) => {
         rzpOrderId = rzpOrder.id;
       }
     } catch {}
+
+    recentCreatedOrdersMap.set(idempotencyKey, {
+      wcOrderId,
+      orderRefCode,
+      razorpayOrderId: rzpOrderId,
+      amount: totalAmountInRupees,
+      amountInPaise,
+      keyId,
+      timestamp: now,
+    });
 
     return res.json({
       success: true,
