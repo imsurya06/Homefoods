@@ -207,6 +207,7 @@ export async function fetchCurrentUser(): Promise<UserProfile | null> {
     if (err && (err.accountDeleted || err.status === 401 || (err.message && err.message.toLowerCase().includes('deleted')))) {
       console.log('Account deleted from WordPress database by admin. Logging out session...');
       logoutCustomer();
+      alert('Your account has been deleted by admin. Please create a new account to continue.');
       return null;
     }
   }
