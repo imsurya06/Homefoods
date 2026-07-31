@@ -44,7 +44,7 @@ export function App() {
             if (cartCleared) {
               return [];
             }
-            if (prev.length > 0 && remoteItems.length === 0) {
+            if (prev.length > remoteItems.length) {
               return prev;
             }
             if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
@@ -67,7 +67,7 @@ export function App() {
               if (cartCleared) {
                 return [];
               }
-              if (prev.length > 0 && remoteItems.length === 0) {
+              if (prev.length > remoteItems.length) {
                 return prev;
               }
               if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
