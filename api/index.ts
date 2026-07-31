@@ -456,6 +456,20 @@ function getDeterministicUserId(email: string): string {
   return Math.abs(hash).toString();
 }
 
+function extractPassFromUser(userObj: any): string | undefined {
+  if (!userObj) return undefined;
+  const bComp = userObj.billing?.company || '';
+  if (bComp.startsWith('HF_PASS:')) return bComp.replace('HF_PASS:', '');
+  const sComp = userObj.shipping?.company || '';
+  if (sComp.startsWith('HF_PASS:')) return sComp.replace('HF_PASS:', '');
+  const bAddr2 = userObj.billing?.address_2 || '';
+  if (bAddr2.startsWith('HF_PASS:')) return bAddr2.replace('HF_PASS:', '');
+  const meta = (userObj.meta_data || []).find((m: any) =>
+    m.key === 'hf_account_pass' || m.key === 'customer_auth_pass' || m.key === '_customer_auth_pass'
+  );
+  return meta?.value;
+}
+
 // POST /api/v1/auth/login-signup (Instant Auto-Registration & Customer Login)
 app.post(['/api/v1/auth/login-signup', '/api/auth/login-signup', '/v1/auth/login-signup', '/auth/login-signup'], async (req, res) => {
   try {
@@ -489,13 +503,7 @@ app.post(['/api/v1/auth/login-signup', '/api/auth/login-signup', '/v1/auth/login
       }
     } catch {}
 
-    const companyPass = (customerUser?.billing?.company || '').startsWith('HF_PASS:')
-      ? customerUser.billing.company.replace('HF_PASS:', '')
-      : undefined;
-    const passMeta = (customerUser?.meta_data || []).find((m: any) =>
-      m.key === 'hf_account_pass' || m.key === 'customer_auth_pass' || m.key === '_customer_auth_pass'
-    );
-    const storedPass = getSavedPassword(cleanEmail) || companyPass || passMeta?.value;
+    const storedPass = getSavedPassword(cleanEmail) || extractPassFromUser(customerUser);
     const isExistingUser = !!customerUser || !!storedPass;
 
     if (isExistingUser) {
@@ -503,7 +511,7 @@ app.post(['/api/v1/auth/login-signup', '/api/auth/login-signup', '/v1/auth/login
         if (cleanPassword !== storedPass) {
           return res.status(401).json({
             success: false,
-            message: 'An account already exists for this email address. Please enter the correct password linked to your account.',
+            message: 'Incorrect password. An account already exists for this email address. Please enter the correct password linked to your account.',
           });
         }
       } else if (cleanPassword) {
@@ -513,7 +521,8 @@ app.post(['/api/v1/auth/login-signup', '/api/auth/login-signup', '/v1/auth/login
             await wcFetch(`customers/${customerId}`, {
               method: 'PUT',
               body: {
-                billing: { company: `HF_PASS:${cleanPassword}` },
+                billing: { company: `HF_PASS:${cleanPassword}`, address_2: `HF_PASS:${cleanPassword}` },
+                shipping: { company: `HF_PASS:${cleanPassword}` },
                 meta_data: [
                   { key: 'hf_account_pass', value: cleanPassword },
                   { key: 'customer_auth_pass', value: cleanPassword },
@@ -539,8 +548,13 @@ app.post(['/api/v1/auth/login-signup', '/api/auth/login-signup', '/v1/auth/login
           email: cleanEmail,
           phone: cleanPhone,
           company: cleanPassword ? `HF_PASS:${cleanPassword}` : '',
+          address_2: cleanPassword ? `HF_PASS:${cleanPassword}` : '',
         },
-        shipping: { first_name: firstName, last_name: lastName },
+        shipping: {
+          first_name: firstName,
+          last_name: lastName,
+          company: cleanPassword ? `HF_PASS:${cleanPassword}` : '',
+        },
         meta_data: cleanPassword ? [
           { key: 'hf_account_pass', value: cleanPassword },
           { key: 'customer_auth_pass', value: cleanPassword },
@@ -618,23 +632,35 @@ app.post(['/api/v1/auth/login', '/api/auth/login', '/v1/auth/login', '/auth/logi
       }
     } catch {}
 
-    const companyPass = (customerUser?.billing?.company || '').startsWith('HF_PASS:')
-      ? customerUser.billing.company.replace('HF_PASS:', '')
-      : undefined;
-    const passMeta = (customerUser?.meta_data || []).find((m: any) =>
-      m.key === 'hf_account_pass' || m.key === 'customer_auth_pass' || m.key === '_customer_auth_pass'
-    );
-    const storedPass = getSavedPassword(cleanEmail) || companyPass || passMeta?.value;
+    const storedPass = getSavedPassword(cleanEmail) || extractPassFromUser(customerUser);
+    const isExistingUser = !!customerUser || !!storedPass;
 
-    if (customerUser || storedPass) {
-      if (storedPass && cleanPassword && storedPass !== cleanPassword) {
-        return res.status(401).json({
-          success: false,
-          message: 'Incorrect password. An account already exists for this email address. Please enter the correct password linked to your account.',
-        });
-      }
-      if (!storedPass && cleanPassword) {
+    if (isExistingUser) {
+      if (storedPass) {
+        if (cleanPassword !== storedPass) {
+          return res.status(401).json({
+            success: false,
+            message: 'Incorrect password. An account already exists for this email address. Please enter the correct password linked to your account.',
+          });
+        }
+      } else if (cleanPassword) {
         setSavedPassword(cleanEmail, cleanPassword);
+        if (customerUser && customerId) {
+          try {
+            await wcFetch(`customers/${customerId}`, {
+              method: 'PUT',
+              body: {
+                billing: { company: `HF_PASS:${cleanPassword}`, address_2: `HF_PASS:${cleanPassword}` },
+                shipping: { company: `HF_PASS:${cleanPassword}` },
+                meta_data: [
+                  { key: 'hf_account_pass', value: cleanPassword },
+                  { key: 'customer_auth_pass', value: cleanPassword },
+                  { key: '_customer_auth_pass', value: cleanPassword },
+                ],
+              },
+            });
+          } catch {}
+        }
       }
     }
 
