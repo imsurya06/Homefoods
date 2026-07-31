@@ -281,11 +281,6 @@ export function App() {
           <span className="text-xs sm:text-sm font-extrabold tracking-wide whitespace-nowrap">
             {activeNotification}
           </span>
-          {(activeNotification.toLowerCase().includes('cart') || activeNotification.toLowerCase().includes('item')) && (
-            <span className="text-xs font-black text-[#95CD1A] underline ml-1 cursor-pointer">
-              View Cart →
-            </span>
-          )}
         </div>
       )}
 

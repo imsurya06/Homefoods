@@ -707,7 +707,7 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
 
       if (isExplicitClear) {
         userCartsMap.set(email, []);
-        userCartLocks.set(email, Date.now() + 30000);
+        userCartLocks.set(email, Date.now() + 5000);
         wcFetch('customers', { params: { email } }).then((searchRes) => {
           if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
             const wcId = searchRes.data[0].id;
@@ -725,18 +725,8 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
         return res.json({ success: true, cartCleared: true, items: [] });
       }
 
-      if (action === 'add' || isUserAction) {
-        userCartLocks.delete(email);
-      }
-
-      const lockExp = userCartLocks.get(email);
-      const isLocked = lockExp && Date.now() < lockExp;
-
-      if (isLocked) {
-        console.log(`🔒 Cart sync locked for ${email}. Rejecting background stale push from secondary device.`);
-        return res.json({ success: true, cartCleared: true, items: [] });
-      }
-
+      // Delete clear locks and accept new cart items immediately
+      userCartLocks.delete(email);
       userCartsMap.set(email, items || []);
 
       // Asynchronous background update to WooCommerce customer metadata
