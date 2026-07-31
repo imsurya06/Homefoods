@@ -90,6 +90,28 @@ function generateOrderRefCode(): string {
   return `HF-${randomNum}-${randomSuffix}`;
 }
 
+function getOrderStatusDetails(status: string): { stage: number; label: string } {
+  const s = (status || '').toLowerCase().trim().replace(/^wc-/, '');
+
+  if (s === 'completed' || s === 'delivered') {
+    return { stage: 4, label: 'Successfully Delivered' };
+  }
+  if (s === 'dispatched' || s === 'shipped' || s === 'out_for_delivery' || s === 'out-for-delivery' || s.includes('dispatch') || s.includes('ship')) {
+    return { stage: 3, label: 'Dispatched & Out for Delivery' };
+  }
+  if (s === 'kitchen' || s === 'processing' || s === 'on-hold' || s === 'on_hold' || s.includes('kitchen') || s.includes('process')) {
+    return { stage: 2, label: 'Kitchen Preparation' };
+  }
+  if (s === 'pending' || s === 'pending-payment' || s === 'confirmed' || s === 'auto-draft') {
+    return { stage: 1, label: 'Order Confirmed' };
+  }
+  if (s === 'cancelled' || s === 'refunded' || s === 'failed') {
+    return { stage: 0, label: s === 'cancelled' ? 'Order Cancelled' : s === 'refunded' ? 'Order Refunded' : 'Payment Failed' };
+  }
+
+  return { stage: 2, label: status || 'Order Confirmed' };
+}
+
 // Transactional Email Dispatcher for Order Confirmation & Tracking
 async function sendOrderTrackingEmail(options: {
   toEmail: string;
@@ -568,34 +590,6 @@ app.get('/api/v1/auth/my-orders', async (req, res) => {
       idStr = parts[0] || '';
       userEmail = parts[1] || '';
     } catch {}
-
-function getOrderStatusDetails(status: string): { stage: number; label: string } {
-  const s = (status || '').toLowerCase().trim().replace(/^wc-/, '');
-
-  if (s === 'completed' || s === 'delivered') {
-    return { stage: 4, label: 'Successfully Delivered' };
-  }
-  if (s === 'dispatched' || s === 'shipped' || s === 'out_for_delivery' || s === 'out-for-delivery' || s.includes('dispatch') || s.includes('ship')) {
-    return { stage: 3, label: 'Dispatched & Out for Delivery' };
-  }
-  if (s === 'kitchen' || s === 'processing' || s === 'on-hold' || s === 'on_hold' || s.includes('kitchen') || s.includes('process')) {
-    return { stage: 2, label: 'Kitchen Preparation' };
-  }
-  if (s === 'pending' || s === 'pending-payment' || s === 'confirmed' || s === 'auto-draft') {
-    return { stage: 1, label: 'Order Confirmed' };
-  }
-  if (s === 'cancelled' || s === 'refunded' || s === 'failed') {
-    return { stage: 0, label: s === 'cancelled' ? 'Order Cancelled' : s === 'refunded' ? 'Order Refunded' : 'Payment Failed' };
-  }
-
-  return { stage: 2, label: status || 'Order Confirmed' };
-}
-
-// GET /api/v1/auth/my-orders
-app.get('/api/v1/auth/my-orders', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const token = authHeader.replace('Bearer ', '');
     let userEmail = '';
