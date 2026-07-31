@@ -37,9 +37,10 @@ export async function fetchRemoteCart(): Promise<CartItem[]> {
 
     const localItems = getStoredCart(true);
     const timeSinceAction = Date.now() - lastUserActionTime;
+    const isActiveDevice = timeSinceAction < 4000;
 
-    // During 10s after explicit user action, protect local state from stale remote responses
-    if (timeSinceAction < 10000) {
+    // ACTIVE DEVICE: Protect local cart state for 4s after explicit user action on THIS device
+    if (isActiveDevice) {
       if (lastUserActionIsClear) {
         return [];
       }
@@ -48,18 +49,9 @@ export async function fetchRemoteCart(): Promise<CartItem[]> {
       }
     }
 
+    // PASSIVE DEVICE: Sync directly with server's latest authoritative state across devices
     const res = await fetchApi<{ success: boolean; items: CartItem[] }>('/cart/get');
     if (res && res.success && Array.isArray(res.items)) {
-      // If user recently cleared cart locally, don't let stale server items restore it!
-      if (lastUserActionIsClear && timeSinceAction < 15000 && res.items.length > 0) {
-        return [];
-      }
-
-      // If local cart has more items than server due to recent additions, preserve local cart!
-      if (localItems.length > res.items.length && timeSinceAction < 15000) {
-        return localItems;
-      }
-
       localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
       return res.items;
     }
