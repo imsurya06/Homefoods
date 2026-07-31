@@ -79,7 +79,14 @@ export function App() {
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncUserAndCart();
+      }
+    };
+
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('hf_cart_cleared', handleCartCleared);
     window.addEventListener('hf_account_deleted', handleAccountDeleted);
     window.addEventListener('storage', handleStorageChange);
@@ -88,11 +95,23 @@ export function App() {
       isMounted = false;
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('hf_cart_cleared', handleCartCleared);
       window.removeEventListener('hf_account_deleted', handleAccountDeleted);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, [user]);
+
+  // Fetch latest cart immediately whenever Cart Drawer is opened
+  useEffect(() => {
+    if (isCartOpen) {
+      fetchRemoteCart().then((remoteItems) => {
+        if (remoteItems && Array.isArray(remoteItems)) {
+          setCartItems(remoteItems);
+        }
+      });
+    }
+  }, [isCartOpen]);
 
   // Save cart whenever cartItems or user state changes
   useEffect(() => {

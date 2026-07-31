@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   ShoppingBag,
@@ -150,12 +150,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
   }, [customerName, email, mobileNumber, shippingAddress, city, pincode]);
 
+  const hasFetchedOrdersOnce = useRef<boolean>(false);
+
   // Prevent background page from scrolling while drawer is open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
+      hasFetchedOrdersOnce.current = false;
     }
     return () => {
       document.body.style.overflow = '';
@@ -176,8 +179,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           return;
         }
 
-        // Only show spinner on initial load if we have 0 orders loaded
-        if (isInitial && orders.length === 0) {
+        // Only show spinner once on initial load if orders have never been fetched yet
+        if (isInitial && !hasFetchedOrdersOnce.current && orders.length === 0) {
           setLoadingOrders(true);
         }
 
@@ -192,6 +195,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             console.warn('Silent order poll warning:', err);
           })
           .finally(() => {
+            hasFetchedOrdersOnce.current = true;
             setLoadingOrders(false);
           });
       } else if (activeTab === 'cart') {
@@ -205,7 +209,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       }
     };
 
-    // Initial fetch with spinner if empty
+    // Initial fetch
     syncData(true);
 
     // Silent background polling every 3 seconds (never shows spinner or wipes existing orders)
