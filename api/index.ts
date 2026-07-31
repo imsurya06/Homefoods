@@ -764,37 +764,42 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
 
     if (!email) return res.json({ success: true, items: [] });
 
-    let items = userCartsMap.get(email);
-    if (!items || items.length === 0) {
-      const diskCarts = readDiskCarts();
-      items = diskCarts[email];
-      if (items && Array.isArray(items) && items.length > 0) {
-        userCartsMap.set(email, items);
-      }
+    // 1. Check in-memory map first
+    if (userCartsMap.has(email)) {
+      return res.json({ success: true, items: userCartsMap.get(email) || [] });
     }
 
-    if (!items || items.length === 0) {
-      try {
-        const searchRes = await wcFetch('customers', { params: { email } });
-        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-          const custId = searchRes.data[0].id;
-          const fullRes = await wcFetch(`customers/${custId}`);
-          const custObj = fullRes.ok && fullRes.data ? fullRes.data : searchRes.data[0];
-          const cartMeta = (custObj.meta_data || []).find((m: any) =>
-            m.key === 'hf_saved_cart' || m.key === '_saved_cart' || m.key === 'saved_cart'
-          );
-          if (cartMeta && cartMeta.value) {
-            items = typeof cartMeta.value === 'string' ? JSON.parse(cartMeta.value) : cartMeta.value;
-            if (Array.isArray(items)) {
-              userCartsMap.set(email, items);
-              writeDiskCart(email, items);
-            }
+    // 2. Check disk cache second
+    const diskCarts = readDiskCarts();
+    if (email in diskCarts) {
+      const diskItems = diskCarts[email] || [];
+      userCartsMap.set(email, diskItems);
+      return res.json({ success: true, items: diskItems });
+    }
+
+    // 3. Fallback to WooCommerce customer metadata for first-time load
+    let items: any[] = [];
+    try {
+      const searchRes = await wcFetch('customers', { params: { email } });
+      if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+        const custId = searchRes.data[0].id;
+        const fullRes = await wcFetch(`customers/${custId}`);
+        const custObj = fullRes.ok && fullRes.data ? fullRes.data : searchRes.data[0];
+        const cartMeta = (custObj.meta_data || []).find((m: any) =>
+          m.key === 'hf_saved_cart' || m.key === '_saved_cart' || m.key === 'saved_cart'
+        );
+        if (cartMeta && cartMeta.value) {
+          const parsed = typeof cartMeta.value === 'string' ? JSON.parse(cartMeta.value) : cartMeta.value;
+          if (Array.isArray(parsed)) {
+            items = parsed;
           }
         }
-      } catch {}
-    }
+      }
+    } catch {}
 
-    return res.json({ success: true, items: items || [] });
+    userCartsMap.set(email, items);
+    writeDiskCart(email, items);
+    return res.json({ success: true, items });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message, items: [] });
   }
