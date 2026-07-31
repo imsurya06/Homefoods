@@ -74,13 +74,18 @@ async function wcFetch(endpoint: string, options: { method?: string; body?: any;
 }
 
 function getRazorpayClient() {
-  const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E';
-  const keySecret = process.env.RAZORPAY_KEY_SECRET || 'mw34w1wZGXkKlbZYTEDcMKu7';
+  try {
+    const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E';
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || 'mw34w1wZGXkKlbZYTEDcMKu7';
 
-  return new Razorpay({
-    key_id: keyId,
-    key_secret: keySecret,
-  });
+    return new Razorpay({
+      key_id: keyId,
+      key_secret: keySecret,
+    });
+  } catch (err: any) {
+    console.warn('Razorpay init warning:', err.message);
+    return null;
+  }
 }
 
 // Helper to generate secure, unguessable Order Reference Code (e.g. HF-84921-B4)
@@ -880,4 +885,6 @@ app.use((err: any, _req: any, res: any, _next: any) => {
   res.status(500).json({ success: false, message: err?.message || 'Internal Server Error' });
 });
 
-export default app;
+export default (req: any, res: any) => {
+  return app(req, res);
+};
