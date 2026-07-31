@@ -689,6 +689,26 @@ app.post(['/api/v1/auth/login', '/api/auth/login', '/v1/auth/login', '/auth/logi
   }
 });
 
+const CART_DISK_FILE = '/tmp/hf_user_carts_v2.json';
+
+function readDiskCarts(): Record<string, any[]> {
+  try {
+    if (fs.existsSync(CART_DISK_FILE)) {
+      const content = fs.readFileSync(CART_DISK_FILE, 'utf-8');
+      return JSON.parse(content) || {};
+    }
+  } catch {}
+  return {};
+}
+
+function writeDiskCart(email: string, items: any[]) {
+  try {
+    const carts = readDiskCarts();
+    carts[email.toLowerCase()] = items;
+    fs.writeFileSync(CART_DISK_FILE, JSON.stringify(carts), 'utf-8');
+  } catch {}
+}
+
 // POST /api/v1/cart/sync (Sync user cart items to database across devices)
 app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'], async (req, res) => {
   try {
@@ -705,6 +725,7 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
     if (email) {
       const validItems = Array.isArray(items) ? items : [];
       userCartsMap.set(email, validItems);
+      writeDiskCart(email, validItems);
 
       // Asynchronous background update to WooCommerce customer metadata
       wcFetch('customers', { params: { email } }).then((searchRes) => {
@@ -745,6 +766,14 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
 
     let items = userCartsMap.get(email);
     if (!items || items.length === 0) {
+      const diskCarts = readDiskCarts();
+      items = diskCarts[email];
+      if (items && Array.isArray(items) && items.length > 0) {
+        userCartsMap.set(email, items);
+      }
+    }
+
+    if (!items || items.length === 0) {
       try {
         const searchRes = await wcFetch('customers', { params: { email } });
         if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
@@ -758,6 +787,7 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
             items = typeof cartMeta.value === 'string' ? JSON.parse(cartMeta.value) : cartMeta.value;
             if (Array.isArray(items)) {
               userCartsMap.set(email, items);
+              writeDiskCart(email, items);
             }
           }
         }
