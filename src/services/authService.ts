@@ -88,6 +88,17 @@ function saveRegisteredPassword(email: string, pass: string) {
   } catch {}
 }
 
+export function getDeterministicUserId(email: string): number {
+  const clean = email.trim().toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    const char = clean.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
 export async function resetPasswordWithOtp(email: string, otp: string, newPassword: string): Promise<{ success: boolean; token: string; user: UserProfile }> {
   try {
     const res = await fetchApi<{ success: boolean; token: string; user: UserProfile }>('/auth/reset-password', {
@@ -103,8 +114,9 @@ export async function resetPasswordWithOtp(email: string, otp: string, newPasswo
   } catch {
     const cleanEmail = email.trim().toLowerCase();
     saveRegisteredPassword(cleanEmail, newPassword);
+    const userId = getDeterministicUserId(cleanEmail);
     const mockUser: UserProfile = {
-      id: Date.now(),
+      id: userId,
       email: cleanEmail,
       firstName: cleanEmail.split('@')[0],
       lastName: '',
@@ -151,8 +163,9 @@ export async function loginOrSignupCustomer(email: string, password: string): Pr
 
     saveRegisteredPassword(cleanEmail, password);
 
+    const userId = getDeterministicUserId(cleanEmail);
     const mockUser: UserProfile = {
-      id: Date.now(),
+      id: userId,
       email: cleanEmail,
       firstName: cleanEmail.split('@')[0],
       lastName: '',

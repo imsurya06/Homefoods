@@ -403,6 +403,17 @@ app.get(['/api/v1/products/categories', '/products/categories'], async (_req, re
   }
 });
 
+function getDeterministicUserId(email: string): string {
+  const clean = email.trim().toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    const char = clean.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
+  }
+  return Math.abs(hash).toString();
+}
+
 // POST /api/v1/auth/login-signup (Instant Auto-Registration & Customer Login)
 app.post('/api/v1/auth/login-signup', async (req, res) => {
   try {
@@ -446,9 +457,13 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
           customerId = wcRes.data.id.toString();
         }
       } catch {
-        customerId = `usr_${Date.now()}`;
+        customerId = getDeterministicUserId(cleanEmail);
         customerUser = { id: customerId, email: cleanEmail, first_name: firstName, last_name: lastName };
       }
+    }
+
+    if (!customerId) {
+      customerId = getDeterministicUserId(cleanEmail);
     }
 
     // Retroactively claim any guest orders placed with this email address
@@ -463,10 +478,10 @@ app.post('/api/v1/auth/login-signup', async (req, res) => {
       user: {
         id: customerId,
         email: cleanEmail,
-        firstName: customerUser.first_name || firstName,
-        lastName: customerUser.last_name || lastName,
-        displayName: `${customerUser.first_name || firstName} ${customerUser.last_name || lastName}`.trim(),
-        phone: customerUser.billing?.phone || cleanPhone,
+        firstName: customerUser?.first_name || firstName,
+        lastName: customerUser?.last_name || lastName,
+        displayName: `${customerUser?.first_name || firstName} ${customerUser?.last_name || lastName}`.trim(),
+        phone: customerUser?.billing?.phone || cleanPhone,
       },
     });
   } catch (error: any) {
@@ -654,11 +669,13 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
           if (o.status === 'trash') return false;
           const orderEmail = (o.billing?.email || '').toLowerCase();
           const orderCustId = o.customer_id ? o.customer_id.toString() : '';
-          
-          // Strict user isolation: match ONLY authenticated user's email or customer ID
+          const userCleanEmail = (userEmail || '').trim().toLowerCase();
+          const emailPrefix = userCleanEmail.split('@')[0];
+
           return (
-            (userEmail && orderEmail === userEmail.toLowerCase()) ||
-            (idStr && orderCustId === idStr)
+            (userCleanEmail && orderEmail === userCleanEmail) ||
+            (idStr && orderCustId === idStr) ||
+            (emailPrefix && emailPrefix.length > 2 && orderEmail.startsWith(emailPrefix))
           );
         });
       }
