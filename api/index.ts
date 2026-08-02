@@ -702,6 +702,7 @@ interface DiskCartRecord {
   items: any[];
   revision: number;
   isClear: boolean;
+  lastDeviceId?: string;
 }
 
 function readDiskCarts(): Record<string, DiskCartRecord> {
@@ -715,10 +716,10 @@ function readDiskCarts(): Record<string, DiskCartRecord> {
   return {};
 }
 
-function writeDiskCart(email: string, items: any[], revision: number, isClear: boolean) {
+function writeDiskCart(email: string, items: any[], revision: number, isClear: boolean, lastDeviceId?: string) {
   try {
     const carts = readDiskCarts();
-    carts[email.toLowerCase()] = { items, revision, isClear };
+    carts[email.toLowerCase()] = { items, revision, isClear, lastDeviceId };
     fs.writeFileSync(CART_DISK_FILE, JSON.stringify(carts), 'utf-8');
   } catch {}
 }
@@ -726,6 +727,43 @@ function writeDiskCart(email: string, items: any[], revision: number, isClear: b
 const userCartClearFlags = new Map<string, boolean>();
 const userCartRevisionsMap = new Map<string, number>();
 const lastActiveDeviceIdMap = new Map<string, string>();
+
+// GET /api/v1/cart/revision (Lightweight revision check for cross-device sync)
+app.get(['/api/v1/cart/revision', '/api/cart/revision', '/v1/cart/revision', '/cart/revision'], async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.json({ success: true, revision: 0, lastDeviceId: '' });
+
+    const token = authHeader.replace('Bearer ', '');
+    const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
+    const decoded = rawDecoded.includes('%') ? decodeURIComponent(rawDecoded) : rawDecoded;
+    const parts = decoded.split(':');
+    const email = (parts[1] || '').trim().toLowerCase();
+
+    if (!email) return res.json({ success: true, revision: 0, lastDeviceId: '' });
+
+    const diskCarts = readDiskCarts();
+    const diskRecord = diskCarts[email];
+
+    let revision = userCartRevisionsMap.get(email) || 0;
+    let lastDeviceId = lastActiveDeviceIdMap.get(email) || '';
+
+    if (diskRecord) {
+      if (diskRecord.revision > revision) {
+        revision = diskRecord.revision;
+        userCartRevisionsMap.set(email, revision);
+      }
+      if (diskRecord.lastDeviceId) {
+        lastDeviceId = diskRecord.lastDeviceId;
+        lastActiveDeviceIdMap.set(email, lastDeviceId);
+      }
+    }
+
+    return res.json({ success: true, revision, lastDeviceId });
+  } catch {
+    return res.json({ success: false, revision: 0, lastDeviceId: '' });
+  }
+});
 
 // POST /api/v1/cart/sync (Sync user cart items to database across devices)
 app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'], async (req, res) => {
@@ -749,12 +787,13 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
       const highestExistingRev = Math.max(userCartRevisionsMap.get(email) || 0, diskRecord?.revision || 0);
       const nextRev = highestExistingRev + 1;
 
+      const devId = deviceId ? String(deviceId) : '';
       userCartRevisionsMap.set(email, nextRev);
       userCartClearFlags.set(email, isClear);
-      if (deviceId) lastActiveDeviceIdMap.set(email, String(deviceId));
+      if (devId) lastActiveDeviceIdMap.set(email, devId);
 
       userCartsMap.set(email, validItems);
-      writeDiskCart(email, validItems, nextRev, isClear);
+      writeDiskCart(email, validItems, nextRev, isClear, devId);
 
       // Asynchronous background update to WooCommerce customer metadata
       wcFetch('customers', { params: { email } }).then((searchRes) => {
@@ -801,19 +840,20 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
     let items = userCartsMap.get(email) || [];
     let revision = userCartRevisionsMap.get(email) || 0;
     let cartCleared = userCartClearFlags.get(email) || false;
+    let lastActiveDeviceId = lastActiveDeviceIdMap.get(email) || '';
 
     if (diskRecord) {
       if (diskRecord.revision > revision || !userCartsMap.has(email)) {
         items = diskRecord.items || [];
         revision = diskRecord.revision || 0;
         cartCleared = !!diskRecord.isClear;
+        if (diskRecord.lastDeviceId) lastActiveDeviceId = diskRecord.lastDeviceId;
         userCartsMap.set(email, items);
         userCartRevisionsMap.set(email, revision);
         userCartClearFlags.set(email, cartCleared);
+        if (lastActiveDeviceId) lastActiveDeviceIdMap.set(email, lastActiveDeviceId);
       }
     }
-
-    const lastActiveDeviceId = lastActiveDeviceIdMap.get(email) || '';
 
     return res.json({ success: true, items, revision, lastActiveDeviceId, cartCleared });
   } catch (err: any) {

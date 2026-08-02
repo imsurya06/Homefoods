@@ -48,6 +48,35 @@ export function isUserRecentlyActive(): boolean {
   return isSyncingCart || (Date.now() - lastUserActionTime < 4000);
 }
 
+
+
+export async function checkRemoteCartRevision(): Promise<{
+  shouldUpdate: boolean;
+  revision: number;
+  lastDeviceId: string;
+}> {
+  try {
+    const token = getSavedToken();
+    if (!token || isSyncingCart) return { shouldUpdate: false, revision: localRevision, lastDeviceId: '' };
+
+    const myDeviceId = getDeviceId();
+    const res = await fetchApi<{ success: boolean; revision: number; lastDeviceId?: string }>('/cart/revision');
+
+    if (res && res.success && typeof res.revision === 'number') {
+      const serverRev = res.revision;
+      const lastDev = res.lastDeviceId || '';
+
+      // Signal Trigger: Update ONLY if server revision is newer AND action came from ANOTHER device
+      if (serverRev > localRevision && lastDev && lastDev !== myDeviceId) {
+        return { shouldUpdate: true, revision: serverRev, lastDeviceId: lastDev };
+      }
+    }
+  } catch (err) {
+    console.warn('Check remote revision warning:', err);
+  }
+  return { shouldUpdate: false, revision: localRevision, lastDeviceId: '' };
+}
+
 let lastFetchRequestTime = 0;
 
 export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleared: boolean }> {
