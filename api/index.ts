@@ -785,15 +785,16 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
       const diskCarts = readDiskCarts();
       const diskRecord = diskCarts[email];
       const highestExistingRev = Math.max(userCartRevisionsMap.get(email) || 0, diskRecord?.revision || 0);
-      const nextRev = highestExistingRev + 1;
+      const nextRev = highestExistingRev + (isClear ? 10 : 1);
 
       const devId = deviceId ? String(deviceId) : '';
       userCartRevisionsMap.set(email, nextRev);
       userCartClearFlags.set(email, isClear);
       if (devId) lastActiveDeviceIdMap.set(email, devId);
 
-      userCartsMap.set(email, validItems);
-      writeDiskCart(email, validItems, nextRev, isClear, devId);
+      const finalItems = isClear ? [] : validItems;
+      userCartsMap.set(email, finalItems);
+      writeDiskCart(email, finalItems, nextRev, isClear, devId);
 
       // Asynchronous background update to WooCommerce customer metadata
       wcFetch('customers', { params: { email } }).then((searchRes) => {

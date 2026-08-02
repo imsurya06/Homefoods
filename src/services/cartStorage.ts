@@ -197,7 +197,7 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
 }
 
 export function clearCartStorage(isLoggedIn: boolean) {
-  isSyncingCart = false;
+  isSyncingCart = true;
   recordUserCartAction();
   try {
     sessionStorage.removeItem(GUEST_CART_KEY);
@@ -206,13 +206,29 @@ export function clearCartStorage(isLoggedIn: boolean) {
     const token = getSavedToken();
     if (isLoggedIn && token) {
       const deviceId = getDeviceId();
-      fetchApi('/cart/sync', {
+      fetchApi<{ success: boolean; revision?: number }>('/cart/sync', {
         method: 'POST',
         body: JSON.stringify({ items: [], action: 'clear', isUserAction: true, revision: localRevision, deviceId }),
-      }).catch((err) => console.warn('Cart clear sync warning:', err));
+      })
+        .then((res) => {
+          if (res && typeof res.revision === 'number') {
+            localRevision = Math.max(localRevision, res.revision);
+          }
+        })
+        .catch((err) => console.warn('Cart clear sync warning:', err))
+        .finally(() => {
+          setTimeout(() => {
+            isSyncingCart = false;
+          }, 3000);
+        });
+    } else {
+      setTimeout(() => {
+        isSyncingCart = false;
+      }, 1000);
     }
   } catch (err) {
     console.error('Failed to clear cart storage:', err);
+    isSyncingCart = false;
   }
 }
 
