@@ -716,7 +716,7 @@ const lastActiveDeviceIdMap = new Map<string, string>();
 // POST /api/v1/cart/sync (Sync user cart items to database across devices)
 app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'], async (req, res) => {
   try {
-    const { items, action, revision, deviceId } = req.body;
+    const { items, action, deviceId } = req.body;
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.json({ success: false, message: 'No auth token' });
 
@@ -730,8 +730,7 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
       const validItems = Array.isArray(items) ? items : [];
       const isClear = action === 'clear' || (validItems.length === 0 && req.body?.isUserAction);
 
-      const currentRev = (userCartRevisionsMap.get(email) || 0) + 1;
-      const nextRev = typeof revision === 'number' && revision > currentRev ? revision : currentRev;
+      const nextRev = (userCartRevisionsMap.get(email) || 0) + 1;
 
       userCartRevisionsMap.set(email, nextRev);
       userCartClearFlags.set(email, isClear);

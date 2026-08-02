@@ -54,17 +54,16 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
     const token = getSavedToken();
     if (!token) return { items: getStoredCart(false), cartCleared: false };
 
-    // If explicit clear occurred on THIS device within 5 seconds, ignore trailing network responses
-    const timeSinceClear = Date.now() - lastLocalClearTime;
-    if (timeSinceClear < 5000) {
-      return { items: [], cartCleared: true };
-    }
-
     const localItems = getStoredCart(true);
 
-    // If local device was active recently and has items, protect local cart from GET polling
-    if (isUserRecentlyActive() && localItems.length > 0) {
+    // If local cart is currently sending POST sync, protect local state from GET polling
+    if (isSyncingCart) {
       return { items: localItems, cartCleared: false };
+    }
+
+    const timeSinceClear = Date.now() - lastLocalClearTime;
+    if (timeSinceClear < 3000) {
+      return { items: [], cartCleared: true };
     }
 
     const res = await fetchApi<{
@@ -76,26 +75,22 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
     }>('/cart/get');
 
     if (res && res.success && Array.isArray(res.items)) {
-      if (Date.now() - lastLocalClearTime < 5000) {
+      if (Date.now() - lastLocalClearTime < 3000) {
         return { items: [], cartCleared: true };
       }
 
       const serverRevision = res.revision || 0;
-      const deviceId = getDeviceId();
 
-      if (serverRevision < localRevision && res.lastActiveDeviceId === deviceId) {
-        return { items: localItems, cartCleared: false };
-      }
-
-      localRevision = Math.max(localRevision, serverRevision);
-      const cartCleared = !!res.cartCleared;
-
-      if (cartCleared) {
-        localStorage.setItem('hf_user_cart', JSON.stringify([]));
-      } else {
+      // If server returned a newer revision, update local state
+      if (serverRevision > localRevision || (res.cartCleared && res.items.length === 0)) {
+        localRevision = serverRevision;
+        const cartCleared = !!res.cartCleared && res.items.length === 0;
         localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
+        return { items: res.items, cartCleared };
       }
-      return { items: res.items, cartCleared };
+
+      // If server revision is same or older, keep local items
+      return { items: localItems, cartCleared: false };
     }
   } catch (err) {
     console.warn('Fetch remote cart warning:', err);

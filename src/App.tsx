@@ -11,7 +11,7 @@ import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
 import { type CartItem } from './data/bestsellers';
 import { fetchCurrentUser, logoutCustomer, getSavedUserProfile, type UserProfile } from './services/authService';
-import { getStoredCart, fetchRemoteCart, saveCartItems, clearCartStorage, mergeCartItems, isUserRecentlyActive } from './services/cartStorage';
+import { getStoredCart, fetchRemoteCart, saveCartItems, clearCartStorage, mergeCartItems } from './services/cartStorage';
 
 export function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'shop'>('home');
@@ -41,11 +41,8 @@ export function App() {
       fetchRemoteCart().then(({ items: remoteItems, cartCleared }) => {
         if (isMounted && remoteItems && Array.isArray(remoteItems)) {
           setCartItems((prev) => {
-            if (cartCleared) {
+            if (cartCleared && remoteItems.length === 0) {
               return [];
-            }
-            if (prev.length > remoteItems.length) {
-              return prev;
             }
             if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
               return prev;
@@ -60,15 +57,12 @@ export function App() {
 
     const interval = setInterval(() => {
       const token = localStorage.getItem('hf_auth_token');
-      if (token && document.visibilityState === 'visible' && !isUserRecentlyActive()) {
+      if (token && document.visibilityState === 'visible') {
         fetchRemoteCart().then(({ items: remoteItems, cartCleared }) => {
           if (isMounted && remoteItems && Array.isArray(remoteItems)) {
             setCartItems((prev) => {
-              if (cartCleared) {
+              if (cartCleared && remoteItems.length === 0) {
                 return [];
-              }
-              if (prev.length > remoteItems.length) {
-                return prev;
               }
               if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
                 return prev;
@@ -78,7 +72,7 @@ export function App() {
           }
         });
       }
-    }, 2500);
+    }, 2000);
 
     const handleFocus = () => syncUserAndCart();
     const handleCartCleared = () => {
