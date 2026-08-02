@@ -857,6 +857,28 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
       }
     }
 
+    // Fallback: If memory & disk cache have 0 items and cart was NOT cleared, fetch saved cart from WooCommerce customer database meta
+    if (items.length === 0 && !cartCleared) {
+      try {
+        const searchRes = await wcFetch('customers', { params: { email } });
+        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+          const cust = searchRes.data[0];
+          const metaList = Array.isArray(cust.meta_data) ? cust.meta_data : [];
+          const savedCartMeta = metaList.find((m: any) => m.key === 'hf_saved_cart' || m.key === '_saved_cart');
+          if (savedCartMeta && savedCartMeta.value) {
+            const parsed = typeof savedCartMeta.value === 'string' ? JSON.parse(savedCartMeta.value) : savedCartMeta.value;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              items = parsed;
+              revision = Math.max(revision, 1);
+              userCartsMap.set(email, items);
+              userCartRevisionsMap.set(email, revision);
+              writeDiskCart(email, items, revision, false, lastActiveDeviceId);
+            }
+          }
+        }
+      } catch {}
+    }
+
     return res.json({ success: true, items, revision, lastActiveDeviceId, cartCleared });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message, items: [], revision: 0, cartCleared: false });
