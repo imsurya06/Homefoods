@@ -49,6 +49,8 @@ export function isUserRecentlyActive(): boolean {
   return isSyncingCart || (Date.now() - lastUserActionTime < 4000);
 }
 
+let lastFetchRequestTime = 0;
+
 export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleared: boolean }> {
   try {
     const token = getSavedToken();
@@ -66,6 +68,9 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
       return { items: [], cartCleared: true };
     }
 
+    const requestTime = Date.now();
+    lastFetchRequestTime = requestTime;
+
     const res = await fetchApi<{
       success: boolean;
       items: CartItem[];
@@ -73,6 +78,11 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
       lastActiveDeviceId?: string;
       cartCleared?: boolean;
     }>('/cart/get');
+
+    // Discard response if a newer fetch request was dispatched while this request was traveling over HTTP
+    if (requestTime < lastFetchRequestTime) {
+      return { items: localItems, cartCleared: false };
+    }
 
     if (res && res.success && Array.isArray(res.items)) {
       if (Date.now() - lastLocalClearTime < 3000) {

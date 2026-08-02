@@ -55,24 +55,33 @@ export function App() {
 
     syncUserAndCart();
 
-    const interval = setInterval(() => {
-      const token = localStorage.getItem('hf_auth_token');
-      if (token && document.visibilityState === 'visible') {
-        fetchRemoteCart().then(({ items: remoteItems, cartCleared }) => {
-          if (isMounted && remoteItems && Array.isArray(remoteItems)) {
-            setCartItems((prev) => {
-              if (cartCleared && remoteItems.length === 0) {
-                return [];
-              }
-              if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
-                return prev;
-              }
-              return remoteItems;
-            });
-          }
-        });
-      }
-    }, 2000);
+    let timerId: ReturnType<typeof setTimeout>;
+
+    const scheduleNextPoll = () => {
+      if (!isMounted) return;
+      timerId = setTimeout(async () => {
+        const token = localStorage.getItem('hf_auth_token');
+        if (token && document.visibilityState === 'visible') {
+          try {
+            const { items: remoteItems, cartCleared } = await fetchRemoteCart();
+            if (isMounted && remoteItems && Array.isArray(remoteItems)) {
+              setCartItems((prev) => {
+                if (cartCleared && remoteItems.length === 0) {
+                  return [];
+                }
+                if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
+                  return prev;
+                }
+                return remoteItems;
+              });
+            }
+          } catch {}
+        }
+        scheduleNextPoll();
+      }, 3000);
+    };
+
+    scheduleNextPoll();
 
     const handleFocus = () => syncUserAndCart();
     const handleCartCleared = () => {
@@ -88,29 +97,21 @@ export function App() {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'hf_user_cart' && isMounted) {
         try {
-          const parsed = e.newValue ? JSON.parse(e.newValue) : [];
-          setCartItems(parsed);
+          const updated = e.newValue ? JSON.parse(e.newValue) : [];
+          setCartItems(updated);
         } catch {}
       }
     };
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        syncUserAndCart();
-      }
-    };
-
     window.addEventListener('focus', handleFocus);
-    window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('hf_cart_cleared', handleCartCleared);
     window.addEventListener('hf_account_deleted', handleAccountDeleted);
     window.addEventListener('storage', handleStorageChange);
 
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      clearTimeout(timerId);
       window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('hf_cart_cleared', handleCartCleared);
       window.removeEventListener('hf_account_deleted', handleAccountDeleted);
       window.removeEventListener('storage', handleStorageChange);
