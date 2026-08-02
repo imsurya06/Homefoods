@@ -36,7 +36,6 @@ export function getDeviceId(): string {
 }
 
 let isSyncingCart = false;
-let lastLocalClearTime = 0;
 let localRevision = 0;
 let lastUserActionTime = 0;
 
@@ -63,11 +62,6 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
       return { items: localItems, cartCleared: false };
     }
 
-    const timeSinceClear = Date.now() - lastLocalClearTime;
-    if (timeSinceClear < 3000) {
-      return { items: [], cartCleared: true };
-    }
-
     const requestTime = Date.now();
     lastFetchRequestTime = requestTime;
 
@@ -85,10 +79,6 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
     }
 
     if (res && res.success && Array.isArray(res.items)) {
-      if (Date.now() - lastLocalClearTime < 3000) {
-        return { items: [], cartCleared: true };
-      }
-
       const serverRevision = res.revision || 0;
       const cartCleared = !!res.cartCleared && res.items.length === 0;
       const hasContentChanged = JSON.stringify(localItems) !== JSON.stringify(res.items);
@@ -111,10 +101,6 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
 
 export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
   recordUserCartAction();
-
-  if (cartItems.length > 0) {
-    lastLocalClearTime = 0;
-  }
 
   if (!isLoggedIn) {
     try {
@@ -159,7 +145,6 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
 
 export function clearCartStorage(isLoggedIn: boolean) {
   isSyncingCart = false;
-  lastLocalClearTime = Date.now();
   recordUserCartAction();
   try {
     sessionStorage.removeItem(GUEST_CART_KEY);

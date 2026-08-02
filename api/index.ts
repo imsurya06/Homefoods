@@ -735,7 +735,7 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
 
     if (email) {
       const validItems = Array.isArray(items) ? items : [];
-      const isClear = action === 'clear' || (validItems.length === 0 && req.body?.isUserAction);
+      const isClear = (action === 'clear' || req.body?.isUserAction) && validItems.length === 0;
 
       const nextRev = (userCartRevisionsMap.get(email) || 0) + 1;
 
