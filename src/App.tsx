@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { CuratedProcessSection } from './components/CuratedProcessSection';
@@ -26,6 +26,11 @@ export function App() {
 
   // Cart & Orders Drawer State
   const [cartItems, setCartItems] = useState<CartItem[]>(() => getStoredCart(!!getSavedUserProfile()));
+  const cartItemsRef = useRef<CartItem[]>(cartItems);
+  useEffect(() => {
+    cartItemsRef.current = cartItems;
+  }, [cartItems]);
+
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [cartDrawerInitialTab, setCartDrawerInitialTab] = useState<'cart' | 'orders'>('cart');
 
@@ -90,11 +95,15 @@ export function App() {
 
     const handleFocus = () => syncUserAndCart();
     const handleCartCleared = () => {
-      if (isMounted) setCartItems([]);
+      if (isMounted) {
+        cartItemsRef.current = [];
+        setCartItems([]);
+      }
     };
     const handleAccountDeleted = () => {
       if (isMounted) {
         setUser(null);
+        cartItemsRef.current = [];
         setCartItems([]);
         setIsCartOpen(false);
       }
@@ -183,6 +192,7 @@ export function App() {
       const accountCart = (remoteItems && remoteItems.length > 0) ? remoteItems : getStoredCart(true);
       if (guestCart && guestCart.length > 0) {
         const merged = mergeCartItems(accountCart, guestCart);
+        cartItemsRef.current = merged;
         setCartItems(merged);
         saveCartItems(merged, true);
         try {
@@ -190,6 +200,7 @@ export function App() {
         } catch {}
         showToast(`Welcome, ${loggedUser.firstName}! Your guest cart was merged.`);
       } else {
+        cartItemsRef.current = accountCart;
         setCartItems(accountCart);
         showToast(`Welcome to Homemade Foods, ${loggedUser.firstName}!`);
       }
@@ -199,44 +210,46 @@ export function App() {
   const handleUserLogout = () => {
     logoutCustomer();
     setUser(null);
-    setCartItems(getStoredCart(false));
+    const stored = getStoredCart(false);
+    cartItemsRef.current = stored;
+    setCartItems(stored);
     showToast('Logged out successfully');
   };
 
   // Cart Operations: Add to Cart (Shows interactive Toast) vs Order Now (Opens Cart Directly)
   const handleAddToCart = (newItem: Omit<CartItem, 'id' | 'quantity'>) => {
     const compositeId = `${newItem.productId}-${newItem.weight}`;
-    setCartItems((prevItems) => {
-      const existingItem = prevItems.find((item) => item.id === compositeId);
-      let updated: CartItem[];
-      if (existingItem) {
-        updated = prevItems.map((item) =>
-          item.id === compositeId ? { ...item, quantity: item.quantity + 1 } : item
-        );
-      } else {
-        updated = [...prevItems, { ...newItem, id: compositeId, quantity: 1 }];
-      }
-      saveCartItems(updated, !!user);
-      return updated;
-    });
+    const currentItems = cartItemsRef.current;
+    const existingItem = currentItems.find((item: CartItem) => item.id === compositeId);
+    let updated: CartItem[];
+    if (existingItem) {
+      updated = currentItems.map((item: CartItem) =>
+        item.id === compositeId ? { ...item, quantity: item.quantity + 1 } : item
+      );
+    } else {
+      updated = [...currentItems, { ...newItem, id: compositeId, quantity: 1 }];
+    }
+    cartItemsRef.current = updated;
+    setCartItems(updated);
+    saveCartItems(updated, !!user);
     showToast('Item added to cart!');
   };
 
   const handleOrderNow = (newItem: Omit<CartItem, 'id' | 'quantity'>) => {
     const compositeId = `${newItem.productId}-${newItem.weight}`;
-    setCartItems((prevItems) => {
-      const existingItem = prevItems.find((item) => item.id === compositeId);
-      let updated: CartItem[];
-      if (existingItem) {
-        updated = prevItems.map((item) =>
-          item.id === compositeId ? { ...item, quantity: item.quantity + 1 } : item
-        );
-      } else {
-        updated = [...prevItems, { ...newItem, id: compositeId, quantity: 1 }];
-      }
-      saveCartItems(updated, !!user);
-      return updated;
-    });
+    const currentItems = cartItemsRef.current;
+    const existingItem = currentItems.find((item: CartItem) => item.id === compositeId);
+    let updated: CartItem[];
+    if (existingItem) {
+      updated = currentItems.map((item: CartItem) =>
+        item.id === compositeId ? { ...item, quantity: item.quantity + 1 } : item
+      );
+    } else {
+      updated = [...currentItems, { ...newItem, id: compositeId, quantity: 1 }];
+    }
+    cartItemsRef.current = updated;
+    setCartItems(updated);
+    saveCartItems(updated, !!user);
     setIsCartOpen(true);
   };
 
@@ -245,58 +258,59 @@ export function App() {
       handleRemoveFromCart(id);
       return;
     }
-    setCartItems((prevItems) => {
-      const updated = prevItems.map((item) => (item.id === id ? { ...item, quantity: newQty } : item));
-      saveCartItems(updated, !!user);
-      return updated;
-    });
+    const currentItems = cartItemsRef.current;
+    const updated = currentItems.map((item: CartItem) => (item.id === id ? { ...item, quantity: newQty } : item));
+    cartItemsRef.current = updated;
+    setCartItems(updated);
+    saveCartItems(updated, !!user);
   };
 
   const handleRemoveFromCart = (id: string) => {
-    setCartItems((prevItems) => {
-      const updated = prevItems.filter((item) => item.id !== id);
-      saveCartItems(updated, !!user);
-      return updated;
-    });
+    const currentItems = cartItemsRef.current;
+    const updated = currentItems.filter((item: CartItem) => item.id !== id);
+    cartItemsRef.current = updated;
+    setCartItems(updated);
+    saveCartItems(updated, !!user);
     showToast('Cart updated');
   };
 
   const handleClearCart = () => {
+    cartItemsRef.current = [];
     setCartItems([]);
     clearCartStorage(!!user);
     showToast('Cart cleared');
   };
 
   const handleUpdateItemWeight = (oldId: string, newWeight: string, newPricePerUnit: number) => {
-    setCartItems((prevItems) => {
-      const targetItem = prevItems.find((i) => i.id === oldId);
-      if (!targetItem) return prevItems;
+    const currentItems = cartItemsRef.current;
+    const targetItem = currentItems.find((i: CartItem) => i.id === oldId);
+    if (!targetItem) return;
 
-      const newId = `${targetItem.productId}-${newWeight}`;
+    const newId = `${targetItem.productId}-${newWeight}`;
 
-      const updatedList = prevItems.map((i) =>
-        i.id === oldId
-          ? { ...i, id: newId, weight: newWeight, pricePerUnit: newPricePerUnit }
-          : i
-      );
+    const updatedList = currentItems.map((i: CartItem) =>
+      i.id === oldId
+        ? { ...i, id: newId, weight: newWeight, pricePerUnit: newPricePerUnit }
+        : i
+    );
 
-      const consolidatedMap = new Map<string, CartItem>();
-      for (const item of updatedList) {
-        if (consolidatedMap.has(item.id)) {
-          const existing = consolidatedMap.get(item.id)!;
-          consolidatedMap.set(item.id, {
-            ...existing,
-            quantity: existing.quantity + item.quantity,
-          });
-        } else {
-          consolidatedMap.set(item.id, { ...item });
-        }
+    const consolidatedMap = new Map<string, CartItem>();
+    for (const item of updatedList) {
+      if (consolidatedMap.has(item.id)) {
+        const existing = consolidatedMap.get(item.id)!;
+        consolidatedMap.set(item.id, {
+          ...existing,
+          quantity: existing.quantity + item.quantity,
+        });
+      } else {
+        consolidatedMap.set(item.id, { ...item });
       }
+    }
 
-      const finalItems = Array.from(consolidatedMap.values());
-      saveCartItems(finalItems, !!user);
-      return finalItems;
-    });
+    const finalItems = Array.from(consolidatedMap.values());
+    cartItemsRef.current = finalItems;
+    setCartItems(finalItems);
+    saveCartItems(finalItems, !!user);
     showToast('Pack weight updated');
   };
 
