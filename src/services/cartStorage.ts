@@ -57,7 +57,7 @@ export function recordUserCartAction() {
 }
 
 export function isUserRecentlyActive(): boolean {
-  return isSyncingCart || (Date.now() - lastUserActionTime < 10000);
+  return isSyncingCart || (Date.now() - lastUserActionTime < 30000);
 }
 
 export async function checkRemoteCartRevision(): Promise<{
@@ -79,8 +79,8 @@ export async function checkRemoteCartRevision(): Promise<{
       const serverRev = res.revision;
       const lastDev = res.lastDeviceId || '';
 
-      // Signal Trigger: Update if server revision is newer OR action came from another device OR server has revision > 0
-      if (serverRev > localRevision || (serverRev > 0 && lastDev !== myDeviceId)) {
+      // Signal Trigger: Update if server revision is strictly newer AND action came from another device
+      if (serverRev > localRevision && lastDev !== myDeviceId) {
         return { shouldUpdate: true, revision: serverRev, lastDeviceId: lastDev };
       }
     }
@@ -112,8 +112,8 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
 
     const localItems = getStoredCart(true);
 
-    // If local cart is currently sending POST sync, protect local state from GET polling
-    if (isSyncingCart) {
+    // If local cart is currently sending POST sync or user was active recently, protect local state from GET polling
+    if (isSyncingCart || isUserRecentlyActive()) {
       return { items: localItems, cartCleared: false };
     }
 
@@ -142,12 +142,16 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
         return { items: localItems, cartCleared: false };
       }
 
-      // Account Cart Adoption: If local cart is empty or server has more items, immediately adopt server cart!
-      const localIsEmpty = localItems.length === 0;
-      const serverHasMoreItems = res.items.length > localItems.length;
+      // Golden Guard 2: Never allow background polling to reduce local item count unless server revision is strictly newer
+      if (!cartCleared && localItems.length > 0 && res.items.length < localItems.length && serverRevision <= localRevision) {
+        return { items: localItems, cartCleared: false };
+      }
 
-      // Update local state IF: server revision is newer, local is empty, server has more items, or cart was cleared
-      if (serverRevision > localRevision || localIsEmpty || serverHasMoreItems || cartCleared) {
+      // Account Cart Adoption: If local cart is empty (e.g. fresh device mount), immediately adopt server cart!
+      const localIsEmpty = localItems.length === 0;
+
+      // Update local state IF: server revision is newer, local is empty, or cart was cleared
+      if (serverRevision > localRevision || localIsEmpty || cartCleared) {
         localRevision = Math.max(localRevision, serverRevision, res.items.length > 0 ? 1 : 0);
         localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
         return { items: res.items, cartCleared };
