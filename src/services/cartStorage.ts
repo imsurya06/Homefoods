@@ -79,8 +79,8 @@ export async function checkRemoteCartRevision(): Promise<{
       const serverRev = res.revision;
       const lastDev = res.lastDeviceId || '';
 
-      // Signal Trigger: Update ONLY if server revision is newer AND action came from ANOTHER device
-      if (serverRev > localRevision && lastDev && lastDev !== myDeviceId) {
+      // Signal Trigger: Update if server revision is newer OR action came from another device OR server has revision > 0
+      if (serverRev > localRevision || (serverRev > 0 && lastDev !== myDeviceId)) {
         return { shouldUpdate: true, revision: serverRev, lastDeviceId: lastDev };
       }
     }
@@ -142,14 +142,13 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
         return { items: localItems, cartCleared: false };
       }
 
-      // Golden Guard 2: Never allow a background poll to reduce local item count unless cartCleared is explicitly true!
-      if (!cartCleared && localItems.length > 0 && res.items.length < localItems.length) {
-        return { items: localItems, cartCleared: false };
-      }
+      // Account Cart Adoption: If local cart is empty or server has more items, immediately adopt server cart!
+      const localIsEmpty = localItems.length === 0;
+      const serverHasMoreItems = res.items.length > localItems.length;
 
-      // Update local state ONLY IF server revision is strictly higher than local revision OR cart was explicitly cleared on remote
-      if (serverRevision > localRevision || cartCleared) {
-        localRevision = Math.max(localRevision, serverRevision);
+      // Update local state IF: server revision is newer, local is empty, server has more items, or cart was cleared
+      if (serverRevision > localRevision || localIsEmpty || serverHasMoreItems || cartCleared) {
+        localRevision = Math.max(localRevision, serverRevision, res.items.length > 0 ? 1 : 0);
         localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
         return { items: res.items, cartCleared };
       }

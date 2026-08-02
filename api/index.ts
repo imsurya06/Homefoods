@@ -760,6 +760,25 @@ app.get(['/api/v1/cart/revision', '/api/cart/revision', '/v1/cart/revision', '/c
       }
     }
 
+    if (revision === 0) {
+      try {
+        const searchRes = await wcFetch('customers', { params: { email } });
+        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+          const cust = searchRes.data[0];
+          const metaList = Array.isArray(cust.meta_data) ? cust.meta_data : [];
+          const savedCartMeta = metaList.find((m: any) => m.key === 'hf_saved_cart' || m.key === '_saved_cart');
+          if (savedCartMeta && savedCartMeta.value) {
+            const parsed = typeof savedCartMeta.value === 'string' ? JSON.parse(savedCartMeta.value) : savedCartMeta.value;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              revision = 1;
+              userCartRevisionsMap.set(email, 1);
+              userCartsMap.set(email, parsed);
+            }
+          }
+        }
+      } catch {}
+    }
+
     return res.json({ success: true, revision, lastDeviceId });
   } catch {
     return res.json({ success: false, revision: 0, lastDeviceId: '' });
