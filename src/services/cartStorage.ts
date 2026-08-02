@@ -147,10 +147,8 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
         return { items: localItems, cartCleared: false };
       }
 
-      const hasContentChanged = JSON.stringify(localItems) !== JSON.stringify(res.items);
-
-      // Update local state IF server revision is newer, content has changed, or cart was cleared
-      if (serverRevision > localRevision || hasContentChanged || cartCleared) {
+      // Update local state ONLY IF server revision is strictly higher than local revision OR cart was explicitly cleared on remote
+      if (serverRevision > localRevision || cartCleared) {
         localRevision = Math.max(localRevision, serverRevision);
         localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
         return { items: res.items, cartCleared };
