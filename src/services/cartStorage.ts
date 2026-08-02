@@ -97,7 +97,7 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
     const token = getSavedToken();
     if (!token) return { items: getStoredCart(false), cartCleared: false };
 
-    // Persistent Clear Lock Check: If local cart was explicitly cleared by user, do NOT restore old server items
+    // Persistent Clear Lock Check: If local cart was explicitly cleared by user on this session, do NOT restore
     const isExplicitlyCleared = (() => {
       try {
         return localStorage.getItem(CLEAR_LOCK_KEY) === 'true';
@@ -112,8 +112,8 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
 
     const localItems = getStoredCart(true);
 
-    // If local cart is currently sending POST sync or user was active recently, protect local state from GET polling
-    if (isSyncingCart || isUserRecentlyActive()) {
+    // If local cart is currently sending POST sync, protect local state during write
+    if (isSyncingCart) {
       return { items: localItems, cartCleared: false };
     }
 
@@ -137,27 +137,16 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
       const serverRevision = res.revision || 0;
       const cartCleared = !!res.cartCleared && res.items.length === 0;
 
-      // Golden Guard 1: Never overwrite a non-empty local cart with an empty remote cart unless cartCleared is explicitly true!
-      if (res.items.length === 0 && !cartCleared && localItems.length > 0) {
-        return { items: localItems, cartCleared: false };
-      }
+      // Database Vault Source of Truth: Always adopt server account cart if content differs or server revision is newer
+      const isDifferent = JSON.stringify(localItems) !== JSON.stringify(res.items);
 
-      // Golden Guard 2: Never allow background polling to reduce local item count unless server revision is strictly newer
-      if (!cartCleared && localItems.length > 0 && res.items.length < localItems.length && serverRevision <= localRevision) {
-        return { items: localItems, cartCleared: false };
-      }
-
-      // Account Cart Adoption: If local cart is empty (e.g. fresh device mount), immediately adopt server cart!
-      const localIsEmpty = localItems.length === 0;
-
-      // Update local state IF: server revision is newer, local is empty, or cart was cleared
-      if (serverRevision > localRevision || localIsEmpty || cartCleared) {
-        localRevision = Math.max(localRevision, serverRevision, res.items.length > 0 ? 1 : 0);
+      if (isDifferent || serverRevision > localRevision || cartCleared) {
+        localRevision = Math.max(localRevision, serverRevision);
         localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
         return { items: res.items, cartCleared };
       }
 
-      // If server revision is same or older, keep local items
+      // If content is identical, keep local items
       return { items: localItems, cartCleared: false };
     }
   } catch (err) {
