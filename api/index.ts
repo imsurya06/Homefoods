@@ -698,20 +698,27 @@ app.post(['/api/v1/auth/login', '/api/auth/login', '/v1/auth/login', '/auth/logi
 
 const CART_DISK_FILE = '/tmp/hf_user_carts_v2.json';
 
-function readDiskCarts(): Record<string, any[]> {
+interface DiskCartRecord {
+  items: any[];
+  revision: number;
+  isClear: boolean;
+}
+
+function readDiskCarts(): Record<string, DiskCartRecord> {
   try {
     if (fs.existsSync(CART_DISK_FILE)) {
       const content = fs.readFileSync(CART_DISK_FILE, 'utf-8');
-      return JSON.parse(content) || {};
+      const parsed = JSON.parse(content);
+      if (parsed && typeof parsed === 'object') return parsed;
     }
   } catch {}
   return {};
 }
 
-function writeDiskCart(email: string, items: any[]) {
+function writeDiskCart(email: string, items: any[], revision: number, isClear: boolean) {
   try {
     const carts = readDiskCarts();
-    carts[email.toLowerCase()] = items;
+    carts[email.toLowerCase()] = { items, revision, isClear };
     fs.writeFileSync(CART_DISK_FILE, JSON.stringify(carts), 'utf-8');
   } catch {}
 }
@@ -737,14 +744,17 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
       const validItems = Array.isArray(items) ? items : [];
       const isClear = (action === 'clear' || req.body?.isUserAction) && validItems.length === 0;
 
-      const nextRev = (userCartRevisionsMap.get(email) || 0) + 1;
+      const diskCarts = readDiskCarts();
+      const diskRecord = diskCarts[email];
+      const highestExistingRev = Math.max(userCartRevisionsMap.get(email) || 0, diskRecord?.revision || 0);
+      const nextRev = highestExistingRev + 1;
 
       userCartRevisionsMap.set(email, nextRev);
       userCartClearFlags.set(email, isClear);
       if (deviceId) lastActiveDeviceIdMap.set(email, String(deviceId));
 
       userCartsMap.set(email, validItems);
-      writeDiskCart(email, validItems);
+      writeDiskCart(email, validItems, nextRev, isClear);
 
       // Asynchronous background update to WooCommerce customer metadata
       wcFetch('customers', { params: { email } }).then((searchRes) => {
@@ -785,45 +795,26 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
 
     if (!email) return res.json({ success: true, items: [], revision: 0, cartCleared: false });
 
-    const cartCleared = userCartClearFlags.get(email) || false;
-    const revision = userCartRevisionsMap.get(email) || 0;
+    const diskCarts = readDiskCarts();
+    const diskRecord = diskCarts[email];
+
+    let items = userCartsMap.get(email) || [];
+    let revision = userCartRevisionsMap.get(email) || 0;
+    let cartCleared = userCartClearFlags.get(email) || false;
+
+    if (diskRecord) {
+      if (diskRecord.revision > revision || !userCartsMap.has(email)) {
+        items = diskRecord.items || [];
+        revision = diskRecord.revision || 0;
+        cartCleared = !!diskRecord.isClear;
+        userCartsMap.set(email, items);
+        userCartRevisionsMap.set(email, revision);
+        userCartClearFlags.set(email, cartCleared);
+      }
+    }
+
     const lastActiveDeviceId = lastActiveDeviceIdMap.get(email) || '';
 
-    // 1. Check in-memory map first
-    if (userCartsMap.has(email)) {
-      return res.json({ success: true, items: userCartsMap.get(email) || [], revision, lastActiveDeviceId, cartCleared });
-    }
-
-    // 2. Check disk cache second
-    const diskCarts = readDiskCarts();
-    if (email in diskCarts) {
-      const diskItems = diskCarts[email] || [];
-      userCartsMap.set(email, diskItems);
-      return res.json({ success: true, items: diskItems, revision, lastActiveDeviceId, cartCleared });
-    }
-
-    // 3. Fallback to WooCommerce customer metadata for first-time load
-    let items: any[] = [];
-    try {
-      const searchRes = await wcFetch('customers', { params: { email } });
-      if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-        const custId = searchRes.data[0].id;
-        const fullRes = await wcFetch(`customers/${custId}`);
-        const custObj = fullRes.ok && fullRes.data ? fullRes.data : searchRes.data[0];
-        const cartMeta = (custObj.meta_data || []).find((m: any) =>
-          m.key === 'hf_saved_cart' || m.key === '_saved_cart' || m.key === 'saved_cart'
-        );
-        if (cartMeta && cartMeta.value) {
-          const parsed = typeof cartMeta.value === 'string' ? JSON.parse(cartMeta.value) : cartMeta.value;
-          if (Array.isArray(parsed)) {
-            items = parsed;
-          }
-        }
-      }
-    } catch {}
-
-    userCartsMap.set(email, items);
-    writeDiskCart(email, items);
     return res.json({ success: true, items, revision, lastActiveDeviceId, cartCleared });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message, items: [], revision: 0, cartCleared: false });
