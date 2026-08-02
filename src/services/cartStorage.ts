@@ -22,8 +22,32 @@ export function getStoredCart(isLoggedIn: boolean): CartItem[] {
   }
 }
 
+export function getDeviceId(): string {
+  try {
+    let id = localStorage.getItem('hf_device_id');
+    if (!id) {
+      id = 'dev_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36);
+      localStorage.setItem('hf_device_id', id);
+    }
+    return id;
+  } catch {
+    return 'dev_unknown';
+  }
+}
+
 let isSyncingCart = false;
 let lastLocalClearTime = 0;
+let localRevision = 0;
+let lastUserActionTime = 0;
+
+export function recordUserCartAction() {
+  lastUserActionTime = Date.now();
+  localRevision++;
+}
+
+export function isUserRecentlyActive(): boolean {
+  return isSyncingCart || (Date.now() - lastUserActionTime < 4000);
+}
 
 export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleared: boolean }> {
   try {
@@ -38,22 +62,34 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
 
     const localItems = getStoredCart(true);
 
-    // If local cart is currently syncing to backend, protect local items from in-flight GET responses
-    if (isSyncingCart && localItems.length > 0) {
+    // If local device was active recently and has items, protect local cart from GET polling
+    if (isUserRecentlyActive() && localItems.length > 0) {
       return { items: localItems, cartCleared: false };
     }
 
-    const res = await fetchApi<{ success: boolean; items: CartItem[]; cartCleared?: boolean }>('/cart/get');
+    const res = await fetchApi<{
+      success: boolean;
+      items: CartItem[];
+      revision?: number;
+      lastActiveDeviceId?: string;
+      cartCleared?: boolean;
+    }>('/cart/get');
+
     if (res && res.success && Array.isArray(res.items)) {
       if (Date.now() - lastLocalClearTime < 5000) {
         return { items: [], cartCleared: true };
       }
 
-      if (isSyncingCart && res.items.length === 0 && localItems.length > 0) {
+      const serverRevision = res.revision || 0;
+      const deviceId = getDeviceId();
+
+      if (serverRevision < localRevision && res.lastActiveDeviceId === deviceId) {
         return { items: localItems, cartCleared: false };
       }
 
+      localRevision = Math.max(localRevision, serverRevision);
       const cartCleared = !!res.cartCleared;
+
       if (cartCleared) {
         localStorage.setItem('hf_user_cart', JSON.stringify([]));
       } else {
@@ -68,6 +104,8 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
 }
 
 export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
+  recordUserCartAction();
+
   if (cartItems.length > 0) {
     lastLocalClearTime = 0;
   }
@@ -86,10 +124,21 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
     const token = getSavedToken();
     if (token) {
       isSyncingCart = true;
-      fetchApi<{ success: boolean }>('/cart/sync', {
+      const deviceId = getDeviceId();
+      fetchApi<{ success: boolean; revision?: number }>('/cart/sync', {
         method: 'POST',
-        body: JSON.stringify({ items: cartItems, action: cartItems.length === 0 ? 'clear' : 'sync' }),
+        body: JSON.stringify({
+          items: cartItems,
+          action: cartItems.length === 0 ? 'clear' : 'sync',
+          revision: localRevision,
+          deviceId,
+        }),
       })
+        .then((res) => {
+          if (res && typeof res.revision === 'number') {
+            localRevision = Math.max(localRevision, res.revision);
+          }
+        })
         .catch((err) => console.warn('Cart sync warning:', err))
         .finally(() => {
           setTimeout(() => {
@@ -105,15 +154,17 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
 export function clearCartStorage(isLoggedIn: boolean) {
   isSyncingCart = false;
   lastLocalClearTime = Date.now();
+  recordUserCartAction();
   try {
     sessionStorage.removeItem(GUEST_CART_KEY);
     localStorage.setItem('hf_user_cart', JSON.stringify([]));
     window.dispatchEvent(new CustomEvent('hf_cart_cleared'));
     const token = getSavedToken();
     if (isLoggedIn && token) {
+      const deviceId = getDeviceId();
       fetchApi('/cart/sync', {
         method: 'POST',
-        body: JSON.stringify({ items: [], action: 'clear', isUserAction: true }),
+        body: JSON.stringify({ items: [], action: 'clear', isUserAction: true, revision: localRevision, deviceId }),
       }).catch((err) => console.warn('Cart clear sync warning:', err));
     }
   } catch (err) {

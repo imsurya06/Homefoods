@@ -710,11 +710,13 @@ function writeDiskCart(email: string, items: any[]) {
 }
 
 const userCartClearFlags = new Map<string, boolean>();
+const userCartRevisionsMap = new Map<string, number>();
+const lastActiveDeviceIdMap = new Map<string, string>();
 
 // POST /api/v1/cart/sync (Sync user cart items to database across devices)
 app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'], async (req, res) => {
   try {
-    const { items, action } = req.body;
+    const { items, action, revision, deviceId } = req.body;
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.json({ success: false, message: 'No auth token' });
 
@@ -728,7 +730,13 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
       const validItems = Array.isArray(items) ? items : [];
       const isClear = action === 'clear' || (validItems.length === 0 && req.body?.isUserAction);
 
+      const currentRev = (userCartRevisionsMap.get(email) || 0) + 1;
+      const nextRev = typeof revision === 'number' && revision > currentRev ? revision : currentRev;
+
+      userCartRevisionsMap.set(email, nextRev);
       userCartClearFlags.set(email, isClear);
+      if (deviceId) lastActiveDeviceIdMap.set(email, String(deviceId));
+
       userCartsMap.set(email, validItems);
       writeDiskCart(email, validItems);
 
@@ -747,9 +755,11 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
           }).catch(() => {});
         }
       }).catch(() => {});
+
+      return res.json({ success: true, revision: nextRev, items: validItems });
     }
 
-    return res.json({ success: true });
+    return res.json({ success: true, revision: 0, items: [] });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -759,7 +769,7 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
 app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader) return res.json({ success: true, items: [], cartCleared: false });
+    if (!authHeader) return res.json({ success: true, items: [], revision: 0, cartCleared: false });
 
     const token = authHeader.replace('Bearer ', '');
     const rawDecoded = Buffer.from(token, 'base64').toString('utf-8');
@@ -767,13 +777,15 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
     const parts = decoded.split(':');
     const email = (parts[1] || '').trim().toLowerCase();
 
-    if (!email) return res.json({ success: true, items: [], cartCleared: false });
+    if (!email) return res.json({ success: true, items: [], revision: 0, cartCleared: false });
 
     const cartCleared = userCartClearFlags.get(email) || false;
+    const revision = userCartRevisionsMap.get(email) || 0;
+    const lastActiveDeviceId = lastActiveDeviceIdMap.get(email) || '';
 
     // 1. Check in-memory map first
     if (userCartsMap.has(email)) {
-      return res.json({ success: true, items: userCartsMap.get(email) || [], cartCleared });
+      return res.json({ success: true, items: userCartsMap.get(email) || [], revision, lastActiveDeviceId, cartCleared });
     }
 
     // 2. Check disk cache second
@@ -781,7 +793,7 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
     if (email in diskCarts) {
       const diskItems = diskCarts[email] || [];
       userCartsMap.set(email, diskItems);
-      return res.json({ success: true, items: diskItems, cartCleared });
+      return res.json({ success: true, items: diskItems, revision, lastActiveDeviceId, cartCleared });
     }
 
     // 3. Fallback to WooCommerce customer metadata for first-time load
@@ -806,9 +818,9 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
 
     userCartsMap.set(email, items);
     writeDiskCart(email, items);
-    return res.json({ success: true, items, cartCleared });
+    return res.json({ success: true, items, revision, lastActiveDeviceId, cartCleared });
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: err.message, items: [], cartCleared: false });
+    return res.status(500).json({ success: false, message: err.message, items: [], revision: 0, cartCleared: false });
   }
 });
 
