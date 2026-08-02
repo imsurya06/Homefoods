@@ -43,6 +43,9 @@ export function App() {
             if (cartCleared && remoteItems.length === 0) {
               return [];
             }
+            if (!cartCleared && prev.length > 0 && remoteItems.length === 0) {
+              return prev;
+            }
             if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
               return prev;
             }

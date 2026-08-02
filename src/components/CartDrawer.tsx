@@ -20,7 +20,6 @@ import {
 import { type CartItem } from '../data/bestsellers';
 import { processRazorpayCheckout, type CheckoutPayload, trackSingleOrder } from '../services/checkoutService';
 import { fetchCustomerOrders, type CustomerOrderHistoryItem, type UserProfile } from '../services/authService';
-import { fetchRemoteCart } from '../services/cartStorage';
 import { getCachedProductsSync } from '../services/productService';
 
 interface CartDrawerProps {
@@ -49,7 +48,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onClearCart,
   onExploreShop,
   onOpenAuthModal,
-  onSyncCart,
+  onSyncCart: _onSyncCart,
   isLoggedIn = false,
   user = null,
   initialTab = 'cart',
@@ -227,13 +226,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             setLoadingOrders(false);
           });
       } else if (activeTab === 'cart') {
-        if (user || hasToken) {
-          fetchRemoteCart().then((remoteItems) => {
-            if (remoteItems && Array.isArray(remoteItems) && onSyncCart) {
-              onSyncCart(remoteItems);
-            }
-          });
-        }
+        // Cart data is seamlessly synced via App.tsx props with 0 drawer flickering
+        return;
       }
     };
 
