@@ -381,57 +381,64 @@ app.get(['/api/v1/products', '/api/products', '/v1/products', '/products'], asyn
       return res.json({ success: true, source: 'cache', count: filtered.length, data: filtered });
     }
 
-    const wcRes = await wcFetch('products', { params: { per_page: 100 } });
     let formattedProducts: any[] = [];
+    try {
+      const wcRes = await wcFetch('products', { params: { per_page: 100 } });
+      if (wcRes.ok && Array.isArray(wcRes.data) && wcRes.data.length > 0) {
+        formattedProducts = wcRes.data.map((p: any) => {
+          const primaryCategory = p.categories && p.categories.length > 0 ? p.categories[0] : {};
+          const basePrice = parseFloat(p.price || p.regular_price || '70');
 
-    if (wcRes.ok && Array.isArray(wcRes.data) && wcRes.data.length > 0) {
-      formattedProducts = wcRes.data.map((p: any) => {
-        const primaryCategory = p.categories && p.categories.length > 0 ? p.categories[0] : {};
-        const basePrice = parseFloat(p.price || p.regular_price || '70');
+          const weightAttr = p.attributes?.find((a: any) => a.name?.toLowerCase() === 'weight')?.options || [];
+          let variants: { weight: string; basePrice: number }[] = [];
 
-        const weightAttr = p.attributes?.find((a: any) => a.name?.toLowerCase() === 'weight')?.options || [];
-        let variants: { weight: string; basePrice: number }[] = [];
+          if (weightAttr.length > 0) {
+            variants = weightAttr.map((opt: string, idx: number) => ({
+              weight: decodeHtmlEntities(opt.trim()),
+              basePrice: idx === 0 ? basePrice : Math.round(basePrice * (idx === 1 ? 1.8 : 3.4)),
+            }));
+          } else if (p.weight) {
+            variants = [{ weight: decodeHtmlEntities(p.weight), basePrice }];
+          } else {
+            variants = [{ weight: '250gms', basePrice }];
+          }
 
-        if (weightAttr.length > 0) {
-          variants = weightAttr.map((opt: string, idx: number) => ({
-            weight: decodeHtmlEntities(opt.trim()),
-            basePrice: idx === 0 ? basePrice : Math.round(basePrice * (idx === 1 ? 1.8 : 3.4)),
-          }));
-        } else if (p.weight) {
-          variants = [{ weight: decodeHtmlEntities(p.weight), basePrice }];
-        } else {
-          variants = [{ weight: '250gms', basePrice }];
-        }
-
-        return {
-          id: p.id.toString(),
-          name: decodeHtmlEntities(p.name),
-          slug: p.slug || `prod-${p.id}`,
-          categoryId: primaryCategory.slug || 'general',
-          categoryName: decodeHtmlEntities(primaryCategory.name || 'Traditional Delicacies'),
-          description: decodeHtmlEntities(p.description?.replace(/<[^>]*>?/gm, '') || p.short_description?.replace(/<[^>]*>?/gm, '') || ''),
-          ingredients: decodeHtmlEntities(p.attributes?.find((a: any) => a.name?.toLowerCase() === 'ingredients')?.options?.join(', ') || ''),
-          shelfLife: decodeHtmlEntities(p.attributes?.find((a: any) => a.name?.toLowerCase() === 'shelf life')?.options?.join(', ') || '6 Months'),
-          storageInstructions: 'Store in a cool dry place.',
-          imageUrl: p.images && p.images.length > 0 ? p.images[0].src : 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80',
-          gstPercentage: 5,
-          isAvailable: p.stock_status === 'instock',
-          stockQuantity: p.stock_quantity ?? 100,
-          variants,
-        };
-      });
+          return {
+            id: p.id.toString(),
+            name: decodeHtmlEntities(p.name),
+            slug: p.slug || `prod-${p.id}`,
+            categoryId: primaryCategory.slug || 'general',
+            categoryName: decodeHtmlEntities(primaryCategory.name || 'Traditional Delicacies'),
+            description: decodeHtmlEntities(p.description?.replace(/<[^>]*>?/gm, '') || p.short_description?.replace(/<[^>]*>?/gm, '') || ''),
+            ingredients: decodeHtmlEntities(p.attributes?.find((a: any) => a.name?.toLowerCase() === 'ingredients')?.options?.join(', ') || ''),
+            shelfLife: decodeHtmlEntities(p.attributes?.find((a: any) => a.name?.toLowerCase() === 'shelf life')?.options?.join(', ') || '6 Months'),
+            storageInstructions: 'Store in a cool dry place.',
+            imageUrl: p.images && p.images.length > 0 ? p.images[0].src : 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80',
+            gstPercentage: 5,
+            isAvailable: p.stock_status === 'instock',
+            stockQuantity: p.stock_quantity ?? 100,
+            variants,
+          };
+        });
+      }
+    } catch (wcErr: any) {
+      console.warn('WooCommerce products fetch warning:', wcErr?.message || wcErr);
     }
 
     if (formattedProducts.length > 0) {
       cachedProductsResponse = formattedProducts;
       lastCacheTime = now;
+    } else if (cachedProductsResponse && cachedProductsResponse.length > 0) {
+      formattedProducts = cachedProductsResponse;
     }
 
     const filtered = filterProducts(formattedProducts, category, search, inStock);
-    return res.json({ success: true, source: 'woocommerce', count: filtered.length, data: filtered });
+    return res.json({ success: true, source: formattedProducts === cachedProductsResponse ? 'cache' : 'woocommerce', count: filtered.length, data: filtered });
   } catch (error: any) {
-    console.error('Error fetching products:', error.message);
-    return res.status(500).json({ success: false, message: 'Error fetching products', error: error.message });
+    console.error('Error in /products endpoint:', error?.message || error);
+    const fallback = cachedProductsResponse || [];
+    const filtered = filterProducts(fallback, req.query.category, req.query.search, req.query.inStock);
+    return res.json({ success: true, source: 'fallback', count: filtered.length, data: filtered });
   }
 });
 
