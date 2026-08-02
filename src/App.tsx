@@ -66,7 +66,9 @@ export function App() {
             if (shouldUpdate && isMounted) {
               const { items: remoteItems, cartCleared } = await fetchRemoteCart();
               if (isMounted && remoteItems && Array.isArray(remoteItems)) {
-                setCartItems(cartCleared ? [] : remoteItems);
+                if (remoteItems.length > 0 || cartCleared) {
+                  setCartItems(cartCleared ? [] : remoteItems);
+                }
               }
             }
           } catch {}

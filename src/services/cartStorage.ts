@@ -22,16 +22,23 @@ export function getStoredCart(isLoggedIn: boolean): CartItem[] {
   }
 }
 
+let cachedDeviceId = '';
+
 export function getDeviceId(): string {
+  if (cachedDeviceId) return cachedDeviceId;
   try {
     let id = localStorage.getItem('hf_device_id');
     if (!id) {
       id = 'dev_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36);
       localStorage.setItem('hf_device_id', id);
     }
+    cachedDeviceId = id;
     return id;
   } catch {
-    return 'dev_unknown';
+    if (!cachedDeviceId) {
+      cachedDeviceId = 'dev_' + Math.random().toString(36).substring(2, 9);
+    }
+    return cachedDeviceId;
   }
 }
 
@@ -47,8 +54,6 @@ export function recordUserCartAction() {
 export function isUserRecentlyActive(): boolean {
   return isSyncingCart || (Date.now() - lastUserActionTime < 4000);
 }
-
-
 
 export async function checkRemoteCartRevision(): Promise<{
   shouldUpdate: boolean;
@@ -110,6 +115,12 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
     if (res && res.success && Array.isArray(res.items)) {
       const serverRevision = res.revision || 0;
       const cartCleared = !!res.cartCleared && res.items.length === 0;
+
+      // Golden Guard: Never overwrite a non-empty local cart with an empty remote cart unless cartCleared is explicitly true!
+      if (res.items.length === 0 && !cartCleared && localItems.length > 0) {
+        return { items: localItems, cartCleared: false };
+      }
+
       const hasContentChanged = JSON.stringify(localItems) !== JSON.stringify(res.items);
 
       // Update local state IF server revision is newer, content has changed, or cart was cleared
