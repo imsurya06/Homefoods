@@ -42,6 +42,8 @@ export function getDeviceId(): string {
   }
 }
 
+const CLEAR_LOCK_KEY = 'hf_cart_explicitly_cleared';
+
 let isSyncingCart = false;
 let localRevision = 0;
 let lastUserActionTime = 0;
@@ -49,10 +51,13 @@ let lastUserActionTime = 0;
 export function recordUserCartAction() {
   lastUserActionTime = Date.now();
   localRevision++;
+  try {
+    localStorage.removeItem(CLEAR_LOCK_KEY);
+  } catch {}
 }
 
 export function isUserRecentlyActive(): boolean {
-  return isSyncingCart || (Date.now() - lastUserActionTime < 4000);
+  return isSyncingCart || (Date.now() - lastUserActionTime < 10000);
 }
 
 export async function checkRemoteCartRevision(): Promise<{
@@ -61,8 +66,11 @@ export async function checkRemoteCartRevision(): Promise<{
   lastDeviceId: string;
 }> {
   try {
+    // Shield active device from background polling overwrites while user is actively browsing/shopping
+    if (isUserRecentlyActive()) return { shouldUpdate: false, revision: localRevision, lastDeviceId: '' };
+
     const token = getSavedToken();
-    if (!token || isSyncingCart) return { shouldUpdate: false, revision: localRevision, lastDeviceId: '' };
+    if (!token) return { shouldUpdate: false, revision: localRevision, lastDeviceId: '' };
 
     const myDeviceId = getDeviceId();
     const res = await fetchApi<{ success: boolean; revision: number; lastDeviceId?: string }>('/cart/revision');
@@ -88,6 +96,19 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
   try {
     const token = getSavedToken();
     if (!token) return { items: getStoredCart(false), cartCleared: false };
+
+    // Persistent Clear Lock Check: If local cart was explicitly cleared by user, do NOT restore old server items
+    const isExplicitlyCleared = (() => {
+      try {
+        return localStorage.getItem(CLEAR_LOCK_KEY) === 'true';
+      } catch {
+        return false;
+      }
+    })();
+
+    if (isExplicitlyCleared) {
+      return { items: [], cartCleared: true };
+    }
 
     const localItems = getStoredCart(true);
 
@@ -198,8 +219,10 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
 
 export function clearCartStorage(isLoggedIn: boolean) {
   isSyncingCart = true;
-  recordUserCartAction();
+  lastUserActionTime = Date.now();
+  localRevision++;
   try {
+    localStorage.setItem(CLEAR_LOCK_KEY, 'true');
     sessionStorage.removeItem(GUEST_CART_KEY);
     localStorage.setItem('hf_user_cart', JSON.stringify([]));
     window.dispatchEvent(new CustomEvent('hf_cart_cleared'));
