@@ -90,11 +90,12 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
       }
 
       const serverRevision = res.revision || 0;
+      const cartCleared = !!res.cartCleared && res.items.length === 0;
+      const hasContentChanged = JSON.stringify(localItems) !== JSON.stringify(res.items);
 
-      // If server returned a newer revision, update local state
-      if (serverRevision > localRevision || (res.cartCleared && res.items.length === 0)) {
-        localRevision = serverRevision;
-        const cartCleared = !!res.cartCleared && res.items.length === 0;
+      // Update local state IF server revision is newer, content has changed, or cart was cleared
+      if (serverRevision > localRevision || hasContentChanged || cartCleared) {
+        localRevision = Math.max(localRevision, serverRevision);
         localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
         return { items: res.items, cartCleared };
       }
