@@ -145,6 +145,7 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
 }
 
 export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
+  isSyncingCart = true;
   recordUserCartAction();
 
   if (!isLoggedIn) {
@@ -153,6 +154,9 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
     } catch (err) {
       console.error('Failed to save guest cart to sessionStorage:', err);
     }
+    setTimeout(() => {
+      isSyncingCart = false;
+    }, 1000);
     return;
   }
 
@@ -160,7 +164,6 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
     localStorage.setItem('hf_user_cart', JSON.stringify(cartItems));
     const token = getSavedToken();
     if (token) {
-      isSyncingCart = true;
       const deviceId = getDeviceId();
       fetchApi<{ success: boolean; revision?: number }>('/cart/sync', {
         method: 'POST',
@@ -180,11 +183,16 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
         .finally(() => {
           setTimeout(() => {
             isSyncingCart = false;
-          }, 1500);
+          }, 2000);
         });
+    } else {
+      setTimeout(() => {
+        isSyncingCart = false;
+      }, 1000);
     }
   } catch (err) {
     console.error('Failed to save user cart:', err);
+    isSyncingCart = false;
   }
 }
 
