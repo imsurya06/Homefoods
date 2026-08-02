@@ -116,8 +116,13 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
       const serverRevision = res.revision || 0;
       const cartCleared = !!res.cartCleared && res.items.length === 0;
 
-      // Golden Guard: Never overwrite a non-empty local cart with an empty remote cart unless cartCleared is explicitly true!
+      // Golden Guard 1: Never overwrite a non-empty local cart with an empty remote cart unless cartCleared is explicitly true!
       if (res.items.length === 0 && !cartCleared && localItems.length > 0) {
+        return { items: localItems, cartCleared: false };
+      }
+
+      // Golden Guard 2: Never allow a background poll to reduce local item count unless cartCleared is explicitly true!
+      if (!cartCleared && localItems.length > 0 && res.items.length < localItems.length) {
         return { items: localItems, cartCleared: false };
       }
 

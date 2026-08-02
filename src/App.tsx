@@ -66,9 +66,15 @@ export function App() {
             if (shouldUpdate && isMounted) {
               const { items: remoteItems, cartCleared } = await fetchRemoteCart();
               if (isMounted && remoteItems && Array.isArray(remoteItems)) {
-                if (remoteItems.length > 0 || cartCleared) {
-                  setCartItems(cartCleared ? [] : remoteItems);
-                }
+                setCartItems((prev) => {
+                  if (cartCleared && remoteItems.length === 0) return [];
+                  // Golden Monotonic Guard: Never reduce item count from background polling unless cartCleared is true
+                  if (!cartCleared && prev.length > 0 && remoteItems.length < prev.length) {
+                    return prev;
+                  }
+                  if (JSON.stringify(prev) === JSON.stringify(remoteItems)) return prev;
+                  return remoteItems;
+                });
               }
             }
           } catch {}
