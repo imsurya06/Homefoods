@@ -31,6 +31,7 @@ app.use((_req, res, next) => {
 // In-Memory & File Persistent Caches
 let cachedProductsResponse: any = null;
 let lastCacheTime = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes product cache TTL
 const userCartsMap = new Map<string, any[]>();
 const userCartLocks = new Map<string, number>();
 const globalPasswordMap = new Map<string, string>();
