@@ -70,7 +70,7 @@ export function App() {
       if (!isMounted) return;
       timerId = setTimeout(async () => {
         const token = localStorage.getItem('hf_auth_token');
-        if (token && document.visibilityState === 'visible') {
+        if (token) {
           try {
             const { shouldUpdate } = await checkRemoteCartRevision();
             if (shouldUpdate && isMounted) {
@@ -99,7 +99,12 @@ export function App() {
 
     scheduleNextPoll();
 
-    const handleFocus = () => syncUserAndCart();
+    const handleFocusOrVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncUserAndCart();
+      }
+    };
+
     const handleCartCleared = () => {
       if (isMounted) {
         cartItemsRef.current = [];
@@ -114,14 +119,17 @@ export function App() {
         setIsCartOpen(false);
       }
     };
-    window.addEventListener('focus', handleFocus);
+
+    window.addEventListener('focus', handleFocusOrVisibility);
+    document.addEventListener('visibilitychange', handleFocusOrVisibility);
     window.addEventListener('hf_cart_cleared', handleCartCleared);
     window.addEventListener('hf_account_deleted', handleAccountDeleted);
 
     return () => {
       isMounted = false;
       clearTimeout(timerId);
-      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('focus', handleFocusOrVisibility);
+      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
       window.removeEventListener('hf_cart_cleared', handleCartCleared);
       window.removeEventListener('hf_account_deleted', handleAccountDeleted);
     };
