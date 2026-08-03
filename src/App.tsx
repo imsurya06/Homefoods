@@ -11,7 +11,7 @@ import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
 import { type CartItem } from './data/bestsellers';
 import { fetchCurrentUser, logoutCustomer, getSavedUserProfile, type UserProfile } from './services/authService';
-import { getStoredCart, fetchRemoteCart, saveCartItems, clearCartStorage, mergeCartItems, checkRemoteCartRevision } from './services/cartStorage';
+import { getStoredCart, fetchRemoteCart, saveCartItems, clearCartStorage, mergeCartItems, checkRemoteCartRevision, resetLocalRevision } from './services/cartStorage';
 
 export function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'shop'>('home');
@@ -196,6 +196,7 @@ export function App() {
   // Auth Callbacks
   const handleAuthSuccess = (loggedUser: UserProfile) => {
     setUser(loggedUser);
+    resetLocalRevision();
     const guestCart = getStoredCart(false);
 
     fetchRemoteCart().then(({ items: remoteItems }) => {
@@ -220,6 +221,7 @@ export function App() {
   const handleUserLogout = () => {
     logoutCustomer();
     setUser(null);
+    resetLocalRevision();
     const stored = getStoredCart(false);
     cartItemsRef.current = stored;
     setCartItems(stored);

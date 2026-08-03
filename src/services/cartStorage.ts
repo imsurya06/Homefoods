@@ -56,6 +56,14 @@ export function recordUserCartAction() {
   } catch {}
 }
 
+export function resetLocalRevision() {
+  localRevision = 0;
+  lastUserActionTime = 0;
+  try {
+    localStorage.removeItem(CLEAR_LOCK_KEY);
+  } catch {}
+}
+
 export function isUserRecentlyActive(): boolean {
   return isSyncingCart || (Date.now() - lastUserActionTime < 30000);
 }
@@ -76,11 +84,7 @@ export async function checkRemoteCartRevision(): Promise<{
       const serverRev = res.revision;
       const lastDev = res.lastDeviceId || '';
 
-      // Cross-Device Sync Signal: Update ONLY if action originated from ANOTHER device
-      if (lastDev && lastDev !== myDeviceId) {
-        return { shouldUpdate: true, revision: serverRev, lastDeviceId: lastDev };
-      }
-
+      // Cross-Device Sync Signal: Update ONLY if server has a newer revision AND action originated from ANOTHER device
       if (serverRev > localRevision && lastDev !== myDeviceId) {
         return { shouldUpdate: true, revision: serverRev, lastDeviceId: lastDev };
       }
