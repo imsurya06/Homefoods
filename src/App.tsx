@@ -53,13 +53,6 @@ export function App() {
         console.log('[CartSync] syncUserAndCart fetchRemoteCart resolved items:', remoteItems, 'cartCleared:', cartCleared);
         if (isMounted && remoteItems && Array.isArray(remoteItems)) {
           setCartItems((prev) => {
-            if (cartCleared && remoteItems.length === 0) {
-              cartItemsRef.current = [];
-              return [];
-            }
-            if (!cartCleared && prev.length > 0 && remoteItems.length === 0) {
-              return prev;
-            }
             if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
               return prev;
             }
@@ -83,13 +76,9 @@ export function App() {
           try {
             const { shouldUpdate, revision: serverRevision } = await checkRemoteCartRevision();
             if (shouldUpdate && isMounted) {
-              const { items: remoteItems, cartCleared } = await fetchRemoteCart(serverRevision);
+              const { items: remoteItems } = await fetchRemoteCart(serverRevision);
               if (isMounted && remoteItems && Array.isArray(remoteItems)) {
                 setCartItems((prev) => {
-                  if (cartCleared && remoteItems.length === 0) {
-                    cartItemsRef.current = [];
-                    return [];
-                  }
                   if (JSON.stringify(prev) === JSON.stringify(remoteItems)) return prev;
                   cartItemsRef.current = remoteItems;
                   return remoteItems;

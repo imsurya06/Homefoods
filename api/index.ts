@@ -915,6 +915,13 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
         if (diskRecord.lastDeviceId) lastActiveDeviceId = diskRecord.lastDeviceId;
       }
     }
+    const expectedRev = parseInt(req.query.revision as string, 10) || 0;
+
+    // Fast-path: If Vercel's memory or disk cache is already at or beyond the expected revision, return it instantly!
+    if (expectedRev > 0 && revision >= expectedRev) {
+      console.log(`[CartGet] Fast-path cache hit for ${email} (rev: ${revision}, expected: ${expectedRev})`);
+      return res.json({ success: true, items, revision, lastActiveDeviceId, cartCleared });
+    }
 
     // Always fetch latest state from WooCommerce Customer Database Vault (Single Source of Truth)
     try {
