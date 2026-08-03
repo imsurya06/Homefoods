@@ -1211,7 +1211,7 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       payment_method: 'razorpay',
       payment_method_title: 'Razorpay (UPI/Cards/NetBanking)',
       set_paid: false,
-      status: 'processing',
+      status: 'pending',
       ...(existingCustomerId > 0 ? { customer_id: existingCustomerId } : {}),
       meta_data: [
         { key: '_order_ref_code', value: orderRefCode },
@@ -1322,7 +1322,7 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
     try {
       await wcFetch(`orders/${wcOrderId}`, {
         method: 'PUT',
-        body: { set_paid: true, status: 'kitchen', transaction_id: razorpay_payment_id || `tx_${Date.now()}` },
+        body: { set_paid: true, status: 'processing', transaction_id: razorpay_payment_id || `tx_${Date.now()}` },
       });
     } catch {}
 
