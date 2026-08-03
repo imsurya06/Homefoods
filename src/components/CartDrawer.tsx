@@ -234,8 +234,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     // Initial fetch
     syncData(true);
 
-    // Silent background polling every 3 seconds (never shows spinner or wipes existing orders)
-    const pollInterval = setInterval(() => syncData(false), 3000);
+    // Silent background polling every 12 seconds (never shows spinner or wipes existing orders)
+    const pollInterval = setInterval(() => syncData(false), 12000);
 
     const handleFocus = () => syncData(false);
     window.addEventListener('focus', handleFocus);

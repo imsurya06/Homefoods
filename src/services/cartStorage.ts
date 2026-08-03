@@ -157,8 +157,46 @@ export function getIsSyncingCart(): boolean {
   return isSyncingCart;
 }
 
-export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
+let pendingSyncItems: CartItem[] | null = null;
+let pendingIsLoggedIn = false;
+
+function sendCartSync(cartItems: CartItem[], _isLoggedIn: boolean) {
   isSyncingCart = true;
+  const token = getSavedToken();
+  if (token) {
+    const deviceId = getDeviceId();
+    fetchApi<{ success: boolean; revision?: number }>('/cart/sync', {
+      method: 'POST',
+      body: JSON.stringify({
+        items: cartItems,
+        action: cartItems.length === 0 ? 'clear' : 'sync',
+        revision: localRevision,
+        deviceId,
+      }),
+    })
+      .then((res) => {
+        if (res && typeof res.revision === 'number') {
+          localRevision = Math.max(localRevision, res.revision);
+        }
+      })
+      .catch((err) => console.warn('Cart sync warning:', err))
+      .finally(() => {
+        if (pendingSyncItems !== null) {
+          const itemsToSync = pendingSyncItems;
+          const loginState = pendingIsLoggedIn;
+          pendingSyncItems = null;
+          console.log('[CartSync] Processing queued cart sync items...');
+          sendCartSync(itemsToSync, loginState);
+        } else {
+          isSyncingCart = false;
+        }
+      });
+  } else {
+    isSyncingCart = false;
+  }
+}
+
+export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
   recordUserCartAction();
 
   if (!isLoggedIn) {
@@ -173,30 +211,15 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
 
   try {
     localStorage.setItem('hf_user_cart', JSON.stringify(cartItems));
-    const token = getSavedToken();
-    if (token) {
-      const deviceId = getDeviceId();
-      fetchApi<{ success: boolean; revision?: number }>('/cart/sync', {
-        method: 'POST',
-        body: JSON.stringify({
-          items: cartItems,
-          action: cartItems.length === 0 ? 'clear' : 'sync',
-          revision: localRevision,
-          deviceId,
-        }),
-      })
-        .then((res) => {
-          if (res && typeof res.revision === 'number') {
-            localRevision = Math.max(localRevision, res.revision);
-          }
-        })
-        .catch((err) => console.warn('Cart sync warning:', err))
-        .finally(() => {
-          isSyncingCart = false;
-        });
-    } else {
-      isSyncingCart = false;
+    
+    if (isSyncingCart) {
+      pendingSyncItems = cartItems;
+      pendingIsLoggedIn = isLoggedIn;
+      console.log('[CartSync] Active sync in progress. Queued latest cart items for next sync.');
+      return;
     }
+
+    sendCartSync(cartItems, isLoggedIn);
   } catch (err) {
     console.error('Failed to save user cart:', err);
     isSyncingCart = false;
@@ -204,32 +227,26 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
 }
 
 export function clearCartStorage(isLoggedIn: boolean) {
-  isSyncingCart = true;
   lastUserActionTime = Date.now();
   localRevision++;
   try {
     sessionStorage.removeItem(GUEST_CART_KEY);
     localStorage.setItem('hf_user_cart', JSON.stringify([]));
     window.dispatchEvent(new CustomEvent('hf_cart_cleared'));
-    const token = getSavedToken();
-    if (isLoggedIn && token) {
-      const deviceId = getDeviceId();
-      fetchApi<{ success: boolean; revision?: number }>('/cart/sync', {
-        method: 'POST',
-        body: JSON.stringify({ items: [], action: 'clear', isUserAction: true, revision: localRevision, deviceId }),
-      })
-        .then((res) => {
-          if (res && typeof res.revision === 'number') {
-            localRevision = Math.max(localRevision, res.revision);
-          }
-        })
-        .catch((err) => console.warn('Cart clear sync warning:', err))
-        .finally(() => {
-          isSyncingCart = false;
-        });
-    } else {
+
+    if (!isLoggedIn) {
       isSyncingCart = false;
+      return;
     }
+
+    if (isSyncingCart) {
+      pendingSyncItems = [];
+      pendingIsLoggedIn = isLoggedIn;
+      console.log('[CartSync] Active sync in progress. Queued clear operation.');
+      return;
+    }
+
+    sendCartSync([], isLoggedIn);
   } catch (err) {
     console.error('Failed to clear cart storage:', err);
     isSyncingCart = false;

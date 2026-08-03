@@ -790,28 +790,31 @@ app.get(['/api/v1/cart/revision', '/api/cart/revision', '/v1/cart/revision', '/c
       }
     }
 
-    try {
-      const searchRes = await wcFetch('customers', { params: { email } });
-      if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-        const cust = searchRes.data[0];
-        const metaList = Array.isArray(cust.meta_data) ? cust.meta_data : [];
+    // Only hit WooCommerce customer database once per container boot to protect server resources
+    if (!userCartRevisionsMap.has(email)) {
+      try {
+        const searchRes = await wcFetch('customers', { params: { email } });
+        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+          const cust = searchRes.data[0];
+          const metaList = Array.isArray(cust.meta_data) ? cust.meta_data : [];
 
-        const revMeta = metaList.find((m: any) => m.key === 'hf_cart_revision');
-        if (revMeta && revMeta.value !== undefined) {
-          const parsedRev = parseInt(revMeta.value, 10);
-          if (!isNaN(parsedRev) && parsedRev > revision) {
-            revision = parsedRev;
-            userCartRevisionsMap.set(email, revision);
+          const revMeta = metaList.find((m: any) => m.key === 'hf_cart_revision');
+          if (revMeta && revMeta.value !== undefined) {
+            const parsedRev = parseInt(revMeta.value, 10);
+            if (!isNaN(parsedRev) && parsedRev > revision) {
+              revision = parsedRev;
+              userCartRevisionsMap.set(email, revision);
 
-            const devMeta = metaList.find((m: any) => m.key === 'hf_last_device_id');
-            if (devMeta && devMeta.value) {
-              lastDeviceId = String(devMeta.value);
-              lastActiveDeviceIdMap.set(email, lastDeviceId);
+              const devMeta = metaList.find((m: any) => m.key === 'hf_last_device_id');
+              if (devMeta && devMeta.value) {
+                lastDeviceId = String(devMeta.value);
+                lastActiveDeviceIdMap.set(email, lastDeviceId);
+              }
             }
           }
         }
-      }
-    } catch {}
+      } catch {}
+    }
 
     return res.json({ success: true, revision, lastDeviceId });
   } catch {
