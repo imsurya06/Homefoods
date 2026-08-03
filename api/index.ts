@@ -181,11 +181,15 @@ function getOrderStatusDetails(status: string): { stage: number; label: string }
   if (s === 'kitchen' || s === 'on-hold' || s === 'on_hold' || s.includes('kitchen')) {
     return { stage: 2, label: 'Kitchen Preparation' };
   }
-  if (s === 'pending' || s === 'pending-payment' || s === 'confirmed' || s === 'processing' || s === 'auto-draft' || s.includes('process')) {
+  if (s === 'confirmed' || s === 'processing' || s === 'auto-draft' || s.includes('process')) {
     return { stage: 1, label: 'Order Confirmed' };
   }
-  if (s === 'cancelled' || s === 'refunded' || s === 'failed') {
-    return { stage: 0, label: s === 'cancelled' ? 'Order Cancelled' : s === 'refunded' ? 'Order Refunded' : 'Payment Failed' };
+  if (s === 'pending' || s === 'pending-payment' || s === 'cancelled' || s === 'refunded' || s === 'failed') {
+    let label = 'Payment Pending';
+    if (s === 'failed') label = 'Payment Failed';
+    if (s === 'cancelled') label = 'Order Cancelled';
+    if (s === 'refunded') label = 'Order Refunded';
+    return { stage: 0, label };
   }
 
   return { stage: 2, label: status || 'Order Confirmed' };
@@ -1207,9 +1211,14 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
 
     const lineItems = items.map((item: any) => {
       const pid = parseInt(item.productId);
+      const price = parseFloat(item.pricePerUnit) || 50;
+      const qty = item.quantity || 1;
+      const lineTotal = (price * qty).toFixed(2);
       return {
         product_id: !isNaN(pid) && pid > 0 ? pid : 35,
-        quantity: item.quantity || 1,
+        quantity: qty,
+        subtotal: lineTotal,
+        total: lineTotal,
       };
     });
 
