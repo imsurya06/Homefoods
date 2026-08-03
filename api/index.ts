@@ -81,6 +81,8 @@ function decodeHtmlEntities(str: string): string {
     .replace(/&nbsp;/g, ' ');
 }
 
+let cachedSecurityCookie = 'humans_21909=1';
+
 // Native Node fetch wrapper for WooCommerce REST API (Zero external CJS module issues on Vercel)
 async function wcFetch(endpoint: string, options: { method?: string; body?: any; params?: Record<string, any> } = {}) {
   const storeUrl = (process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com').replace(/\/$/, '');
@@ -95,12 +97,18 @@ async function wcFetch(endpoint: string, options: { method?: string; body?: any;
 
   const url = `${storeUrl}/wp-json/wc/v3/${endpoint.replace(/^\//, '')}?${queryParams.toString()}`;
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
+
+  if (cachedSecurityCookie) {
+    headers['Cookie'] = cachedSecurityCookie;
+  }
+
   const fetchOptions: RequestInit = {
     method: options.method || 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
+    headers,
   };
 
   if (options.body) {
@@ -108,8 +116,30 @@ async function wcFetch(endpoint: string, options: { method?: string; body?: any;
   }
 
   try {
-    const response = await fetch(url, fetchOptions);
-    const data = await response.json();
+    let response = await fetch(url, fetchOptions);
+    let text = await response.text();
+
+    // Check for DDoS cookie challenge: e.g. <script>document.cookie = "humans_21909=1"; ...
+    if (text.includes('document.cookie =') && text.includes('reload')) {
+      const match = text.match(/document\.cookie\s*=\s*"([^"]+)"/);
+      if (match && match[1]) {
+        cachedSecurityCookie = match[1];
+        console.log('[wcFetch] Detected new DDoS cookie wall challenge. Retrying with:', cachedSecurityCookie);
+
+        // Update headers and retry once
+        headers['Cookie'] = cachedSecurityCookie;
+        response = await fetch(url, fetchOptions);
+        text = await response.text();
+      }
+    }
+
+    let data = null;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      console.warn(`[wcFetch] Failed to parse JSON response from ${endpoint}. Response length: ${text.length}`);
+    }
+
     return { ok: response.ok, status: response.status, data };
   } catch (err: any) {
     console.error(`wcFetch network error for ${endpoint}:`, err.message);
