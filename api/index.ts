@@ -178,10 +178,10 @@ function getOrderStatusDetails(status: string): { stage: number; label: string }
   if (s === 'dispatched' || s === 'shipped' || s === 'out_for_delivery' || s === 'out-for-delivery' || s.includes('dispatch') || s.includes('ship')) {
     return { stage: 3, label: 'Dispatched & Out for Delivery' };
   }
-  if (s === 'kitchen' || s === 'processing' || s === 'on-hold' || s === 'on_hold' || s.includes('kitchen') || s.includes('process')) {
+  if (s === 'kitchen' || s === 'on-hold' || s === 'on_hold' || s.includes('kitchen')) {
     return { stage: 2, label: 'Kitchen Preparation' };
   }
-  if (s === 'pending' || s === 'pending-payment' || s === 'confirmed' || s === 'auto-draft') {
+  if (s === 'pending' || s === 'pending-payment' || s === 'confirmed' || s === 'processing' || s === 'auto-draft' || s.includes('process')) {
     return { stage: 1, label: 'Order Confirmed' };
   }
   if (s === 'cancelled' || s === 'refunded' || s === 'failed') {
@@ -792,6 +792,7 @@ app.get(['/api/v1/cart/revision', '/api/cart/revision', '/v1/cart/revision', '/c
 
     // Only hit WooCommerce customer database once per container boot to protect server resources
     if (!userCartRevisionsMap.has(email)) {
+      userCartRevisionsMap.set(email, revision);
       try {
         const searchRes = await wcFetch('customers', { params: { email } });
         if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
@@ -1197,7 +1198,7 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       payment_method: 'razorpay',
       payment_method_title: 'Razorpay (UPI/Cards/NetBanking)',
       set_paid: false,
-      status: 'confirmed',
+      status: 'processing',
       ...(existingCustomerId > 0 ? { customer_id: existingCustomerId } : {}),
       meta_data: [
         { key: '_order_ref_code', value: orderRefCode },
