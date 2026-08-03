@@ -758,6 +758,7 @@ function writeDiskCart(email: string, items: any[], revision: number, isClear: b
 const userCartClearFlags = new Map<string, boolean>();
 const userCartRevisionsMap = new Map<string, number>();
 const lastActiveDeviceIdMap = new Map<string, string>();
+const customerIdCache = new Map<string, number>();
 
 // GET /api/v1/cart/revision (Lightweight revision check for cross-device sync)
 app.get(['/api/v1/cart/revision', '/api/cart/revision', '/v1/cart/revision', '/cart/revision'], async (req, res) => {
@@ -856,9 +857,16 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
 
       // Await WooCommerce customer metadata update to guarantee database vault persistence before returning HTTP response
       try {
-        const searchRes = await wcFetch('customers', { params: { email } });
-        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-          const wcId = searchRes.data[0].id;
+        let wcId = customerIdCache.get(email);
+        if (!wcId) {
+          const searchRes = await wcFetch('customers', { params: { email } });
+          if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+            wcId = searchRes.data[0].id;
+            customerIdCache.set(email, wcId);
+          }
+        }
+
+        if (wcId) {
           await wcFetch(`customers/${wcId}`, {
             method: 'PUT',
             body: {
@@ -925,9 +933,24 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
 
     // Always fetch latest state from WooCommerce Customer Database Vault (Single Source of Truth)
     try {
-      const searchRes = await wcFetch('customers', { params: { email } });
-      if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-        const cust = searchRes.data[0];
+      let cust: any = null;
+      let wcId = customerIdCache.get(email);
+      if (wcId) {
+        const fetchRes = await wcFetch(`customers/${wcId}`);
+        if (fetchRes.ok && fetchRes.data) {
+          cust = fetchRes.data;
+        }
+      }
+
+      if (!cust) {
+        const searchRes = await wcFetch('customers', { params: { email } });
+        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+          cust = searchRes.data[0];
+          customerIdCache.set(email, cust.id);
+        }
+      }
+
+      if (cust) {
         const metaList = Array.isArray(cust.meta_data) ? cust.meta_data : [];
 
         // 1. Fetch revision

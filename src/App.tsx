@@ -49,16 +49,19 @@ export function App() {
           console.log('[CartSync] fetchCurrentUser returned empty/null user');
         }
       });
-      fetchRemoteCart().then(({ items: remoteItems, cartCleared }) => {
-        console.log('[CartSync] syncUserAndCart fetchRemoteCart resolved items:', remoteItems, 'cartCleared:', cartCleared);
-        if (isMounted && remoteItems && Array.isArray(remoteItems)) {
-          setCartItems((prev) => {
-            if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
-              return prev;
+      checkRemoteCartRevision().then(({ shouldUpdate, revision: serverRevision }) => {
+        if (shouldUpdate && isMounted) {
+          fetchRemoteCart(serverRevision).then(({ items: remoteItems }) => {
+            if (isMounted && remoteItems && Array.isArray(remoteItems)) {
+              setCartItems((prev) => {
+                if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
+                  return prev;
+                }
+                console.log('[CartSync] syncUserAndCart updating state to', remoteItems);
+                cartItemsRef.current = remoteItems;
+                return remoteItems;
+              });
             }
-            console.log('[CartSync] syncUserAndCart updating state from', prev, 'to', remoteItems);
-            cartItemsRef.current = remoteItems;
-            return remoteItems;
           });
         }
       });
