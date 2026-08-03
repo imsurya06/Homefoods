@@ -42,8 +42,6 @@ export function getDeviceId(): string {
   }
 }
 
-const CLEAR_LOCK_KEY = 'hf_cart_explicitly_cleared';
-
 let isSyncingCart = false;
 let localRevision = 0;
 let lastUserActionTime = 0;
@@ -51,17 +49,11 @@ let lastUserActionTime = 0;
 export function recordUserCartAction() {
   lastUserActionTime = Date.now();
   localRevision++;
-  try {
-    localStorage.removeItem(CLEAR_LOCK_KEY);
-  } catch {}
 }
 
 export function resetLocalRevision() {
   localRevision = 0;
   lastUserActionTime = 0;
-  try {
-    localStorage.removeItem(CLEAR_LOCK_KEY);
-  } catch {}
 }
 
 export function isUserRecentlyActive(): boolean {
@@ -104,20 +96,6 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
   try {
     const token = getSavedToken();
     if (!token) return { items: getStoredCart(false), cartCleared: false };
-
-    // Persistent Clear Lock Check: If local cart was explicitly cleared by user on this session, do NOT restore
-    const isExplicitlyCleared = (() => {
-      try {
-        return localStorage.getItem(CLEAR_LOCK_KEY) === 'true';
-      } catch {
-        return false;
-      }
-    })();
-
-    if (isExplicitlyCleared) {
-      console.log('[CartSync] fetchRemoteCart blocked by explicit clear lock');
-      return { items: [], cartCleared: true };
-    }
 
     const localItems = getStoredCart(true);
 
@@ -232,7 +210,6 @@ export function clearCartStorage(isLoggedIn: boolean) {
   lastUserActionTime = Date.now();
   localRevision++;
   try {
-    localStorage.setItem(CLEAR_LOCK_KEY, 'true');
     sessionStorage.removeItem(GUEST_CART_KEY);
     localStorage.setItem('hf_user_cart', JSON.stringify([]));
     window.dispatchEvent(new CustomEvent('hf_cart_cleared'));
