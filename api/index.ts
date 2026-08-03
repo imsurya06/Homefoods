@@ -946,6 +946,19 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
           }
         }
 
+        const expectedRev = parseInt(req.query.revision as string, 10) || 0;
+
+        // If the database is lagging behind what the client expects, handle it gracefully
+        if (expectedRev > 0 && serverRev < expectedRev) {
+          if (revision >= expectedRev) {
+            // We have the expected items cached in memory or disk, return them
+            return res.json({ success: true, items, revision, lastActiveDeviceId, cartCleared });
+          }
+          // WooCommerce database is lagging and we don't have it in memory, flag it as lagging
+          console.log(`[CartGet] Database is lagging (server: ${serverRev}, expected: ${expectedRev})`);
+          return res.json({ success: true, isLagging: true, items, revision, lastActiveDeviceId, cartCleared });
+        }
+
         // Adopt WooCommerce values ONLY if they are newer or if local is uninitialized
         if (serverRev > revision || revision === 0) {
           items = serverItems;

@@ -81,9 +81,9 @@ export function App() {
         const token = localStorage.getItem('hf_auth_token');
         if (token && !getIsSyncingCart()) {
           try {
-            const { shouldUpdate } = await checkRemoteCartRevision();
+            const { shouldUpdate, revision: serverRevision } = await checkRemoteCartRevision();
             if (shouldUpdate && isMounted) {
-              const { items: remoteItems, cartCleared } = await fetchRemoteCart();
+              const { items: remoteItems, cartCleared } = await fetchRemoteCart(serverRevision);
               if (isMounted && remoteItems && Array.isArray(remoteItems)) {
                 setCartItems((prev) => {
                   if (cartCleared && remoteItems.length === 0) {

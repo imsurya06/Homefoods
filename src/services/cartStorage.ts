@@ -92,7 +92,7 @@ export async function checkRemoteCartRevision(): Promise<{
 
 let lastFetchRequestTime = 0;
 
-export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleared: boolean }> {
+export async function fetchRemoteCart(expectedRevision?: number): Promise<{ items: CartItem[]; cartCleared: boolean }> {
   try {
     const token = getSavedToken();
     if (!token) return { items: getStoredCart(false), cartCleared: false };
@@ -108,13 +108,20 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
     const requestTime = Date.now();
     lastFetchRequestTime = requestTime;
 
+    const deviceId = getDeviceId();
+    let url = `/cart/get?deviceId=${deviceId}`;
+    if (expectedRevision !== undefined) {
+      url += `&revision=${expectedRevision}`;
+    }
+
     const res = await fetchApi<{
       success: boolean;
       items: CartItem[];
       revision?: number;
       lastActiveDeviceId?: string;
       cartCleared?: boolean;
-    }>('/cart/get');
+      isLagging?: boolean;
+    }>(url);
 
     console.log('[CartSync] fetchRemoteCart API res:', res, 'localItems:', localItems);
 
@@ -125,6 +132,11 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
     }
 
     if (res && res.success && Array.isArray(res.items)) {
+      if (res.isLagging) {
+        console.log('[CartSync] fetchRemoteCart blocked: server database is lagging behind expected revision');
+        return { items: localItems, cartCleared: false };
+      }
+
       const serverRevision = res.revision || 0;
       const cartCleared = !!res.cartCleared && res.items.length === 0;
 
