@@ -138,6 +138,11 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
       const serverRevision = res.revision || 0;
       const cartCleared = !!res.cartCleared && res.items.length === 0;
 
+      // Monotonic Shield: If user is actively shopping/modifying, protect local state from older/same server states
+      if (isUserRecentlyActive() && serverRevision <= localRevision) {
+        return { items: localItems, cartCleared: false };
+      }
+
       // Database Vault Source of Truth: Always adopt server account cart if content differs or server revision is newer
       const isDifferent = JSON.stringify(localItems) !== JSON.stringify(res.items);
 

@@ -760,24 +760,28 @@ app.get(['/api/v1/cart/revision', '/api/cart/revision', '/v1/cart/revision', '/c
       }
     }
 
-    if (revision === 0) {
-      try {
-        const searchRes = await wcFetch('customers', { params: { email } });
-        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-          const cust = searchRes.data[0];
-          const metaList = Array.isArray(cust.meta_data) ? cust.meta_data : [];
-          const savedCartMeta = metaList.find((m: any) => m.key === 'hf_saved_cart' || m.key === '_saved_cart');
-          if (savedCartMeta && savedCartMeta.value) {
-            const parsed = typeof savedCartMeta.value === 'string' ? JSON.parse(savedCartMeta.value) : savedCartMeta.value;
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              revision = 1;
-              userCartRevisionsMap.set(email, 1);
-              userCartsMap.set(email, parsed);
-            }
+    try {
+      const searchRes = await wcFetch('customers', { params: { email } });
+      if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+        const cust = searchRes.data[0];
+        const metaList = Array.isArray(cust.meta_data) ? cust.meta_data : [];
+
+        const revMeta = metaList.find((m: any) => m.key === 'hf_cart_revision');
+        if (revMeta && revMeta.value !== undefined) {
+          const parsedRev = parseInt(revMeta.value, 10);
+          if (!isNaN(parsedRev) && parsedRev > revision) {
+            revision = parsedRev;
+            userCartRevisionsMap.set(email, revision);
           }
         }
-      } catch {}
-    }
+
+        const devMeta = metaList.find((m: any) => m.key === 'hf_last_device_id');
+        if (devMeta && devMeta.value) {
+          lastDeviceId = String(devMeta.value);
+          lastActiveDeviceIdMap.set(email, lastDeviceId);
+        }
+      }
+    } catch {}
 
     return res.json({ success: true, revision, lastDeviceId });
   } catch {
@@ -827,6 +831,9 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
               meta_data: [
                 { key: 'hf_saved_cart', value: JSON.stringify(validItems) },
                 { key: '_saved_cart', value: JSON.stringify(validItems) },
+                { key: 'hf_cart_revision', value: nextRev.toString() },
+                { key: 'hf_last_device_id', value: devId },
+                { key: 'hf_cart_cleared', value: isClear ? 'true' : 'false' },
               ],
             },
           });
@@ -872,33 +879,56 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
         revision = diskRecord.revision || 0;
         cartCleared = !!diskRecord.isClear;
         if (diskRecord.lastDeviceId) lastActiveDeviceId = diskRecord.lastDeviceId;
-        userCartsMap.set(email, items);
-        userCartRevisionsMap.set(email, revision);
-        userCartClearFlags.set(email, cartCleared);
-        if (lastActiveDeviceId) lastActiveDeviceIdMap.set(email, lastActiveDeviceId);
       }
     }
 
-    // Fallback: If memory & disk cache have 0 items and cart was NOT cleared, fetch saved cart from WooCommerce customer database meta
-    if (items.length === 0 && !cartCleared) {
-      try {
-        const searchRes = await wcFetch('customers', { params: { email } });
-        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-          const cust = searchRes.data[0];
-          const metaList = Array.isArray(cust.meta_data) ? cust.meta_data : [];
-          const savedCartMeta = metaList.find((m: any) => m.key === 'hf_saved_cart' || m.key === '_saved_cart');
-          if (savedCartMeta && savedCartMeta.value) {
-            const parsed = typeof savedCartMeta.value === 'string' ? JSON.parse(savedCartMeta.value) : savedCartMeta.value;
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              items = parsed;
-              revision = Math.max(revision, 1);
-              userCartsMap.set(email, items);
-              userCartRevisionsMap.set(email, revision);
-              writeDiskCart(email, items, revision, false, lastActiveDeviceId);
-            }
+    // Always fetch latest state from WooCommerce Customer Database Vault (Single Source of Truth)
+    try {
+      const searchRes = await wcFetch('customers', { params: { email } });
+      if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+        const cust = searchRes.data[0];
+        const metaList = Array.isArray(cust.meta_data) ? cust.meta_data : [];
+
+        // 1. Fetch revision
+        const revMeta = metaList.find((m: any) => m.key === 'hf_cart_revision');
+        const parsedRev = revMeta ? parseInt(revMeta.value, 10) : 0;
+        const serverRev = isNaN(parsedRev) ? 0 : parsedRev;
+
+        // 2. Fetch cart cleared flag
+        const clearedMeta = metaList.find((m: any) => m.key === 'hf_cart_cleared');
+        const serverCleared = clearedMeta ? clearedMeta.value === 'true' || clearedMeta.value === true : false;
+
+        // 3. Fetch last active device ID
+        const devMeta = metaList.find((m: any) => m.key === 'hf_last_device_id');
+        const serverDevId = devMeta ? String(devMeta.value) : '';
+
+        // 4. Fetch cart items
+        const savedCartMeta = metaList.find((m: any) => m.key === 'hf_saved_cart' || m.key === '_saved_cart');
+        let serverItems: any[] = [];
+        if (savedCartMeta && savedCartMeta.value) {
+          const parsed = typeof savedCartMeta.value === 'string' ? JSON.parse(savedCartMeta.value) : savedCartMeta.value;
+          if (Array.isArray(parsed)) {
+            serverItems = parsed;
           }
         }
-      } catch {}
+
+        // Adopt WooCommerce values if they are newer or if local is uninitialized
+        if (serverRev > revision || (revision === 0 && serverRev > 0) || (serverRev === 0 && serverItems.length > 0) || (JSON.stringify(items) !== JSON.stringify(serverItems))) {
+          items = serverItems;
+          revision = Math.max(revision, serverRev);
+          cartCleared = serverCleared;
+          lastActiveDeviceId = serverDevId;
+
+          // Sync back to memory and disk cache
+          userCartsMap.set(email, items);
+          userCartRevisionsMap.set(email, revision);
+          userCartClearFlags.set(email, cartCleared);
+          if (lastActiveDeviceId) lastActiveDeviceIdMap.set(email, lastActiveDeviceId);
+          writeDiskCart(email, items, revision, cartCleared, lastActiveDeviceId);
+        }
+      }
+    } catch (err) {
+      console.warn('WooCommerce customer cart fetch error:', err);
     }
 
     return res.json({ success: true, items, revision, lastActiveDeviceId, cartCleared });
