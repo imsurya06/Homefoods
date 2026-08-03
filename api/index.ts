@@ -816,11 +816,12 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
       userCartsMap.set(email, finalItems);
       writeDiskCart(email, finalItems, nextRev, isClear, devId);
 
-      // Asynchronous background update to WooCommerce customer metadata
-      wcFetch('customers', { params: { email } }).then((searchRes) => {
+      // Await WooCommerce customer metadata update to guarantee database vault persistence before returning HTTP response
+      try {
+        const searchRes = await wcFetch('customers', { params: { email } });
         if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
           const wcId = searchRes.data[0].id;
-          wcFetch(`customers/${wcId}`, {
+          await wcFetch(`customers/${wcId}`, {
             method: 'PUT',
             body: {
               meta_data: [
@@ -828,9 +829,11 @@ app.post(['/api/v1/cart/sync', '/api/cart/sync', '/v1/cart/sync', '/cart/sync'],
                 { key: '_saved_cart', value: JSON.stringify(validItems) },
               ],
             },
-          }).catch(() => {});
+          });
         }
-      }).catch(() => {});
+      } catch (err: any) {
+        console.warn('Failed to sync metadata to WooCommerce customer:', err.message);
+      }
 
       return res.json({ success: true, revision: nextRev, items: validItems });
     }
