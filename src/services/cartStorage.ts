@@ -66,9 +66,6 @@ export async function checkRemoteCartRevision(): Promise<{
   lastDeviceId: string;
 }> {
   try {
-    // Shield active device from background polling overwrites while user is actively browsing/shopping
-    if (isUserRecentlyActive()) return { shouldUpdate: false, revision: localRevision, lastDeviceId: '' };
-
     const token = getSavedToken();
     if (!token) return { shouldUpdate: false, revision: localRevision, lastDeviceId: '' };
 
@@ -79,7 +76,11 @@ export async function checkRemoteCartRevision(): Promise<{
       const serverRev = res.revision;
       const lastDev = res.lastDeviceId || '';
 
-      // Signal Trigger: Update if server revision is strictly newer AND action came from another device
+      // Cross-Device Sync Signal: Update ONLY if action originated from ANOTHER device
+      if (lastDev && lastDev !== myDeviceId) {
+        return { shouldUpdate: true, revision: serverRev, lastDeviceId: lastDev };
+      }
+
       if (serverRev > localRevision && lastDev !== myDeviceId) {
         return { shouldUpdate: true, revision: serverRev, lastDeviceId: lastDev };
       }

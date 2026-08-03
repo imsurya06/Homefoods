@@ -11,7 +11,7 @@ import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
 import { type CartItem } from './data/bestsellers';
 import { fetchCurrentUser, logoutCustomer, getSavedUserProfile, type UserProfile } from './services/authService';
-import { getStoredCart, fetchRemoteCart, saveCartItems, clearCartStorage, mergeCartItems } from './services/cartStorage';
+import { getStoredCart, fetchRemoteCart, saveCartItems, clearCartStorage, mergeCartItems, checkRemoteCartRevision } from './services/cartStorage';
 
 export function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'shop'>('home');
@@ -72,17 +72,20 @@ export function App() {
         const token = localStorage.getItem('hf_auth_token');
         if (token) {
           try {
-            const { items: remoteItems, cartCleared } = await fetchRemoteCart();
-            if (isMounted && remoteItems && Array.isArray(remoteItems)) {
-              setCartItems((prev) => {
-                if (cartCleared && remoteItems.length === 0) {
-                  cartItemsRef.current = [];
-                  return [];
-                }
-                if (JSON.stringify(prev) === JSON.stringify(remoteItems)) return prev;
-                cartItemsRef.current = remoteItems;
-                return remoteItems;
-              });
+            const { shouldUpdate } = await checkRemoteCartRevision();
+            if (shouldUpdate && isMounted) {
+              const { items: remoteItems, cartCleared } = await fetchRemoteCart();
+              if (isMounted && remoteItems && Array.isArray(remoteItems)) {
+                setCartItems((prev) => {
+                  if (cartCleared && remoteItems.length === 0) {
+                    cartItemsRef.current = [];
+                    return [];
+                  }
+                  if (JSON.stringify(prev) === JSON.stringify(remoteItems)) return prev;
+                  cartItemsRef.current = remoteItems;
+                  return remoteItems;
+                });
+              }
             }
           } catch {}
         }
