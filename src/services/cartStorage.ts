@@ -80,12 +80,15 @@ export async function checkRemoteCartRevision(): Promise<{
     const myDeviceId = getDeviceId();
     const res = await fetchApi<{ success: boolean; revision: number; lastDeviceId?: string }>('/cart/revision');
 
+    console.log('[CartSync] checkRemoteCartRevision res:', res, 'localRevision:', localRevision, 'myDeviceId:', myDeviceId);
+
     if (res && res.success && typeof res.revision === 'number') {
       const serverRev = res.revision;
       const lastDev = res.lastDeviceId || '';
 
       // Cross-Device Sync Signal: Update ONLY if server has a newer revision AND action originated from ANOTHER device
       if (serverRev > localRevision && lastDev !== myDeviceId) {
+        console.log('[CartSync] Triggering update! serverRev > localRevision && lastDev !== myDeviceId');
         return { shouldUpdate: true, revision: serverRev, lastDeviceId: lastDev };
       }
     }
@@ -112,6 +115,7 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
     })();
 
     if (isExplicitlyCleared) {
+      console.log('[CartSync] fetchRemoteCart blocked by explicit clear lock');
       return { items: [], cartCleared: true };
     }
 
@@ -119,6 +123,7 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
 
     // If local cart is currently sending POST sync, protect local state during write
     if (isSyncingCart) {
+      console.log('[CartSync] fetchRemoteCart blocked by active sync');
       return { items: localItems, cartCleared: false };
     }
 
@@ -133,8 +138,11 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
       cartCleared?: boolean;
     }>('/cart/get');
 
+    console.log('[CartSync] fetchRemoteCart API res:', res, 'localItems:', localItems);
+
     // Discard response if a newer fetch request was dispatched while this request was traveling over HTTP
     if (requestTime < lastFetchRequestTime) {
+      console.log('[CartSync] fetchRemoteCart discarded stale HTTP response');
       return { items: localItems, cartCleared: false };
     }
 
@@ -144,6 +152,7 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
 
       // Monotonic Shield: If user is actively shopping/modifying, protect local state from older/same server states
       if (isUserRecentlyActive() && serverRevision <= localRevision) {
+        console.log('[CartSync] fetchRemoteCart blocked by active user shield (monotonic check)');
         return { items: localItems, cartCleared: false };
       }
 
@@ -151,6 +160,7 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
       const isDifferent = JSON.stringify(localItems) !== JSON.stringify(res.items);
 
       if (isDifferent || serverRevision > localRevision || cartCleared) {
+        console.log('[CartSync] Adopting server items:', res.items, 'serverRevision:', serverRevision);
         localRevision = Math.max(localRevision, serverRevision);
         localStorage.setItem('hf_user_cart', JSON.stringify(res.items));
         return { items: res.items, cartCleared };

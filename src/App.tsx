@@ -39,10 +39,17 @@ export function App() {
     let isMounted = true;
 
     const syncUserAndCart = () => {
+      console.log('[CartSync] syncUserAndCart triggered');
       fetchCurrentUser().then((u) => {
-        if (isMounted && u) setUser(u);
+        if (isMounted && u) {
+          console.log('[CartSync] fetchCurrentUser success:', u.email);
+          setUser(u);
+        } else {
+          console.log('[CartSync] fetchCurrentUser returned empty/null user');
+        }
       });
       fetchRemoteCart().then(({ items: remoteItems, cartCleared }) => {
+        console.log('[CartSync] syncUserAndCart fetchRemoteCart resolved items:', remoteItems, 'cartCleared:', cartCleared);
         if (isMounted && remoteItems && Array.isArray(remoteItems)) {
           setCartItems((prev) => {
             if (cartCleared && remoteItems.length === 0) {
@@ -55,6 +62,7 @@ export function App() {
             if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
               return prev;
             }
+            console.log('[CartSync] syncUserAndCart updating state from', prev, 'to', remoteItems);
             cartItemsRef.current = remoteItems;
             return remoteItems;
           });
