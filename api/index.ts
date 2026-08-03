@@ -772,13 +772,13 @@ app.get(['/api/v1/cart/revision', '/api/cart/revision', '/v1/cart/revision', '/c
           if (!isNaN(parsedRev) && parsedRev > revision) {
             revision = parsedRev;
             userCartRevisionsMap.set(email, revision);
-          }
-        }
 
-        const devMeta = metaList.find((m: any) => m.key === 'hf_last_device_id');
-        if (devMeta && devMeta.value) {
-          lastDeviceId = String(devMeta.value);
-          lastActiveDeviceIdMap.set(email, lastDeviceId);
+            const devMeta = metaList.find((m: any) => m.key === 'hf_last_device_id');
+            if (devMeta && devMeta.value) {
+              lastDeviceId = String(devMeta.value);
+              lastActiveDeviceIdMap.set(email, lastDeviceId);
+            }
+          }
         }
       }
     } catch {}
@@ -912,8 +912,8 @@ app.get(['/api/v1/cart/get', '/api/cart/get', '/v1/cart/get', '/cart/get'], asyn
           }
         }
 
-        // Adopt WooCommerce values if they are newer or if local is uninitialized
-        if (serverRev > revision || (revision === 0 && serverRev > 0) || (serverRev === 0 && serverItems.length > 0) || (JSON.stringify(items) !== JSON.stringify(serverItems))) {
+        // Adopt WooCommerce values ONLY if they are newer or if local is uninitialized
+        if (serverRev > revision || revision === 0) {
           items = serverItems;
           revision = Math.max(revision, serverRev);
           cartCleared = serverCleared;
