@@ -11,7 +11,7 @@ import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
 import { type CartItem } from './data/bestsellers';
 import { fetchCurrentUser, logoutCustomer, getSavedUserProfile, type UserProfile } from './services/authService';
-import { getStoredCart, fetchRemoteCart, saveCartItems, clearCartStorage, mergeCartItems, checkRemoteCartRevision, resetLocalRevision } from './services/cartStorage';
+import { getStoredCart, fetchRemoteCart, saveCartItems, clearCartStorage, mergeCartItems, checkRemoteCartRevision, resetLocalRevision, getIsSyncingCart } from './services/cartStorage';
 
 export function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'shop'>('home');
@@ -79,7 +79,7 @@ export function App() {
       if (!isMounted) return;
       timerId = setTimeout(async () => {
         const token = localStorage.getItem('hf_auth_token');
-        if (token) {
+        if (token && !getIsSyncingCart()) {
           try {
             const { shouldUpdate } = await checkRemoteCartRevision();
             if (shouldUpdate && isMounted) {
@@ -99,7 +99,7 @@ export function App() {
           } catch {}
         }
         scheduleNextPoll();
-      }, 2500);
+      }, 1500);
     };
 
     scheduleNextPoll();

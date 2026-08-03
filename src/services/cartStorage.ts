@@ -153,6 +153,10 @@ export async function fetchRemoteCart(): Promise<{ items: CartItem[]; cartCleare
   return { items: getStoredCart(true), cartCleared: false };
 }
 
+export function getIsSyncingCart(): boolean {
+  return isSyncingCart;
+}
+
 export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
   isSyncingCart = true;
   recordUserCartAction();
@@ -163,9 +167,7 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
     } catch (err) {
       console.error('Failed to save guest cart to sessionStorage:', err);
     }
-    setTimeout(() => {
-      isSyncingCart = false;
-    }, 1000);
+    isSyncingCart = false;
     return;
   }
 
@@ -190,14 +192,10 @@ export function saveCartItems(cartItems: CartItem[], isLoggedIn: boolean) {
         })
         .catch((err) => console.warn('Cart sync warning:', err))
         .finally(() => {
-          setTimeout(() => {
-            isSyncingCart = false;
-          }, 2000);
+          isSyncingCart = false;
         });
     } else {
-      setTimeout(() => {
-        isSyncingCart = false;
-      }, 1000);
+      isSyncingCart = false;
     }
   } catch (err) {
     console.error('Failed to save user cart:', err);
@@ -227,14 +225,10 @@ export function clearCartStorage(isLoggedIn: boolean) {
         })
         .catch((err) => console.warn('Cart clear sync warning:', err))
         .finally(() => {
-          setTimeout(() => {
-            isSyncingCart = false;
-          }, 3000);
+          isSyncingCart = false;
         });
     } else {
-      setTimeout(() => {
-        isSyncingCart = false;
-      }, 1000);
+      isSyncingCart = false;
     }
   } catch (err) {
     console.error('Failed to clear cart storage:', err);
