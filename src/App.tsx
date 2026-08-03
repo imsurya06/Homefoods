@@ -11,13 +11,48 @@ import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
 import { type CartItem } from './data/bestsellers';
 import { fetchCurrentUser, logoutCustomer, getSavedUserProfile, type UserProfile } from './services/authService';
-import { getStoredCart, fetchRemoteCart, saveCartItems, clearCartStorage, mergeCartItems, checkRemoteCartRevision, resetLocalRevision } from './services/cartStorage';
+import { getStoredCart, fetchRemoteCart, saveCartItems, clearCartStorage, mergeCartItems, checkRemoteCartRevision, resetLocalRevision, getDeviceId } from './services/cartStorage';
 
 export function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'shop'>('home');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeNotification, setActiveNotification] = useState<string | null>(null);
+
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const originalLog = console.log;
+    const originalWarn = console.warn;
+    const originalError = console.error;
+
+    const addLog = (type: 'log' | 'warn' | 'error', args: any[]) => {
+      const text = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+      if (text.includes('[CartSync]') || text.includes('Cart') || text.includes('sync')) {
+        setDebugLogs((prev) => [...prev.slice(-99), `[${new Date().toLocaleTimeString()}] [${type.toUpperCase()}] ${text}`]);
+      }
+    };
+
+    console.log = (...args) => {
+      addLog('log', args);
+      originalLog.apply(console, args);
+    };
+    console.warn = (...args) => {
+      addLog('warn', args);
+      originalWarn.apply(console, args);
+    };
+    console.error = (...args) => {
+      addLog('error', args);
+      originalError.apply(console, args);
+    };
+
+    return () => {
+      console.log = originalLog;
+      console.warn = originalWarn;
+      console.error = originalError;
+    };
+  }, []);
 
   // User Auth & Modal States with instant persistence across page refreshes
   const [user, setUser] = useState<UserProfile | null>(() => getSavedUserProfile());
@@ -477,6 +512,62 @@ export function App() {
           setIsCartOpen(true);
         }}
       />
+
+      {/* Floating 🐛 Debug Sync Button */}
+      <div className="fixed bottom-4 left-4 z-[9999] flex flex-col items-start gap-2">
+        <button
+          onClick={() => setIsDebugOpen(!isDebugOpen)}
+          className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-[10px] px-3 py-2 rounded-full shadow-2xl flex items-center gap-1.5 transition-all border border-purple-500 cursor-pointer"
+        >
+          <span>🐛 Debug Sync ({debugLogs.length})</span>
+        </button>
+
+        {/* Debug Console Panel Overlay */}
+        {isDebugOpen && (
+          <div className="bg-black/95 text-green-400 font-mono text-[9px] w-[300px] max-w-[calc(100vw-32px)] h-[320px] rounded-2xl shadow-2xl border border-gray-800 flex flex-col justify-between overflow-hidden">
+            <div className="bg-gray-900 border-b border-gray-800 px-3 py-2 flex items-center justify-between">
+              <span className="font-extrabold text-white text-[10px]">Sync Console Logs</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setDebugLogs([])}
+                  className="text-gray-400 hover:text-white font-bold cursor-pointer"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={() => setIsDebugOpen(false)}
+                  className="text-gray-400 hover:text-white font-bold cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="p-3 overflow-y-auto flex-1 text-left space-y-1.5 selection:bg-green-800">
+              {debugLogs.length === 0 ? (
+                <div className="text-gray-500 text-center py-8">No [CartSync] logs yet...</div>
+              ) : (
+                debugLogs.map((log, idx) => (
+                  <div key={idx} className="whitespace-pre-wrap break-all leading-normal">
+                    {log}
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="bg-gray-900 px-3 py-2 border-t border-gray-800 text-[8px] text-gray-500 flex justify-between">
+              <span>Device ID: {getDeviceId().substring(0, 15)}...</span>
+              <button
+                onClick={() => {
+                  const token = localStorage.getItem('hf_auth_token');
+                  alert(`Token: ${token ? token.substring(0, 15) + '...' : 'none'}`);
+                }}
+                className="text-purple-400 hover:underline cursor-pointer"
+              >
+                Token Info
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
