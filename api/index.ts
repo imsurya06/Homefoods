@@ -1431,10 +1431,11 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
   }
 });
 
-// GET /api/v1/checkout/track/*
-app.get(['/api/v1/checkout/track/*', '/api/checkout/track/*', '/v1/checkout/track/*', '/checkout/track/*'], async (req, res) => {
+// GET /api/v1/checkout/track/*id
+app.get(['/api/v1/checkout/track/*id', '/api/checkout/track/*id', '/v1/checkout/track/*id', '/checkout/track/*id'], async (req, res) => {
   try {
-    const rawInput = (req.params[0] || '').trim();
+    const idParam = req.params.id;
+    const rawInput = Array.isArray(idParam) ? idParam.join('/') : (idParam || '').trim();
     const cleanId = rawInput.replace(/^#/, '').trim();
     const searchCore = cleanId.replace(/^HF-/i, '').trim();
     const searchLower = cleanId.toLowerCase();
