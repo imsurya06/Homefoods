@@ -775,7 +775,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     <input
                       type="text"
                       value={guestSearchInput}
-                      onChange={(e) => setGuestSearchInput(e.target.value)}
+                      onChange={(e) => {
+                        setGuestSearchInput(e.target.value);
+                        if (!e.target.value.trim()) {
+                          setGuestSearchResult(null);
+                          setGuestSearchError(null);
+                        }
+                      }}
                       placeholder="Enter Order ID (e.g. 118)"
                       className="w-full pl-8 pr-2 py-2 bg-white rounded-xl border border-gray-200 focus:border-[#95CD1A] text-xs font-bold font-numeric focus:outline-none"
                     />
@@ -835,176 +841,196 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </div>
                 ) : (
                   <div className="space-y-3.5">
-                    {orders.map((ord) => {
-                      const isExpanded = expandedOrderId === ord.id || expandedOrderId?.toString() === ord.id.toString();
-
-                      // Compute food names summary
-                      const foodNamesSummary = ord.items && ord.items.length > 0
-                        ? ord.items.map((i: any) => `${i.name}${i.quantity > 1 ? ` (${i.quantity}x)` : ''}`).join(', ')
-                        : 'Homemade South Indian Food Delicacies';
-
-                      // Status Stage & Label Calculation
-                      const rawStatus = (ord.status || '').toLowerCase().trim();
-                      const rawLabel = (ord.statusLabel || '').toLowerCase().trim();
-
-                      let stage = ord.stage ?? 2;
-                      if (rawStatus.includes('dispatch') || rawStatus.includes('shipped') || rawStatus.includes('out_for_delivery') || rawLabel.includes('dispatch') || rawLabel.includes('shipped')) {
-                        stage = 3;
-                      } else if (rawStatus.includes('deliver') || rawStatus.includes('complete') || rawLabel.includes('deliver') || rawLabel.includes('complete')) {
-                        stage = 4;
-                      } else if (rawStatus.includes('kitchen') || rawStatus.includes('process') || rawStatus.includes('hold') || rawLabel.includes('kitchen') || rawLabel.includes('process')) {
-                        stage = 2;
+                    {(() => {
+                      const displayList = [...orders];
+                      if (guestSearchResult) {
+                        const guestOrderObj = {
+                          id: guestSearchResult.orderId || guestSearchResult.id,
+                          orderRefCode: guestSearchResult.orderRefCode,
+                          status: guestSearchResult.status,
+                          statusLabel: guestSearchResult.statusLabel,
+                          stage: guestSearchResult.stage,
+                          total: guestSearchResult.total,
+                          currency: guestSearchResult.currency || '₹',
+                          dateCreated: guestSearchResult.dateCreated,
+                          items: guestSearchResult.items || [],
+                          shippingAddress: guestSearchResult.shippingAddress || '',
+                        };
+                        if (!displayList.some(o => o.id.toString() === guestOrderObj.id.toString())) {
+                          displayList.unshift(guestOrderObj);
+                        }
                       }
+                      return displayList.map((ord) => {
+                        const isExpanded = expandedOrderId === ord.id || expandedOrderId?.toString() === ord.id.toString();
 
-                      const stageLabel = ord.statusLabel || (stage === 3 ? 'Dispatched' : stage === 4 ? 'Delivered' : stage === 2 ? 'Kitchen' : 'Confirmed');
+                        // Compute food names summary
+                        const foodNamesSummary = ord.items && ord.items.length > 0
+                          ? ord.items.map((i: any) => `${i.name}${i.quantity > 1 ? ` (${i.quantity}x)` : ''}`).join(', ')
+                          : 'Homemade South Indian Food Delicacies';
 
-                      return (
-                        <div
-                          key={ord.id}
-                          className={`rounded-2xl border transition-all overflow-hidden ${
-                            isExpanded
-                              ? 'border-[#95CD1A] bg-white shadow-md'
-                              : 'border-gray-200 hover:border-[#95CD1A]/50 bg-white'
-                          }`}
-                        >
-                          {/* Order Summary Header Card (Always Visible) */}
-                          <div className="p-4 space-y-2">
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-black text-[#1F2937] font-numeric">
-                                    Order #{ord.orderRefCode || `HF-${ord.id}`}
-                                  </span>
-                                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#F7FCE8] text-[#95CD1A] border border-[#ECF9CA]">
-                                    {stageLabel}
-                                  </span>
+                        // Status Stage & Label Calculation
+                        const rawStatus = (ord.status || '').toLowerCase().trim();
+                        const rawLabel = (ord.statusLabel || '').toLowerCase().trim();
+
+                        let stage = ord.stage ?? 2;
+                        if (rawStatus.includes('dispatch') || rawStatus.includes('shipped') || rawStatus.includes('out_for_delivery') || rawLabel.includes('dispatch') || rawLabel.includes('shipped')) {
+                          stage = 3;
+                        } else if (rawStatus.includes('deliver') || rawStatus.includes('complete') || rawLabel.includes('deliver') || rawLabel.includes('complete')) {
+                          stage = 4;
+                        } else if (rawStatus.includes('kitchen') || rawStatus.includes('process') || rawStatus.includes('hold') || rawLabel.includes('kitchen') || rawLabel.includes('process')) {
+                          stage = 2;
+                        }
+
+                        const stageLabel = ord.statusLabel || (stage === 3 ? 'Dispatched' : stage === 4 ? 'Delivered' : stage === 2 ? 'Kitchen' : 'Confirmed');
+
+                        return (
+                          <div
+                            key={ord.id}
+                            className={`rounded-2xl border transition-all overflow-hidden ${
+                              isExpanded
+                                ? 'border-[#95CD1A] bg-white shadow-md'
+                                : 'border-gray-200 hover:border-[#95CD1A]/50 bg-white'
+                            }`}
+                          >
+                            {/* Order Summary Header Card (Always Visible) */}
+                            <div className="p-4 space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-[#1F2937] font-numeric">
+                                      Order #{ord.orderRefCode || `HF-${ord.id}`}
+                                    </span>
+                                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#F7FCE8] text-[#95CD1A] border border-[#ECF9CA]">
+                                      {stageLabel}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-500 font-medium mt-0.5">
+                                    {ord.dateCreated ? new Date(ord.dateCreated).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently Placed'}
+                                  </p>
                                 </div>
-                                <p className="text-xs text-gray-500 font-medium mt-0.5">
-                                  {ord.dateCreated ? new Date(ord.dateCreated).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently Placed'}
-                                </p>
-                              </div>
 
-                              <div className="text-right shrink-0 font-numeric">
-                                <span className="text-sm font-black text-[#1F2937] block">
-                                  ₹{ord.total}
-                                </span>
-                                <span className="text-[10px] text-gray-400 font-bold">
-                                  {ord.items?.length || 1} {ord.items?.length === 1 ? 'Item' : 'Items'}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Prominent Food Item Name Display */}
-                            <div className="pt-2 border-t border-gray-100 flex items-start gap-2">
-                              <span className="text-xs font-bold text-[#95CD1A] shrink-0">Items:</span>
-                              <span className="text-xs font-extrabold text-[#1F2937] line-clamp-2 leading-snug">
-                                {foodNamesSummary}
-                              </span>
-                            </div>
-
-                            {/* Dropdown Toggle Button */}
-                            <button
-                              onClick={() => toggleAccordion(ord.id)}
-                              className="w-full pt-2 flex items-center justify-between text-xs font-extrabold text-[#95CD1A] hover:text-[#7EB30E] transition-colors cursor-pointer"
-                            >
-                              <span>{isExpanded ? 'Hide Tracking Details' : 'View Tracking Details & Items'}</span>
-                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                            </button>
-                          </div>
-
-                          {/* Accordion Expanded Tracking Details */}
-                          {isExpanded && (
-                            <div className="px-4 pb-4 pt-3 bg-[#FAFBF6] border-t border-gray-100 space-y-4 animate-in slide-in-from-top-2 duration-200">
-                              
-                              {/* 4-Step Visual Tracking Stepper */}
-                              <div className="space-y-2">
-                                <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400 block">
-                                  Live Delivery Progress
-                                </span>
-
-                                <div className="grid grid-cols-4 gap-1 relative text-center pt-2">
-                                  {/* Progress Line */}
-                                  <div className="absolute top-5 left-[12%] right-[12%] h-1 bg-gray-200 -z-0">
-                                    <div
-                                      className="h-full bg-[#95CD1A] transition-all duration-500"
-                                      style={{ width: `${Math.max(0, Math.min(100, ((stage - 1) / 3) * 100))}%` }}
-                                    />
-                                  </div>
-
-                                  {/* Step 1: Confirmed */}
-                                  <div className="flex flex-col items-center gap-1 relative z-10">
-                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                                      stage >= 1 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
-                                    }`}>
-                                      <CheckCircle2 className="w-4 h-4" />
-                                    </div>
-                                    <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Confirmed</span>
-                                  </div>
-
-                                  {/* Step 2: Kitchen */}
-                                  <div className="flex flex-col items-center gap-1 relative z-10">
-                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                                      stage >= 2 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
-                                    }`}>
-                                      <Clock className="w-4 h-4" />
-                                    </div>
-                                    <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Kitchen</span>
-                                  </div>
-
-                                  {/* Step 3: Dispatched */}
-                                  <div className="flex flex-col items-center gap-1 relative z-10">
-                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                                      stage >= 3 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
-                                    }`}>
-                                      <Truck className="w-4 h-4" />
-                                    </div>
-                                    <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Dispatched</span>
-                                  </div>
-
-                                  {/* Step 4: Delivered */}
-                                  <div className="flex flex-col items-center gap-1 relative z-10">
-                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                                      stage >= 4 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
-                                    }`}>
-                                      <PackageCheck className="w-4 h-4" />
-                                    </div>
-                                    <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Delivered</span>
-                                  </div>
+                                <div className="text-right shrink-0 font-numeric">
+                                  <span className="text-sm font-black text-[#1F2937] block">
+                                    ₹{ord.total}
+                                  </span>
+                                  <span className="text-[10px] text-gray-400 font-bold">
+                                    {ord.items?.length || 1} {ord.items?.length === 1 ? 'Item' : 'Items'}
+                                  </span>
                                 </div>
                               </div>
 
-                              {/* Items Breakdown List */}
-                              {ord.items && ord.items.length > 0 && (
-                                <div className="space-y-1.5 pt-2 border-t border-gray-200/60">
-                                  <span className="text-[11px] font-extrabold text-gray-500 uppercase tracking-wider block">
-                                    Food Items Breakdown
+                              {/* Prominent Food Item Name Display */}
+                              <div className="pt-2 border-t border-gray-100 flex items-start gap-2">
+                                <span className="text-xs font-bold text-[#95CD1A] shrink-0">Items:</span>
+                                <span className="text-xs font-extrabold text-[#1F2937] line-clamp-2 leading-snug">
+                                  {foodNamesSummary}
+                                </span>
+                              </div>
+
+                              {/* Dropdown Toggle Button */}
+                              <button
+                                onClick={() => toggleAccordion(ord.id)}
+                                className="w-full pt-2 flex items-center justify-between text-xs font-extrabold text-[#95CD1A] hover:text-[#7EB30E] transition-colors cursor-pointer"
+                              >
+                                <span>{isExpanded ? 'Hide Tracking Details' : 'View Tracking Details & Items'}</span>
+                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              </button>
+                            </div>
+
+                            {/* Accordion Expanded Tracking Details */}
+                            {isExpanded && (
+                              <div className="px-4 pb-4 pt-3 bg-[#FAFBF6] border-t border-gray-100 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                                
+                                {/* 4-Step Visual Tracking Stepper */}
+                                <div className="space-y-2">
+                                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400 block">
+                                    Live Delivery Progress
                                   </span>
-                                  <div className="divide-y divide-gray-200/60 bg-white rounded-xl p-2.5 border border-gray-200/80 text-xs">
-                                    {ord.items.map((it: any, i: number) => (
-                                      <div key={i} className="py-1 flex items-center justify-between">
-                                        <span className="font-extrabold text-gray-800">{it.name}</span>
-                                        <span className="font-bold text-gray-500 font-numeric">x{it.quantity}</span>
+
+                                  <div className="grid grid-cols-4 gap-1 relative text-center pt-2">
+                                    {/* Progress Line */}
+                                    <div className="absolute top-5 left-[12%] right-[12%] h-1 bg-gray-200 -z-0">
+                                      <div
+                                        className="h-full bg-[#95CD1A] transition-all duration-500"
+                                        style={{ width: `${Math.max(0, Math.min(100, ((stage - 1) / 3) * 100))}%` }}
+                                      />
+                                    </div>
+
+                                    {/* Step 1: Confirmed */}
+                                    <div className="flex flex-col items-center gap-1 relative z-10">
+                                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                        stage >= 1 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
+                                      }`}>
+                                        <CheckCircle2 className="w-4 h-4" />
                                       </div>
-                                    ))}
+                                      <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Confirmed</span>
+                                    </div>
+
+                                    {/* Step 2: Kitchen */}
+                                    <div className="flex flex-col items-center gap-1 relative z-10">
+                                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                        stage >= 2 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
+                                      }`}>
+                                        <Clock className="w-4 h-4" />
+                                      </div>
+                                      <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Kitchen</span>
+                                    </div>
+
+                                    {/* Step 3: Dispatched */}
+                                    <div className="flex flex-col items-center gap-1 relative z-10">
+                                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                        stage >= 3 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
+                                      }`}>
+                                        <Truck className="w-4 h-4" />
+                                      </div>
+                                      <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Dispatched</span>
+                                    </div>
+
+                                    {/* Step 4: Delivered */}
+                                    <div className="flex flex-col items-center gap-1 relative z-10">
+                                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                        stage >= 4 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
+                                      }`}>
+                                        <PackageCheck className="w-4 h-4" />
+                                      </div>
+                                      <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Delivered</span>
+                                    </div>
                                   </div>
                                 </div>
-                              )}
 
-                              {/* Shipping Address */}
-                              {ord.shippingAddress && (
-                                <div className="pt-2 border-t border-gray-200/60 text-xs">
-                                  <span className="font-extrabold text-gray-500 uppercase tracking-wider block text-[10px] mb-0.5">
-                                    Delivery Address:
-                                  </span>
-                                  <span className="font-medium text-gray-700 block">{ord.shippingAddress}</span>
-                                </div>
-                              )}
+                                {/* Items Breakdown List */}
+                                {ord.items && ord.items.length > 0 && (
+                                  <div className="space-y-1.5 pt-2 border-t border-gray-200/60">
+                                    <span className="text-[11px] font-extrabold text-gray-500 uppercase tracking-wider block">
+                                      Food Items Breakdown
+                                    </span>
+                                    <div className="divide-y divide-gray-200/60 bg-white rounded-xl p-2.5 border border-gray-200/80 text-xs">
+                                      {ord.items.map((it: any, i: number) => (
+                                        <div key={i} className="py-1 flex items-center justify-between">
+                                          <span className="font-extrabold text-gray-800">{it.name}</span>
+                                          <span className="font-bold text-gray-500 font-numeric">x{it.quantity}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
 
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                                {/* Shipping Address */}
+                                {ord.shippingAddress && (
+                                  <div className="pt-2 border-t border-gray-200/60 text-xs">
+                                    <span className="font-extrabold text-gray-500 uppercase tracking-wider block text-[10px] mb-0.5">
+                                      Delivery Address:
+                                    </span>
+                                    <span className="font-medium text-gray-700 block">{ord.shippingAddress}</span>
+                                  </div>
+                                )}
+
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 )}
               </div>

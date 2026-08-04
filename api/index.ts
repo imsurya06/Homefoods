@@ -1197,7 +1197,7 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
     const firstName = fullName.split(' ')[0] || 'Customer';
     const lastName = fullName.split(' ').slice(1).join(' ') || 'Order';
 
-    const orderRefCode = generateOrderRefCode();
+    let orderRefCode = 'HF-PENDING';
 
     let existingCustomerId = authCustomerId;
     if (!existingCustomerId && customerEmail) {
@@ -1288,11 +1288,24 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
     };
 
     let wcOrderId = Date.now();
+    orderRefCode = `HF-${wcOrderId}`;
     try {
       const wcRes = await wcFetch('orders', { method: 'POST', body: wcOrderPayload });
       if (wcRes.ok && wcRes.data && wcRes.data.id) {
         wcOrderId = wcRes.data.id;
+        orderRefCode = `HF-${wcOrderId}`;
         totalAmountInRupees = parseFloat(wcRes.data.total) || totalAmountInRupees;
+        
+        // Save the correct reference code to WooCommerce metadata
+        await wcFetch(`orders/${wcOrderId}`, {
+          method: 'PUT',
+          body: {
+            meta_data: [
+              { key: '_order_ref_code', value: orderRefCode },
+              { key: '_customer_phone', value: customerPhone },
+            ],
+          },
+        }).catch(() => {});
       }
     } catch {}
 
@@ -1430,7 +1443,17 @@ app.get(['/api/v1/checkout/track/:id', '/api/checkout/track/:id', '/v1/checkout/
       } catch {}
     }
 
-    // Strategy 2: Search recent orders by ref code, ID, email, or phone
+    // Strategy 2: WooCommerce Native Search Query API (Searches billing names, addresses, emails, phones, etc.)
+    if (!order) {
+      try {
+        const searchRes = await wcFetch('orders', { params: { search: cleanId, per_page: 5 } });
+        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+          order = searchRes.data.find((o: any) => o && o.status !== 'trash');
+        }
+      } catch {}
+    }
+
+    // Strategy 3: Scan recent 100 orders as a fallback (for older custom metadata reference codes)
     if (!order) {
       try {
         const recentOrdersRes = await wcFetch('orders', { params: { per_page: 100 } });
