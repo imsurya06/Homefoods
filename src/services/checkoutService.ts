@@ -25,7 +25,7 @@ export interface CheckoutPayload {
 
 export async function processRazorpayCheckout(
   payload: CheckoutPayload,
-  onSuccess: (response: { wcOrderId: number; paymentId: string }) => void,
+  onSuccess: (response: { wcOrderId: number; paymentId: string; orderRefCode?: string }) => void,
   onError: (errorMsg: string) => void
 ) {
   try {
@@ -125,6 +125,7 @@ export async function processRazorpayCheckout(
             onSuccess({
               wcOrderId: orderRes.wcOrderId,
               paymentId: response.razorpay_payment_id,
+              orderRefCode: verifyRes.orderRefCode || orderRes.orderRefCode,
             });
           } else {
             onError('Payment signature verification failed.');

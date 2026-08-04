@@ -138,7 +138,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [orderSuccess, setOrderSuccess] = useState<{ wcOrderId: number; paymentId: string } | null>(null);
+  const [orderSuccess, setOrderSuccess] = useState<{ wcOrderId: number; paymentId: string; orderRefCode?: string } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Orders Tab State
