@@ -164,6 +164,41 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
   }, [user, isOpen]);
 
+  // Auto-search guest order if id parameter is present in URL hash
+  useEffect(() => {
+    if (isOpen && activeTab === 'orders') {
+      const hash = window.location.hash;
+      if (hash.includes('?id=')) {
+        const urlParams = new URLSearchParams(hash.substring(hash.indexOf('?')));
+        const idParam = urlParams.get('id');
+        if (idParam) {
+          const decoded = decodeURIComponent(idParam);
+          setGuestSearchInput(decoded);
+          
+          setGuestSearchLoading(true);
+          setGuestSearchError(null);
+          trackSingleOrder(decoded.trim().replace(/^#/, ''))
+            .then((data) => {
+              if (data && data.orderId && !data.notFound) {
+                setGuestSearchResult(data);
+                setExpandedOrderId(data.orderId);
+              } else {
+                setGuestSearchError(data?.message || 'Order not found. Check ID.');
+              }
+            })
+            .catch(() => {
+              setGuestSearchError('Error fetching order details.');
+            })
+            .finally(() => {
+              setGuestSearchLoading(false);
+              // Clean the hash so it doesn't trigger repeatedly
+              window.history.replaceState(null, '', '#track');
+            });
+        }
+      }
+    }
+  }, [isOpen, activeTab]);
+
   useEffect(() => {
     try {
       localStorage.setItem('hf_customer_name', customerName);

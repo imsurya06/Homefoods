@@ -288,8 +288,11 @@ async function sendOrderTrackingEmail(options: {
                       <h2 style="font-size: 22px; font-weight: 800; margin: 0 0 8px 0; color: #1F2937;">
                         Thank you for your order, ${customerName}! 🎉
                       </h2>
-                      <p style="font-size: 14px; color: #4B5563; line-height: 1.6; margin: 0 0 24px 0;">
+                      <p style="font-size: 14px; color: #4B5563; line-height: 1.6; margin: 0 0 16px 0;">
                         We have received your payment and our kitchen team has started preparing your fresh, traditional South Indian delicacies.
+                      </p>
+                      <p style="font-size: 14px; color: #4B5563; line-height: 1.6; margin: 0 0 24px 0; background-color: #FAFBF6; padding: 14px; border-left: 4px solid #95CD1A; border-radius: 8px;">
+                        💡 <strong>Order Tracking Info:</strong> You can track this order anytime on our website using your <strong>Order ID: <span style="font-family: monospace; font-size: 15px; color: #95CD1A;">${orderRefCode}</span></strong>.
                       </p>
                       <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FAFBF6; border: 1px solid #ECF9CA; border-radius: 14px; padding: 18px; margin-bottom: 24px;">
                         <tr>
@@ -1293,7 +1296,14 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       const wcRes = await wcFetch('orders', { method: 'POST', body: wcOrderPayload });
       if (wcRes.ok && wcRes.data && wcRes.data.id) {
         wcOrderId = wcRes.data.id;
-        orderRefCode = `HF-${wcOrderId}`;
+        
+        // Construct the custom time//date//ordernumber reference code in IST (UTC+5:30)
+        const nowIst = new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000));
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        const HHMM = `${pad(nowIst.getUTCHours())}${pad(nowIst.getUTCMinutes())}`;
+        const DDMMYY = `${pad(nowIst.getUTCDate())}${pad(nowIst.getUTCMonth() + 1)}${nowIst.getUTCFullYear().toString().slice(-2)}`;
+        orderRefCode = `${HHMM}//${DDMMYY}//${wcOrderId}`;
+        
         totalAmountInRupees = parseFloat(wcRes.data.total) || totalAmountInRupees;
         
         // Save the correct reference code to WooCommerce metadata
@@ -1399,7 +1409,7 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
     }
 
     const displayOrderCode = orderRefCode || `HF-${wcOrderId}`;
-    const trackingLink = `https://homefoods-lac.vercel.app/#track?id=${displayOrderCode}`;
+    const trackingLink = `https://homefoods-lac.vercel.app/#track?id=${encodeURIComponent(displayOrderCode)}`;
 
     if (customerEmail && customerEmail.includes('@')) {
       sendOrderTrackingEmail({
@@ -1421,11 +1431,10 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
   }
 });
 
-// GET /api/v1/checkout/track/:id
-app.get(['/api/v1/checkout/track/:id', '/api/checkout/track/:id', '/v1/checkout/track/:id', '/checkout/track/:id'], async (req, res) => {
+// GET /api/v1/checkout/track/*
+app.get(['/api/v1/checkout/track/*', '/api/checkout/track/*', '/v1/checkout/track/*', '/checkout/track/*'], async (req, res) => {
   try {
-    const { id } = req.params;
-    const rawInput = (id || '').trim();
+    const rawInput = (req.params[0] || '').trim();
     const cleanId = rawInput.replace(/^#/, '').trim();
     const searchCore = cleanId.replace(/^HF-/i, '').trim();
     const searchLower = cleanId.toLowerCase();
@@ -1433,8 +1442,21 @@ app.get(['/api/v1/checkout/track/:id', '/api/checkout/track/:id', '/v1/checkout/
     let order: any = null;
 
     // Strategy 1: Direct numeric order ID fetch
-    const numericId = searchCore.split('-')[0];
-    if (numericId && /^\d+$/.test(numericId)) {
+    let numericId = '';
+    if (searchCore.includes('/')) {
+      const parts = searchCore.split('/');
+      const lastPart = parts[parts.length - 1];
+      if (/^\d+$/.test(lastPart)) {
+        numericId = lastPart;
+      }
+    } else {
+      const splitId = searchCore.split('-')[0];
+      if (/^\d+$/.test(splitId)) {
+        numericId = splitId;
+      }
+    }
+
+    if (numericId) {
       try {
         const wcRes = await wcFetch(`orders/${numericId}`);
         if (wcRes.ok && wcRes.data && wcRes.data.id) {
@@ -1467,7 +1489,10 @@ app.get(['/api/v1/checkout/track/:id', '/api/checkout/track/:id', '/v1/checkout/
             
             const refMeta = (o.meta_data || []).find((m: any) => m.key === '_order_ref_code');
             const refVal = (refMeta?.value || '').toLowerCase().trim();
-            if (refVal && (refVal === searchLower || refVal.includes(searchLower) || searchLower.includes(refVal))) return true;
+            const normRefVal = refVal.replace(/\/+/g, '/');
+            const normSearchLower = searchLower.replace(/\/+/g, '/');
+
+            if (normRefVal && (normRefVal === normSearchLower || normRefVal.includes(normSearchLower) || normSearchLower.includes(normRefVal))) return true;
 
             const bEmail = (o.billing?.email || '').toLowerCase().trim();
             if (bEmail && (bEmail === searchLower || (searchLower.includes('@') && bEmail.includes(searchLower)))) return true;
