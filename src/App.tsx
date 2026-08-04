@@ -263,6 +263,7 @@ export function App() {
     cartItemsRef.current = updated;
     setCartItems(updated);
     saveCartItems(updated, !!user);
+    setCartDrawerInitialTab('cart');
     setIsCartOpen(true);
   };
 
@@ -340,6 +341,7 @@ export function App() {
         <div
           onClick={() => {
             if (activeNotification.toLowerCase().includes('cart') || activeNotification.toLowerCase().includes('item')) {
+              setCartDrawerInitialTab('cart');
               setIsCartOpen(true);
             }
           }}
@@ -358,7 +360,10 @@ export function App() {
       {cartItems.length > 0 && !isCartOpen && (
         <div className="fixed bottom-4 left-3 right-3 sm:bottom-6 sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-xl z-50 animate-in slide-in-from-bottom-6 duration-300">
           <div
-            onClick={() => setIsCartOpen(true)}
+            onClick={() => {
+              setCartDrawerInitialTab('cart');
+              setIsCartOpen(true);
+            }}
             className="bg-[#1F2937] text-white p-3 sm:p-3.5 rounded-2xl shadow-2xl border border-gray-700/80 flex items-center justify-between gap-3 cursor-pointer group hover:bg-black transition-all transform hover:-translate-y-0.5"
           >
             <div className="flex items-center gap-3">
