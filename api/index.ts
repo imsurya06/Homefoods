@@ -1438,7 +1438,9 @@ app.get(['/api/v1/checkout/track/:id', '/api/checkout/track/:id', '/v1/checkout/
       try {
         const wcRes = await wcFetch(`orders/${numericId}`);
         if (wcRes.ok && wcRes.data && wcRes.data.id) {
-          order = wcRes.data;
+          if (wcRes.data.status !== 'trash') {
+            order = wcRes.data;
+          }
         }
       } catch {}
     }
