@@ -152,6 +152,20 @@ export const useSyncStore = create<SyncState>((set) => ({
 
   setCart: (items, revision) => {
     set((state) => {
+      if (revision !== undefined) {
+        if (revision < state.cartRevision) {
+          console.warn(`[Sync Store] Discarding stale server cart revision ${revision} (local: ${state.cartRevision})`);
+          return {};
+        }
+        const hasPendingCartOps = state.offlineQueue.some(
+          (op) => op.type === 'ADD_CART' || op.type === 'REMOVE_CART' || op.type === 'UPDATE_CART' || op.type === 'CLEAR_CART'
+        );
+        if (hasPendingCartOps) {
+          console.log('[Sync Store] Postponing server cart hydration: local modifications are pending upload.');
+          return {};
+        }
+      }
+
       const nextRev = revision !== undefined ? revision : state.cartRevision + 1;
       const key = state.isLoggedIn ? 'hf_user_cart' : 'hf_guest_cart';
       if (state.isLoggedIn) {
@@ -168,6 +182,18 @@ export const useSyncStore = create<SyncState>((set) => ({
 
   setWishlist: (items, revision) => {
     set((state) => {
+      if (revision !== undefined) {
+        if (revision < state.wishlistRevision) {
+          console.warn(`[Sync Store] Discarding stale server wishlist revision ${revision} (local: ${state.wishlistRevision})`);
+          return {};
+        }
+        const hasPendingWishlistOps = state.offlineQueue.some((op) => op.type === 'SYNC_WISHLIST');
+        if (hasPendingWishlistOps) {
+          console.log('[Sync Store] Postponing server wishlist hydration: local modifications are pending upload.');
+          return {};
+        }
+      }
+
       const nextRev = revision !== undefined ? revision : state.wishlistRevision + 1;
       localStorage.setItem('hf_wishlist', JSON.stringify(items));
       if (revision === undefined && state.isLoggedIn) {
@@ -179,6 +205,18 @@ export const useSyncStore = create<SyncState>((set) => ({
 
   setAddresses: (addresses, revision) => {
     set((state) => {
+      if (revision !== undefined) {
+        if (revision < state.addressRevision) {
+          console.warn(`[Sync Store] Discarding stale server address revision ${revision} (local: ${state.addressRevision})`);
+          return {};
+        }
+        const hasPendingAddressOps = state.offlineQueue.some((op) => op.type === 'UPDATE_ADDRESS');
+        if (hasPendingAddressOps) {
+          console.log('[Sync Store] Postponing server addresses hydration: local modifications are pending upload.');
+          return {};
+        }
+      }
+
       const nextRev = revision !== undefined ? revision : state.addressRevision + 1;
       if (revision === undefined && state.isLoggedIn) {
         syncBus.emit('address.changed', addresses);
@@ -190,6 +228,18 @@ export const useSyncStore = create<SyncState>((set) => ({
   updateProfile: (profile, revision) => {
     set((state) => {
       if (!state.user) return {};
+      if (revision !== undefined) {
+        if (revision < state.profileRevision) {
+          console.warn(`[Sync Store] Discarding stale server profile revision ${revision} (local: ${state.profileRevision})`);
+          return {};
+        }
+        const hasPendingProfileOps = state.offlineQueue.some((op) => op.type === 'UPDATE_PROFILE');
+        if (hasPendingProfileOps) {
+          console.log('[Sync Store] Postponing server profile hydration: local modifications are pending upload.');
+          return {};
+        }
+      }
+
       const nextUser = { ...state.user, ...profile };
       localStorage.setItem('hf_user_profile', JSON.stringify(nextUser));
       const nextRev = revision !== undefined ? revision : state.profileRevision + 1;
@@ -201,12 +251,12 @@ export const useSyncStore = create<SyncState>((set) => ({
   },
 
   setRevisions: (revisions) => {
-    set({
-      cartRevision: revisions.cartRevision,
-      wishlistRevision: revisions.wishlistRevision,
-      profileRevision: revisions.profileRevision,
-      addressRevision: revisions.addressRevision,
-    });
+    set((state) => ({
+      cartRevision: Math.max(state.cartRevision, revisions.cartRevision),
+      wishlistRevision: Math.max(state.wishlistRevision, revisions.wishlistRevision),
+      profileRevision: Math.max(state.profileRevision, revisions.profileRevision),
+      addressRevision: Math.max(state.addressRevision, revisions.addressRevision),
+    }));
   },
 
   setPreferences: (preferences) => {
