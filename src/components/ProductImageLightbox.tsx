@@ -8,6 +8,7 @@ interface ProductImageLightboxProps {
   images: ProductImage[];
   initialIndex: number;
   productName: string;
+  description?: string;
 }
 
 export const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
@@ -16,6 +17,7 @@ export const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
   images,
   initialIndex,
   productName,
+  description,
 }) => {
   const [currentIndex, setCurrentIndex] = useState<number>(initialIndex);
   const [isZoomed, setIsZoomed] = useState<boolean>(false);
@@ -188,7 +190,7 @@ export const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
       {/* Lightbox Footer (Captions overlay) */}
       <div className="w-full max-w-2xl px-6 text-center z-10 shrink-0">
         <p className="text-xs sm:text-sm text-gray-200 font-extrabold leading-relaxed animate-in fade-in slide-in-from-bottom-1 duration-300">
-          {getCaption(currentIndex, currentImage.alt)}
+          {description || getCaption(currentIndex, currentImage.alt)}
         </p>
         
         {/* Mobile Swipe Guidance */}

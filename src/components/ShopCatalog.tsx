@@ -39,11 +39,13 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
     images: { id: number; src: string; alt: string }[];
     initialIndex: number;
     productName: string;
+    description?: string;
   }>({
     isOpen: false,
     images: [],
     initialIndex: 0,
     productName: '',
+    description: '',
   });
 
   const openLightbox = (product: Product, index: number) => {
@@ -55,6 +57,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
       images: imgs,
       initialIndex: index,
       productName: product.name,
+      description: product.description,
     });
   };
 
@@ -583,6 +586,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
         images={lightboxState.images}
         initialIndex={lightboxState.initialIndex}
         productName={lightboxState.productName}
+        description={lightboxState.description}
       />
     </section>
   );

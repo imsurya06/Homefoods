@@ -22,11 +22,13 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
     images: { id: number; src: string; alt: string }[];
     initialIndex: number;
     productName: string;
+    description?: string;
   }>({
     isOpen: false,
     images: [],
     initialIndex: 0,
     productName: '',
+    description: '',
   });
 
   const openLightbox = (src: string, alt: string, title: string) => {
@@ -35,6 +37,7 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
       images: [{ id: 1, src, alt }],
       initialIndex: 0,
       productName: title,
+      description: alt,
     });
   };
 
@@ -47,6 +50,7 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
       images: imgs,
       initialIndex: index,
       productName: product.name,
+      description: product.description,
     });
   };
 
@@ -345,6 +349,7 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
         images={lightboxState.images}
         initialIndex={lightboxState.initialIndex}
         productName={lightboxState.productName}
+        description={lightboxState.description}
       />
     </section>
   );
