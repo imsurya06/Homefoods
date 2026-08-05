@@ -813,7 +813,8 @@ async function sendOrderTrackingEmail(options: {
                   <tr>
                     <td align="center" style="background-color: #F9FAFB; padding: 20px 24px; border-top: 1px solid #E5E7EB; font-size: 12px; color: #6B7280; text-align: center;">
                       <p style="margin: 0 0 4px 0; font-weight: 700; color: #374151;">Homemade Foods Madurai</p>
-                      <p style="margin: 0;">Handcrafted traditional delicacies • Madurai, Tamil Nadu, India</p>
+                      <p style="margin: 0 0 4px 0;">Handcrafted traditional delicacies • Madurai, Tamil Nadu, India</p>
+                      <p style="margin: 0; font-size: 11px; color: #9CA3AF;">Support: +91 86677 26345 | care.homemadefoods@gmail.com</p>
                     </td>
                   </tr>
                 </table>
@@ -1018,7 +1019,13 @@ async function sendEmailOtp(email: string, otp: string) {
         <div style="padding: 16px; background-color: #FAFBF6; border: 1px solid #ECF9CA; border-radius: 8px; font-size: 24px; font-weight: bold; color: #95CD1A; text-align: center; margin: 20px 0; letter-spacing: 4px;">
           ${otp}
         </div>
-        <p style="color: #9CA3AF; font-size: 11px;">This code will expire in 15 minutes. If you did not make this request, you can safely ignore this email.</p>
+        <p style="color: #9CA3AF; font-size: 11px; margin-bottom: 12px;">This code will expire in 15 minutes. If you did not make this request, you can safely ignore this email.</p>
+        <hr style="border: 0; border-top: 1px solid #E5E7EB; margin: 16px 0;" />
+        <p style="margin: 0; font-size: 11px; color: #9CA3AF; text-align: center; line-height: 1.5;">
+          <strong>Homemade Foods Madurai</strong><br/>
+          Handcrafted traditional delicacies • Madurai, Tamil Nadu, India<br/>
+          Support: +91 86677 26345 | care.homemadefoods@gmail.com
+        </p>
       </div>
     `
   };
