@@ -475,23 +475,23 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                       </div>
 
                       {/* Content Details */}
-                      <div className="p-3 sm:p-5 flex flex-col justify-between grow space-y-3 sm:space-y-4">
+                      <div className="p-2.5 sm:p-5 flex flex-col justify-between grow space-y-2.5 sm:space-y-4">
 
                         <div className="space-y-1">
                           <h4 className="font-extrabold text-sm sm:text-lg text-[#1F2937] group-hover:text-[#95CD1A] transition-colors leading-tight line-clamp-2">
                             {product.name}
                           </h4>
-                          <p className="text-[11px] sm:text-xs text-gray-500 leading-tight line-clamp-1 sm:line-clamp-2">
+                          <p className="text-[11px] sm:text-xs text-gray-500 leading-tight line-clamp-1 sm:line-clamp-2 hidden sm:block">
                             {product.description}
                           </p>
                         </div>
 
                         {/* Weight Variant Selector & Price */}
-                        <div className="pt-2 sm:pt-3 border-t border-gray-100 space-y-2.5">
+                        <div className="pt-2 sm:pt-3 border-t border-gray-100 space-y-2">
 
                           {/* Prominent Weight Selector Custom Dropdown */}
                           <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-gray-700 block">
+                            <label className="text-xs font-extrabold text-gray-700 hidden sm:block">
                               Weight:
                             </label>
                             <CustomDropdown
@@ -505,13 +505,13 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                            {/* Dynamic Price Display */}
                            <div className="flex items-baseline justify-between pt-1">
                              <div className="flex flex-col text-left">
-                               <span className="text-[10px] sm:text-xs font-bold text-gray-400 block uppercase tracking-wider">
+                               <span className="text-[10px] sm:text-xs font-bold text-gray-400 hidden sm:block uppercase tracking-wider">
                                  Total Price
                                </span>
-                               <div className="flex items-baseline gap-1.5 mt-0.5">
+                               <div className="flex flex-wrap items-baseline gap-1.5 mt-0.5">
                                  {regularPriceInfo && regularPriceInfo.totalPrice > priceInfo.totalPrice && (
                                    <>
-                                     <span className="line-through text-xs sm:text-sm text-gray-400 font-extrabold">
+                                     <span className="line-through text-[11px] sm:text-sm text-gray-400 font-extrabold">
                                        ₹{regularPriceInfo.totalPrice}
                                      </span>
                                      {discountPercent > 0 && (
@@ -526,32 +526,33 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                                  </span>
                                </div>
                              </div>
-                             <span className="text-[10px] sm:text-xs text-gray-400 font-semibold align-self-end mb-1">
+                             <span className="text-[10px] sm:text-xs text-gray-400 font-semibold hidden sm:block align-self-end mb-1">
                                Incl. GST
                              </span>
                            </div>
 
                          </div>
 
-                         {/* Dual Action Buttons: Add to Cart & Order Now (Stacked on mobile, 2 cols on desktop) */}
-                         <div className="pt-1 flex flex-col gap-2 sm:grid sm:grid-cols-2 sm:gap-2">
+                         {/* Dual Action Buttons: Add to Cart & Order Now (Side-by-side on mobile, 2 cols on desktop) */}
+                         <div className="pt-1 flex flex-row gap-1.5 sm:grid sm:grid-cols-2 sm:gap-2 w-full">
                            <button
                              onClick={handleAddToCartClick}
                              disabled={!product.isAvailable}
-                             className={`w-full py-2.5 px-3 font-extrabold text-xs sm:text-xs rounded-xl border transition-all duration-200 shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer text-center group/cartBtn ${
+                             title="Add to Cart"
+                             className={`p-2.5 sm:py-2.5 sm:px-3 font-extrabold text-xs sm:text-xs rounded-xl border transition-all duration-200 shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer text-center group/cartBtn ${
                                product.isAvailable
                                  ? 'bg-[#F7FCE8] hover:bg-[#95CD1A] text-[#1F2937] hover:text-white border-[#95CD1A]/40'
                                  : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
                              }`}
                            >
-                             <ShoppingBag className={`w-3.5 h-3.5 shrink-0 ${product.isAvailable ? 'text-[#95CD1A] group-hover/cartBtn:text-white' : 'text-gray-300'}`} />
-                             <span className="whitespace-nowrap font-black">Add to Cart</span>
+                             <ShoppingBag className={`w-4 h-4 sm:w-3.5 sm:h-3.5 shrink-0 ${product.isAvailable ? 'text-[#95CD1A] group-hover/cartBtn:text-white' : 'text-gray-300'}`} />
+                             <span className="hidden sm:inline whitespace-nowrap font-black">Add to Cart</span>
                            </button>
 
                            <button
                              onClick={handleOrderNowClick}
                              disabled={!product.isAvailable}
-                             className={`w-full py-2.5 px-3 text-white font-extrabold text-xs sm:text-xs rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer text-center ${
+                             className={`flex-1 sm:w-full py-2.5 px-3 text-white font-extrabold text-xs sm:text-xs rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer text-center ${
                                product.isAvailable
                                  ? 'bg-[#95CD1A] hover:bg-[#7EB30E] shadow-md shadow-[#95CD1A]/20 hover:shadow-lg transform hover:-translate-y-0.5'
                                  : 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none'
