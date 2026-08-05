@@ -683,6 +683,8 @@ async function sendOrderTrackingEmail(options: {
     const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
     const smtpUser = process.env.SMTP_USER || '';
     const smtpPass = process.env.SMTP_PASS || '';
+    const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+    const secure = smtpPort === 465;
 
     if (!smtpUser || !smtpPass) {
       console.log(`✉️ Email notification logged (SMTP credentials not configured): Order ${orderRefCode} (#${wcOrderId}) for ${toEmail}. Track Link: ${trackingLink}`);
@@ -691,8 +693,8 @@ async function sendOrderTrackingEmail(options: {
 
     const transporter = nodemailer.createTransport({
       host: smtpHost,
-      port: 587,
-      secure: false,
+      port: smtpPort,
+      secure: secure,
       auth: { user: smtpUser, pass: smtpPass },
     });
 
@@ -990,6 +992,8 @@ async function sendEmailOtp(email: string, otp: string) {
   const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
+  const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+  const secure = smtpPort === 465;
 
   if (!smtpUser || !smtpPass) {
     console.warn('[Mail] SMTP credentials not set. OTP is:', otp);
@@ -998,8 +1002,8 @@ async function sendEmailOtp(email: string, otp: string) {
 
   const transporter = nodemailer.createTransport({
     host: smtpHost,
-    port: 587,
-    secure: false,
+    port: smtpPort,
+    secure: secure,
     auth: { user: smtpUser, pass: smtpPass },
   });
 
