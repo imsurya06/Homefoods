@@ -326,6 +326,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     } else {
       document.body.style.overflow = '';
       hasFetchedOrdersOnce.current = false;
+      setOrderSuccess(null);
     }
     return () => {
       document.body.style.overflow = '';
@@ -496,7 +497,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         onClearCart();
         setCouponCode('');
         setCouponStatus(null);
-        setActiveTab('orders');
+        setCalcSummary(null);
+        setCheckoutError(null);
+        setFieldErrors({});
         if (response && response.wcOrderId) {
           setExpandedOrderId(response.wcOrderId);
         }
@@ -584,8 +587,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
       />
 
-      <div className="absolute inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">
-        <div className="w-full sm:w-screen max-w-full sm:max-w-md bg-white shadow-2xl flex flex-col justify-between transform transition-transform duration-300">
+      <div className="absolute inset-y-0 right-0 w-full sm:w-[460px] max-w-full flex pl-0">
+        <div className="w-full h-full bg-white shadow-2xl flex flex-col justify-between transform transition-transform duration-300">
           
           {/* Top Drawer Header with Segmented Tabs */}
           <div className="p-4 sm:p-5 bg-white border-b border-gray-100 shrink-0 space-y-3">
@@ -606,7 +609,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             {/* Segmented Dual Tab Switcher: Cart vs Your Orders */}
             <div className="flex border border-gray-200 bg-gray-100/80 p-1 rounded-2xl gap-1">
               <button
-                onClick={() => setActiveTab('cart')}
+                onClick={() => {
+                  setActiveTab('cart');
+                  setOrderSuccess(null);
+                }}
                 className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   activeTab === 'cart'
                     ? 'bg-white text-[#95CD1A] shadow-md border border-gray-100'
@@ -623,7 +629,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </button>
 
               <button
-                onClick={() => setActiveTab('orders')}
+                onClick={() => {
+                  setActiveTab('orders');
+                  setOrderSuccess(null);
+                }}
                 className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   activeTab === 'orders'
                     ? 'bg-white text-[#95CD1A] shadow-md border border-gray-100'
@@ -646,7 +655,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
               {orderSuccess ? (
                 /* Order Placed Success Confirmation View */
-                <div className="py-8 text-center space-y-4 animate-in zoom-in-95 duration-300">
+                <div className="py-8 text-center space-y-5 animate-in zoom-in-95 duration-300">
                   <div className="w-16 h-16 bg-[#F7FCE8] text-[#95CD1A] rounded-full flex items-center justify-center mx-auto border-2 border-[#ECF9CA] shadow-md">
                     <CheckCircle2 className="w-10 h-10 stroke-[2.5]" />
                   </div>
@@ -656,13 +665,26 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       Payment Successful!
                     </span>
                     <h3 className="text-2xl font-black text-[#1F2937]">
-                      Order #{(orderSuccess as any).orderRefCode || `HF-${orderSuccess.wcOrderId}`} Confirmed
+                      Order placed successfully
                     </h3>
-                    <p className="text-xs text-gray-500 max-w-xs mx-auto">
-                      Thank you! Your delicious South Indian delicacies are now being prepared in our kitchen.
+                    <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed mt-1.5 px-2">
+                      {isLoggedIn ? (
+                        <>
+                          Your order has been confirmed and is now being processed.
+                          <br />
+                          You can track its progress from <strong className="font-extrabold text-[#1F2937]">My Orders & Tracking</strong>.
+                        </>
+                      ) : (
+                        <>
+                          Thank you for your order. Your tracking link has been sent to your email address.
+                          <br />
+                          Check your email to track your order and receive future delivery updates.
+                        </>
+                      )}
                     </p>
                   </div>
 
+                  {/* Summary Details Box */}
                   <div className="bg-[#FAFBF6] p-4 rounded-2xl border border-[#ECF9CA] text-left text-xs space-y-2 font-medium">
                     <div className="flex justify-between border-b border-gray-200/60 pb-2">
                       <span className="text-gray-500">Order Reference:</span>
@@ -680,28 +702,46 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </div>
                   </div>
 
-                  <div className="pt-2 space-y-2">
-                    <button
-                      onClick={() => {
-                        setExpandedOrderId(orderSuccess.wcOrderId);
-                        setActiveTab('orders');
-                      }}
-                      className="w-full py-3.5 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <Package className="w-4 h-4" />
-                      <span>Track Order Status Live →</span>
-                    </button>
+                  <div className="pt-2 space-y-2.5">
+                    {isLoggedIn ? (
+                      <>
+                        <button
+                          onClick={() => {
+                            if (orderSuccess && orderSuccess.wcOrderId) {
+                              setExpandedOrderId(orderSuccess.wcOrderId);
+                            }
+                            setActiveTab('orders');
+                            setOrderSuccess(null);
+                          }}
+                          className="w-full py-3.5 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <Package className="w-4 h-4 text-white" />
+                          <span>View My Orders</span>
+                        </button>
 
-                    <button
-                      onClick={() => {
-                        setOrderSuccess(null);
-                        onClose();
-                        if (onExploreShop) onExploreShop();
-                      }}
-                      className="w-full py-2.5 text-xs font-bold text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
-                    >
-                      Continue Shopping
-                    </button>
+                        <button
+                          onClick={() => {
+                            setOrderSuccess(null);
+                            onClose();
+                            if (onExploreShop) onExploreShop();
+                          }}
+                          className="w-full py-3 border border-gray-200 hover:bg-gray-50 text-gray-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer"
+                        >
+                          Continue Shopping
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setOrderSuccess(null);
+                          onClose();
+                          if (onExploreShop) onExploreShop();
+                        }}
+                        className="w-full py-3.5 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        Continue Shopping
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : items.length === 0 ? (
