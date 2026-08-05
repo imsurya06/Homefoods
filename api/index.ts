@@ -15,6 +15,8 @@ import dns from 'dns';
 
 dotenv.config();
 
+const APP_URL = (process.env.FRONTEND_URL || 'https://www.homemadefoodsmadurai.com').replace(/\/$/, '');
+
 const app = express();
 
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -2831,7 +2833,7 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
     }
 
     const displayOrderCode = orderRefCode || `HF-${wcOrderId}`;
-    const trackingLink = `https://homefoods-lac.vercel.app/#track?id=${encodeURIComponent(displayOrderCode)}`;
+    const trackingLink = `${APP_URL}/#track?id=${encodeURIComponent(displayOrderCode)}`;
 
     if (customerEmail && customerEmail.includes('@')) {
       sendOrderTrackingEmail({
