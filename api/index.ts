@@ -11,6 +11,7 @@ import compression from 'compression';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
+import dns from 'dns';
 
 dotenv.config();
 
@@ -90,6 +91,41 @@ async function verifyUserExists(customerId: number): Promise<boolean> {
 
   userExistenceCache.set(customerId, { exists: false, lastChecked: now });
   return false;
+}
+
+async function verifyEmailDomain(email: string): Promise<boolean> {
+  const domain = email.split('@')[1];
+  if (!domain) return false;
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        console.warn(`[Email Validation Guard] DNS lookup timed out for domain: ${domain}. Falling back to pass.`);
+        resolve(true); // Fail-open on timeout
+      }
+    }, 1500);
+
+    dns.resolveMx(domain, (err, addresses) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+
+      if (err) {
+        const errCode = (err as any).code;
+        if (errCode === 'ENOTFOUND' || errCode === 'ENODATA') {
+          console.warn(`[Email Validation Guard] DNS check failed: domain ${domain} has no mail server records (code: ${errCode}).`);
+          resolve(false); // Definitely invalid domain
+        } else {
+          console.warn(`[Email Validation Guard] DNS query errored for ${domain} (${err.message}). Falling back to pass.`);
+          resolve(true); // Fail-open on network/DNS server errors
+        }
+      } else {
+        resolve(addresses && addresses.length > 0);
+      }
+    });
+  });
 }
 
 // Middleware to authenticate JWT access tokens
@@ -2376,6 +2412,13 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
     const errorMsg = validation.error.issues.map(i => i.message).join('. ');
     console.warn('[Checkout Validation Failed]:', errorMsg);
     return res.status(400).json({ success: false, code: 'VALIDATION_FAILED', message: errorMsg });
+  }
+
+  const emailDomainValid = await verifyEmailDomain(req.body.customerDetails.email);
+  if (!emailDomainValid) {
+    const errorMsg = `The email domain '${req.body.customerDetails.email.split('@')[1]}' does not exist or cannot receive mail. Please check for typos.`;
+    console.warn('[Checkout Domain Check Failed]:', errorMsg);
+    return res.status(400).json({ success: false, code: 'INVALID_EMAIL_DOMAIN', message: errorMsg });
   }
 
   let existingCustomerId = 0;
