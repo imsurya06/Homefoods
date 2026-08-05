@@ -2343,7 +2343,41 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
   }
 });
 
+const checkoutSchema = z.object({
+  customerDetails: z.object({
+    name: z.string().min(2, "Full name must be at least 2 characters").regex(/^[a-zA-Z\s]+$/, "Full name must contain only letters"),
+    email: z.string().email("Please enter a valid email address"),
+    phone: z.string().regex(/^[6-9]\d{9}$/, "Please enter a valid 10-digit Indian mobile number"),
+  }),
+  shippingAddress: z.object({
+    address: z.string().min(10, "Address must be at least 10 characters long"),
+    city: z.string().min(2, "City must be at least 2 characters long"),
+    state: z.string().optional(),
+    pincode: z.string().regex(/^\d{6}$/, "Pincode must be exactly 6 digits"),
+  }),
+  items: z.array(z.object({
+    productId: z.string(),
+    quantity: z.number().int().min(1),
+    weight: z.string().optional(),
+    pricePerUnit: z.number().optional(),
+  })).min(1, "Cart cannot be empty"),
+  couponCode: z.string().optional(),
+  notes: z.string().optional(),
+  cartRevision: z.number().optional(),
+});
+
 app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/checkout/create-order', '/checkout/create-order'], async (req, res) => {
+  if (req.body.customerDetails && typeof req.body.customerDetails.phone === 'string') {
+    req.body.customerDetails.phone = req.body.customerDetails.phone.replace(/\D/g, '').replace(/^91/, '');
+  }
+
+  const validation = checkoutSchema.safeParse(req.body);
+  if (!validation.success) {
+    const errorMsg = validation.error.issues.map(i => i.message).join('. ');
+    console.warn('[Checkout Validation Failed]:', errorMsg);
+    return res.status(400).json({ success: false, code: 'VALIDATION_FAILED', message: errorMsg });
+  }
+
   let existingCustomerId = 0;
   try {
     const { customerDetails, billingAddress, shippingAddress, items, couponCode, notes, cartRevision } = req.body;

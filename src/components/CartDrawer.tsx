@@ -41,6 +41,29 @@ interface CartDrawerProps {
   initialTab?: 'cart' | 'orders';
 }
 
+const validateEmail = (email: string) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email.trim());
+};
+
+const normalizeMobile = (phone: string) => {
+  return phone.replace(/\D/g, '').replace(/^91/, '');
+};
+
+const validateMobile = (phone: string) => {
+  const normalized = normalizeMobile(phone);
+  const mobileRegex = /^[6-9]\d{9}$/;
+  return mobileRegex.test(normalized);
+};
+
+const validatePincode = (pincode: string) => {
+  return /^\d{6}$/.test(pincode.trim());
+};
+
+const validateName = (name: string) => {
+  return name.trim().length >= 2 && /^[a-zA-Z\s]+$/.test(name.trim());
+};
+
 export const CartDrawer: React.FC<CartDrawerProps> = ({
   isOpen,
   onClose,
@@ -414,23 +437,23 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
 
     const errors: Record<string, string> = {};
-    if (!customerName.trim()) {
-      errors.customerName = 'Full name is required';
+    if (!validateName(customerName)) {
+      errors.customerName = 'Name must contain only letters and be at least 2 characters';
     }
-    if (!mobileNumber.trim() || mobileNumber.trim().length < 10) {
-      errors.mobileNumber = 'Valid 10-digit mobile number required';
+    if (!validateMobile(mobileNumber)) {
+      errors.mobileNumber = 'Enter a valid 10-digit Indian mobile number (starts with 6-9)';
     }
-    if (!email.trim() || !email.includes('@')) {
-      errors.email = 'Valid email address required';
+    if (!validateEmail(email)) {
+      errors.email = 'Please enter a valid email address';
     }
-    if (!shippingAddress.trim()) {
-      errors.shippingAddress = 'Shipping address is required';
+    if (shippingAddress.trim().length < 10) {
+      errors.shippingAddress = 'Shipping address must be at least 10 characters';
     }
-    if (!city.trim()) {
-      errors.city = 'City is required';
+    if (city.trim().length < 2) {
+      errors.city = 'City must be at least 2 characters';
     }
-    if (!pincode.trim() || pincode.trim().length < 6) {
-      errors.pincode = 'Valid 6-digit pincode required';
+    if (!validatePincode(pincode)) {
+      errors.pincode = 'Please enter a valid 6-digit pincode';
     }
 
     if (Object.keys(errors).length > 0) {
@@ -450,7 +473,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       customerDetails: {
         name: customerName.trim(),
         email: email.trim(),
-        phone: mobileNumber.trim(),
+        phone: normalizeMobile(mobileNumber),
       },
       shippingAddress: {
         address: shippingAddress.trim(),
@@ -809,8 +832,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           type="text"
                           value={customerName}
                           onChange={(e) => {
-                            setCustomerName(e.target.value);
-                            if (fieldErrors.customerName) setFieldErrors((prev) => ({ ...prev, customerName: '' }));
+                            const val = e.target.value;
+                            setCustomerName(val);
+                            if (val.trim() && !validateName(val)) {
+                              setFieldErrors((prev) => ({ ...prev, customerName: 'Name must contain only letters and be at least 2 characters.' }));
+                            } else {
+                              setFieldErrors((prev) => ({ ...prev, customerName: '' }));
+                            }
                           }}
                           placeholder="Full Name"
                           className={`w-full px-3 py-2 bg-white rounded-xl border ${
@@ -830,8 +858,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                               type="tel"
                               value={mobileNumber}
                               onChange={(e) => {
-                                setMobileNumber(e.target.value);
-                                if (fieldErrors.mobileNumber) setFieldErrors((prev) => ({ ...prev, mobileNumber: '' }));
+                                const val = e.target.value;
+                                setMobileNumber(val);
+                                if (val.trim() && !validateMobile(val)) {
+                                  setFieldErrors((prev) => ({ ...prev, mobileNumber: 'Enter a valid 10-digit Indian mobile number.' }));
+                                } else {
+                                  setFieldErrors((prev) => ({ ...prev, mobileNumber: '' }));
+                                }
                               }}
                               placeholder="9876543210"
                               className={`w-full pl-7 pr-2 py-2 bg-white rounded-xl border ${
@@ -852,8 +885,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                               type="email"
                               value={email}
                               onChange={(e) => {
-                                setEmail(e.target.value);
-                                if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: '' }));
+                                const val = e.target.value;
+                                setEmail(val);
+                                if (val.trim() && !validateEmail(val)) {
+                                  setFieldErrors((prev) => ({ ...prev, email: 'Please enter a valid email address.' }));
+                                } else {
+                                  setFieldErrors((prev) => ({ ...prev, email: '' }));
+                                }
                               }}
                               placeholder="name@email.com"
                               className={`w-full pl-7 pr-2 py-2 bg-white rounded-xl border ${
@@ -874,8 +912,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           rows={2}
                           value={shippingAddress}
                           onChange={(e) => {
-                            setShippingAddress(e.target.value);
-                            if (fieldErrors.shippingAddress) setFieldErrors((prev) => ({ ...prev, shippingAddress: '' }));
+                            const val = e.target.value;
+                            setShippingAddress(val);
+                            if (val.trim() && val.trim().length < 10) {
+                              setFieldErrors((prev) => ({ ...prev, shippingAddress: 'Address must be at least 10 characters long.' }));
+                            } else {
+                              setFieldErrors((prev) => ({ ...prev, shippingAddress: '' }));
+                            }
                           }}
                           placeholder="Door No, Street Name, Area"
                           className={`w-full px-3 py-2 bg-white rounded-xl border ${
@@ -894,8 +937,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                             type="text"
                             value={city}
                             onChange={(e) => {
-                              setCity(e.target.value);
-                              if (fieldErrors.city) setFieldErrors((prev) => ({ ...prev, city: '' }));
+                              const val = e.target.value;
+                              setCity(val);
+                              if (val.trim() && val.trim().length < 2) {
+                                setFieldErrors((prev) => ({ ...prev, city: 'City must be at least 2 characters.' }));
+                              } else {
+                                setFieldErrors((prev) => ({ ...prev, city: '' }));
+                              }
                             }}
                             placeholder="Madurai"
                             className={`w-full px-3 py-2 bg-white rounded-xl border ${
@@ -913,8 +961,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                             type="text"
                             value={pincode}
                             onChange={(e) => {
-                              setPincode(e.target.value);
-                              if (fieldErrors.pincode) setFieldErrors((prev) => ({ ...prev, pincode: '' }));
+                              const val = e.target.value;
+                              setPincode(val);
+                              if (val.trim() && !validatePincode(val)) {
+                                setFieldErrors((prev) => ({ ...prev, pincode: 'Please enter a valid 6-digit pincode.' }));
+                              } else {
+                                setFieldErrors((prev) => ({ ...prev, pincode: '' }));
+                              }
                             }}
                             placeholder="625001"
                             className={`w-full px-3 py-2 bg-white rounded-xl border ${
