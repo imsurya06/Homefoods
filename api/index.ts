@@ -878,19 +878,35 @@ app.get(['/api/v1/products', '/api/products', '/v1/products', '/products'], asyn
         formattedProducts = wcRes.data.map((p: any) => {
           const primaryCategory = p.categories && p.categories.length > 0 ? p.categories[0] : {};
           const basePrice = parseFloat(p.price || p.regular_price || '70');
+          const regPrice = parseFloat(p.regular_price || p.price || '70');
+          const onSale = p.on_sale === true;
 
           const weightAttr = p.attributes?.find((a: any) => a.name?.toLowerCase() === 'weight')?.options || [];
-          let variants: { weight: string; basePrice: number }[] = [];
+          let variants: { weight: string; basePrice: number; regularPrice?: number }[] = [];
 
           if (weightAttr.length > 0) {
-            variants = weightAttr.map((opt: string, idx: number) => ({
-              weight: decodeHtmlEntities(opt.trim()),
-              basePrice: idx === 0 ? basePrice : Math.round(basePrice * (idx === 1 ? 1.8 : 3.4)),
-            }));
+            variants = weightAttr.map((opt: string, idx: number) => {
+              const multiplier = idx === 0 ? 1 : idx === 1 ? 1.8 : 3.4;
+              const saleP = Math.round(basePrice * multiplier);
+              const regP = Math.round(regPrice * multiplier);
+              return {
+                weight: decodeHtmlEntities(opt.trim()),
+                basePrice: saleP,
+                regularPrice: onSale && regP > saleP ? regP : undefined,
+              };
+            });
           } else if (p.weight) {
-            variants = [{ weight: decodeHtmlEntities(p.weight), basePrice }];
+            variants = [{
+              weight: decodeHtmlEntities(p.weight),
+              basePrice,
+              regularPrice: onSale && regPrice > basePrice ? regPrice : undefined,
+            }];
           } else {
-            variants = [{ weight: '250gms', basePrice }];
+            variants = [{
+              weight: '250gms',
+              basePrice,
+              regularPrice: onSale && regPrice > basePrice ? regPrice : undefined,
+            }];
           }
 
           return {

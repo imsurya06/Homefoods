@@ -4,6 +4,8 @@ import { calculatePriceDetails, type CartItem } from '../data/bestsellers';
 import { PRODUCTS, type Product } from '../data/products';
 import { getLiveProducts, getCachedProductsSync } from '../services/productService';
 
+import { ProductImageLightbox } from './ProductImageLightbox';
+
 interface CuratedProcessSectionProps {
   onAddToCart?: (item: Omit<CartItem, 'id' | 'quantity'>) => void;
   onOrderNow?: (item: Omit<CartItem, 'id' | 'quantity'>) => void;
@@ -15,6 +17,38 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
     return cached && cached.length > 0 ? cached.slice(0, 3) : PRODUCTS.slice(0, 3);
   });
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
+  const [lightboxState, setLightboxState] = useState<{
+    isOpen: boolean;
+    images: { id: number; src: string; alt: string }[];
+    initialIndex: number;
+    productName: string;
+  }>({
+    isOpen: false,
+    images: [],
+    initialIndex: 0,
+    productName: '',
+  });
+
+  const openLightbox = (src: string, alt: string, title: string) => {
+    setLightboxState({
+      isOpen: true,
+      images: [{ id: 1, src, alt }],
+      initialIndex: 0,
+      productName: title,
+    });
+  };
+
+  const openProductLightbox = (product: Product, index: number) => {
+    const imgs = product.images && product.images.length > 0
+      ? product.images
+      : [{ id: 0, src: product.imageUrl, alt: product.name }];
+    setLightboxState({
+      isOpen: true,
+      images: imgs,
+      initialIndex: index,
+      productName: product.name,
+    });
+  };
 
   useEffect(() => {
     getLiveProducts().then((data) => {
@@ -90,7 +124,10 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
             {/* Visual Staggered Photo Collage */}
             <div className="relative w-full max-w-md pt-6">
               {/* Primary Image: Sun-dried Spices */}
-              <div className="relative rounded-2xl overflow-hidden shadow-xl border-4 border-white aspect-4/3 transform -rotate-1 hover:rotate-0 transition-transform duration-500">
+              <div 
+                onClick={() => openLightbox('https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=1000&q=80', 'Sun-dried traditional Indian spices', 'Sun-Dried Spices')}
+                className="relative rounded-2xl overflow-hidden shadow-xl border-4 border-white aspect-4/3 transform -rotate-1 hover:rotate-0 transition-transform duration-500 cursor-pointer"
+              >
                 <img
                   src="https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80"
                   alt="Sun-dried traditional Indian spices"
@@ -103,7 +140,10 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
               </div>
 
               {/* Overlapping Secondary Image: Mortar & Pestle */}
-              <div className="absolute -bottom-6 -right-4 sm:-right-6 w-44 sm:w-52 aspect-square rounded-2xl overflow-hidden shadow-2xl border-4 border-white transform rotate-2 hover:rotate-0 transition-transform duration-500">
+              <div 
+                onClick={() => openLightbox('https://images.unsplash.com/photo-1610057099443-fde8c4d50f91?auto=format&fit=crop&w=1000&q=80', 'Hand-pounding South Indian podi spices', 'Handcrafted Batches')}
+                className="absolute -bottom-6 -right-4 sm:-right-6 w-44 sm:w-52 aspect-square rounded-2xl overflow-hidden shadow-2xl border-4 border-white transform rotate-2 hover:rotate-0 transition-transform duration-500 cursor-pointer"
+              >
                 <img
                   src="https://images.unsplash.com/photo-1610057099443-fde8c4d50f91?auto=format&fit=crop&w=800&q=80"
                   alt="Hand-pounding South Indian podi spices"
@@ -145,6 +185,12 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
                   const currentVariantIdx = selectedVariants[product.id] ?? 0;
                   const currentVariant = product.variants[currentVariantIdx] || product.variants[0];
                   const priceInfo = calculatePriceDetails(currentVariant.basePrice, product.gstPercentage);
+                  const regularPriceInfo = currentVariant.regularPrice
+                    ? calculatePriceDetails(currentVariant.regularPrice, product.gstPercentage)
+                    : null;
+                  const discountPercent = regularPriceInfo
+                    ? Math.round(((regularPriceInfo.totalPrice - priceInfo.totalPrice) / regularPriceInfo.totalPrice) * 100)
+                    : 0;
 
                   const handleOrderNow = () => {
                     const itemData = {
@@ -168,7 +214,10 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
                       className="group bg-white rounded-2xl border border-gray-200 p-4 sm:p-6 shadow-xs hover:shadow-xl hover:border-[#95CD1A]/50 transition-all duration-300 flex flex-col sm:flex-row items-center sm:items-start gap-6 text-left"
                     >
                       {/* Product Image */}
-                      <div className="relative w-full sm:w-44 aspect-square rounded-xl overflow-hidden bg-gray-100 shrink-0 border border-gray-100">
+                      <div 
+                        onClick={() => openProductLightbox(product, 0)}
+                        className="relative w-full sm:w-44 aspect-square rounded-xl overflow-hidden bg-gray-100 shrink-0 border border-gray-100 cursor-pointer"
+                      >
                         <img
                           src={product.imageUrl}
                           alt={product.name}
@@ -187,9 +236,21 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
                             <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
                               {product.categoryName}
                             </span>
-                            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                              {product.gstPercentage}% GST Included
-                            </span>
+                            
+                            {/* Stock Indicator Badge */}
+                            {!product.isAvailable ? (
+                              <span className="text-[10px] font-black text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-md">
+                                Sold Out
+                              </span>
+                            ) : product.stockQuantity !== undefined && product.stockQuantity <= 5 ? (
+                              <span className="text-[10px] font-black text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md animate-pulse">
+                                Only {product.stockQuantity} Left!
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md">
+                                In Stock
+                              </span>
+                            )}
                           </div>
 
                           <h4 className="text-lg sm:text-xl font-extrabold text-[#1F2937] group-hover:text-[#95CD1A] transition-colors mt-1">
@@ -222,16 +283,28 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
                           </div>
 
                           {/* Price Highlights */}
-                          <div className="text-right">
-                            <span className="text-xs text-gray-400 block">Total Price</span>
-                            <div className="flex items-baseline gap-1">
-                              <span className="text-xl sm:text-2xl font-extrabold text-[#1F2937]">
+                          <div className="text-right flex flex-col items-end">
+                            <span className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">Total Price</span>
+                            <div className="flex items-baseline gap-1.5 mt-0.5">
+                              {regularPriceInfo && regularPriceInfo.totalPrice > priceInfo.totalPrice && (
+                                <>
+                                  <span className="line-through text-xs sm:text-sm text-gray-400 font-extrabold">
+                                    ₹{regularPriceInfo.totalPrice}
+                                  </span>
+                                  {discountPercent > 0 && (
+                                    <span className="text-[10px] bg-red-50 text-red-500 font-black px-1.5 py-0.5 rounded-md mr-1">
+                                      {discountPercent}% OFF
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                              <span className="text-xl sm:text-2xl font-black text-[#1F2937]">
                                 ₹{priceInfo.totalPrice}
                               </span>
-                              <span className="text-[11px] text-gray-400 font-normal">
-                                (Base ₹{priceInfo.basePrice} + GST ₹{priceInfo.gstAmount})
-                              </span>
                             </div>
+                            <span className="text-[10px] text-gray-400 font-semibold mt-0.5">
+                              (Base ₹{priceInfo.basePrice} + GST ₹{priceInfo.gstAmount})
+                            </span>
                           </div>
 
                         </div>
@@ -240,10 +313,15 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
                         <div className="pt-2">
                           <button
                             onClick={handleOrderNow}
-                            className="w-full py-3 px-6 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm rounded-xl transition-all duration-300 shadow-md shadow-[#95CD1A]/20 hover:shadow-lg transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 cursor-pointer"
+                            disabled={!product.isAvailable}
+                            className={`w-full py-3 px-6 text-white font-extrabold text-sm rounded-xl transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer ${
+                              product.isAvailable
+                                ? 'bg-[#95CD1A] hover:bg-[#7EB30E] shadow-md shadow-[#95CD1A]/20 hover:shadow-lg transform hover:-translate-y-0.5 active:translate-y-0'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed border-gray-200'
+                            }`}
                           >
-                            <Zap className="w-4 h-4 text-white fill-white" />
-                            <span>Order Now</span>
+                            <Zap className="w-4 h-4 text-white fill-white shrink-0" />
+                            <span>{product.isAvailable ? 'Order Now' : 'Sold Out'}</span>
                           </button>
                         </div>
 
@@ -260,6 +338,14 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
         </div>
 
       </div>
+
+      <ProductImageLightbox
+        isOpen={lightboxState.isOpen}
+        onClose={() => setLightboxState((prev) => ({ ...prev, isOpen: false }))}
+        images={lightboxState.images}
+        initialIndex={lightboxState.initialIndex}
+        productName={lightboxState.productName}
+      />
     </section>
   );
 };

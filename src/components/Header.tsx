@@ -163,14 +163,6 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          {/* My Orders / Track Order Link */}
-          <button
-            onClick={onOpenTrackModal}
-            className="relative py-1 text-gray-700 hover:text-[#95CD1A] transition-all duration-200 cursor-pointer flex items-center gap-1.5 font-extrabold"
-          >
-            <span>{user ? 'My Orders' : 'Track Order'}</span>
-          </button>
-
           {/* Contact Us Link */}
           <button
             onClick={() => handleNavClick('home', 'footer')}
@@ -181,6 +173,14 @@ export const Header: React.FC<HeaderProps> = ({
             {activeSection === 'footer' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#95CD1A] rounded-full animate-in fade-in zoom-in-50 duration-200" />
             )}
+          </button>
+
+          {/* My Orders / Track Order Link */}
+          <button
+            onClick={onOpenTrackModal}
+            className="relative py-1 text-gray-700 hover:text-[#95CD1A] transition-all duration-200 cursor-pointer flex items-center gap-1.5 font-extrabold"
+          >
+            <span>{user ? 'My Orders' : 'Track Order'}</span>
           </button>
         </nav>
 
@@ -229,10 +229,16 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* User Dropdown Menu */}
               {isUserDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-in fade-in zoom-in-95 duration-150 text-left">
-                  <div className="px-4 py-2 border-b border-gray-100">
-                    <span className="text-[11px] font-bold text-gray-400 block uppercase tracking-wider">Logged In As</span>
-                    <span className="text-xs font-black text-[#1F2937] truncate block">{user.email}</span>
+                <div className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-2xl shadow-gray-200/80 border border-gray-100 p-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150 text-left">
+                  {/* Dropdown Header User Card */}
+                  <div className="p-3.5 rounded-xl bg-gradient-to-br from-[#95CD1A]/5 via-transparent to-[#7EB30E]/5 border border-gray-50 mb-1 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#95CD1A]/10 text-[#95CD1A] flex items-center justify-center font-extrabold text-base uppercase shrink-0">
+                      {user.email.charAt(0)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[9px] font-extrabold text-gray-400 block uppercase tracking-wider">Logged In As</span>
+                      <span className="text-xs font-black text-[#1F2937] truncate block" title={user.email}>{user.email}</span>
+                    </div>
                   </div>
 
                   <button
@@ -240,9 +246,9 @@ export const Header: React.FC<HeaderProps> = ({
                       setIsUserDropdownOpen(false);
                       if (onOpenTrackModal) onOpenTrackModal();
                     }}
-                    className="w-full px-4 py-2.5 text-xs font-bold text-gray-700 hover:bg-[#F7FCE8] hover:text-[#95CD1A] flex items-center gap-2 transition-colors cursor-pointer"
+                    className="w-full px-3 py-2.5 text-xs font-extrabold text-gray-700 hover:bg-[#F7FCE8] hover:text-[#7EB30E] rounded-xl flex items-center gap-2.5 transition-all cursor-pointer group/item"
                   >
-                    <Package className="w-3.5 h-3.5" />
+                    <Package className="w-4 h-4 text-[#95CD1A] group-hover/item:scale-110 transition-transform" />
                     <span>My Orders & Live Tracking</span>
                   </button>
 
@@ -251,9 +257,9 @@ export const Header: React.FC<HeaderProps> = ({
                       setIsUserDropdownOpen(false);
                       if (onLogout) onLogout();
                     }}
-                    className="w-full px-4 py-2.5 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors cursor-pointer border-t border-gray-100"
+                    className="w-full px-3 py-2.5 mt-1 text-xs font-extrabold text-red-600 hover:bg-red-50/60 rounded-xl flex items-center gap-2.5 transition-all cursor-pointer border-t border-gray-50 pt-2.5"
                   >
-                    <LogOut className="w-3.5 h-3.5" />
+                    <LogOut className="w-4 h-4 text-red-500" />
                     <span>Logout Account</span>
                   </button>
                 </div>

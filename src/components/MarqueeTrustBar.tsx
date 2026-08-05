@@ -5,7 +5,7 @@ export const MarqueeTrustBar: React.FC = () => {
   const trustItems = [
     { icon: <Leaf className="w-4 h-4 text-[#95CD1A] shrink-0" />, label: '100% Vegetarian' },
     { icon: <Ban className="w-4 h-4 text-[#95CD1A] shrink-0" />, label: 'No Artificial Preservatives' },
-    { icon: <img src="/fssai-logo.png" alt="FSSAI Logo" className="h-5 w-auto object-contain shrink-0" />, label: 'FSSAI Certified', sub: '(Lic. 22425577000230)' },
+    { icon: <img src="/fssai-logo.png" alt="FSSAI Logo" className="h-5 w-auto object-contain shrink-0" />, label: 'Certified', sub: '(Lic. 22425577000230)' },
     { icon: <HeartHandshake className="w-4 h-4 text-amber-600 shrink-0" />, label: 'Authentic Family Recipes' },
     { icon: <Flame className="w-4 h-4 text-[#95CD1A] shrink-0" />, label: 'Hand-pounded Spices' },
     { icon: <Droplet className="w-4 h-4 text-amber-500 fill-amber-400 shrink-0" />, label: 'Pure Desi Ghee' },

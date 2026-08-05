@@ -118,7 +118,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage, onOpenTrackModal
           <div className="lg:col-span-3 bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-3">
             <div className="flex items-center gap-3">
               <img src="/fssai-logo.png" alt="FSSAI Logo" className="h-8 w-auto object-contain" />
-              <span className="text-[#1F2937] font-extrabold text-sm">FSSAI Certified Business</span>
+              <span className="text-[#1F2937] font-extrabold text-sm">Certified Business</span>
             </div>
 
             <p className="text-xs text-gray-500 leading-normal">

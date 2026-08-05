@@ -1,6 +1,7 @@
 export interface ProductVariant {
   weight: string;
   basePrice: number;
+  regularPrice?: number;
 }
 
 export interface ProductImage {
@@ -22,6 +23,7 @@ export interface Product {
   imageUrl: string;
   gstPercentage: number;
   isAvailable: boolean;
+  stockQuantity?: number;
   variants: ProductVariant[];
   images?: ProductImage[];
 }

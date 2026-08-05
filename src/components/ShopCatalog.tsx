@@ -398,6 +398,13 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                   const currentVariantIdx = selectedVariants[product.id] ?? 0;
                   const currentVariant = product.variants[currentVariantIdx] || product.variants[0];
                   const priceInfo = calculatePriceDetails(currentVariant.basePrice, product.gstPercentage);
+                  const regularPriceInfo = currentVariant.regularPrice
+                    ? calculatePriceDetails(currentVariant.regularPrice, product.gstPercentage)
+                    : null;
+                  const discountPercent = regularPriceInfo
+                    ? Math.round(((regularPriceInfo.totalPrice - priceInfo.totalPrice) / regularPriceInfo.totalPrice) * 100)
+                    : 0;
+
                   const handleAddToCartClick = () => {
                     if (onAddToCart) {
                       onAddToCart({
@@ -447,6 +454,21 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                           {product.categoryName}
                         </span>
 
+                        {/* Stock Status Badge */}
+                        {!product.isAvailable ? (
+                          <span className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md shadow-xs z-10">
+                            Sold Out
+                          </span>
+                        ) : product.stockQuantity !== undefined && product.stockQuantity <= 5 ? (
+                          <span className="absolute top-2 right-2 bg-amber-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md shadow-xs z-10 animate-pulse">
+                            Only {product.stockQuantity} Left!
+                          </span>
+                        ) : (
+                          <span className="absolute top-2 right-2 bg-emerald-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md shadow-xs z-10">
+                            In Stock
+                          </span>
+                        )}
+
                         <span className="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-md pointer-events-none z-10">
                           {product.gstPercentage}% GST
                         </span>
@@ -480,42 +502,65 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                             />
                           </div>
 
-                          {/* Dynamic Price Display */}
-                          <div className="flex items-baseline justify-between pt-1">
-                            <div>
-                              <span className="text-[10px] sm:text-xs font-bold text-gray-400 block uppercase tracking-wider">
-                                Total Price
-                              </span>
-                              <span className="text-base sm:text-2xl font-black text-[#1F2937]">
-                                ₹{priceInfo.totalPrice}
-                              </span>
-                            </div>
-                            <span className="text-[10px] sm:text-xs text-gray-400 font-semibold">
-                              Incl. GST
-                            </span>
-                          </div>
+                           {/* Dynamic Price Display */}
+                           <div className="flex items-baseline justify-between pt-1">
+                             <div className="flex flex-col text-left">
+                               <span className="text-[10px] sm:text-xs font-bold text-gray-400 block uppercase tracking-wider">
+                                 Total Price
+                               </span>
+                               <div className="flex items-baseline gap-1.5 mt-0.5">
+                                 {regularPriceInfo && regularPriceInfo.totalPrice > priceInfo.totalPrice && (
+                                   <>
+                                     <span className="line-through text-xs sm:text-sm text-gray-400 font-extrabold">
+                                       ₹{regularPriceInfo.totalPrice}
+                                     </span>
+                                     {discountPercent > 0 && (
+                                       <span className="text-[9px] bg-red-50 text-red-500 font-black px-1 py-0.5 rounded-md">
+                                         {discountPercent}% OFF
+                                       </span>
+                                     )}
+                                   </>
+                                 )}
+                                 <span className="text-base sm:text-2xl font-black text-[#1F2937]">
+                                   ₹{priceInfo.totalPrice}
+                                 </span>
+                               </div>
+                             </div>
+                             <span className="text-[10px] sm:text-xs text-gray-400 font-semibold align-self-end mb-1">
+                               Incl. GST
+                             </span>
+                           </div>
 
-                        </div>
+                         </div>
 
-                        {/* Dual Action Buttons: Add to Cart & Order Now (Stacked on mobile, 2 cols on desktop) */}
-                        <div className="pt-1 flex flex-col gap-2 sm:grid sm:grid-cols-2 sm:gap-2">
-                          <button
-                            onClick={handleAddToCartClick}
-                            className="w-full py-2.5 px-3 bg-[#F7FCE8] hover:bg-[#95CD1A] text-[#1F2937] hover:text-white font-extrabold text-xs sm:text-xs rounded-xl border border-[#95CD1A]/40 transition-all duration-200 shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer text-center group/cartBtn"
-                          >
-                            <ShoppingBag className="w-3.5 h-3.5 text-[#95CD1A] group-hover/cartBtn:text-white shrink-0" />
-                            <span className="whitespace-nowrap font-black">Add to Cart</span>
-                          </button>
+                         {/* Dual Action Buttons: Add to Cart & Order Now (Stacked on mobile, 2 cols on desktop) */}
+                         <div className="pt-1 flex flex-col gap-2 sm:grid sm:grid-cols-2 sm:gap-2">
+                           <button
+                             onClick={handleAddToCartClick}
+                             disabled={!product.isAvailable}
+                             className={`w-full py-2.5 px-3 font-extrabold text-xs sm:text-xs rounded-xl border transition-all duration-200 shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer text-center group/cartBtn ${
+                               product.isAvailable
+                                 ? 'bg-[#F7FCE8] hover:bg-[#95CD1A] text-[#1F2937] hover:text-white border-[#95CD1A]/40'
+                                 : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                             }`}
+                           >
+                             <ShoppingBag className={`w-3.5 h-3.5 shrink-0 ${product.isAvailable ? 'text-[#95CD1A] group-hover/cartBtn:text-white' : 'text-gray-300'}`} />
+                             <span className="whitespace-nowrap font-black">Add to Cart</span>
+                           </button>
 
-                          <button
-                            onClick={handleOrderNowClick}
-                            className="w-full py-2.5 px-3 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-xs sm:text-xs rounded-xl transition-all duration-200 shadow-md shadow-[#95CD1A]/20 hover:shadow-lg transform hover:-translate-y-0.5 flex items-center justify-center gap-1.5 cursor-pointer text-center"
-                          >
-                            <Zap className="w-3.5 h-3.5 text-white shrink-0 fill-white" />
-                            <span className="whitespace-nowrap font-black">Order Now</span>
-                          </button>
-                        </div>
-
+                           <button
+                             onClick={handleOrderNowClick}
+                             disabled={!product.isAvailable}
+                             className={`w-full py-2.5 px-3 text-white font-extrabold text-xs sm:text-xs rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer text-center ${
+                               product.isAvailable
+                                 ? 'bg-[#95CD1A] hover:bg-[#7EB30E] shadow-md shadow-[#95CD1A]/20 hover:shadow-lg transform hover:-translate-y-0.5'
+                                 : 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none'
+                             }`}
+                           >
+                             <Zap className="w-3.5 h-3.5 shrink-0 text-white fill-white" />
+                             <span className="whitespace-nowrap font-black">{product.isAvailable ? 'Order Now' : 'Sold Out'}</span>
+                           </button>
+                         </div>
                       </div>
 
                     </div>

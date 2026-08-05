@@ -287,7 +287,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <img src="/fssai-logo.png" alt="FSSAI Logo" className="h-4 sm:h-5 w-auto object-contain shrink-0" />
                 <div>
                   <span className="text-[11px] sm:text-xs font-extrabold text-[#1F2937] block leading-tight">
-                    FSSAI Certified
+                    Certified
                   </span>
                   <span className="text-[8px] sm:text-[9px] font-mono text-gray-500 font-semibold block">
                     Lic. 22425577000230
