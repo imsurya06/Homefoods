@@ -481,7 +481,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                           <h4 className="font-extrabold text-sm sm:text-lg text-[#1F2937] group-hover:text-[#95CD1A] transition-colors leading-tight line-clamp-2">
                             {product.name}
                           </h4>
-                          <p className="text-[11px] sm:text-xs text-gray-500 leading-tight line-clamp-1 sm:line-clamp-2 hidden sm:block">
+                          <p className="text-[11px] sm:text-xs text-gray-500 leading-tight line-clamp-1 sm:line-clamp-2">
                             {product.description}
                           </p>
                         </div>
