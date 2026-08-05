@@ -1,0 +1,250 @@
+import { create } from 'zustand';
+import type { CartItem } from '../data/bestsellers';
+import type { UserProfile } from '../services/authService';
+import { syncBus } from '../services/eventBus';
+
+export interface Address {
+  id: string; // uuid
+  label: string; // "Home", "Office"
+  firstName: string;
+  lastName?: string;
+  address1: string;
+  city: string;
+  state: string;
+  postcode: string;
+  phone: string;
+  isDefaultShipping: boolean;
+  isDefaultBilling: boolean;
+  updatedAt: string; // ISO String
+}
+
+export interface OfflineOperation {
+  operationId: string;
+  type: 'ADD_CART' | 'REMOVE_CART' | 'CLEAR_CART' | 'UPDATE_CART' | 'SYNC_WISHLIST' | 'UPDATE_ADDRESS' | 'UPDATE_PROFILE';
+  payload: any;
+  createdAt: string;
+  retryCount: number;
+}
+
+interface SyncState {
+  // Auth state
+  user: UserProfile | null;
+  accessToken: string | null;
+  isLoggedIn: boolean;
+
+  // Business state
+  cartItems: CartItem[];
+  cartRevision: number;
+
+  wishlistItems: number[];
+  wishlistRevision: number;
+
+  addresses: Address[];
+  addressRevision: number;
+
+  profileRevision: number;
+
+  // Preferences
+  preferences: Record<string, any>;
+
+  // Offline operation queue
+  offlineQueue: OfflineOperation[];
+
+  // Network state
+  isOnline: boolean;
+  isSyncing: boolean;
+
+  // Actions
+  login: (user: UserProfile, accessToken: string, refreshToken: string) => void;
+  logout: () => void;
+  setCart: (items: CartItem[], revision?: number) => void;
+  setWishlist: (items: number[], revision?: number) => void;
+  setAddresses: (addresses: Address[], revision?: number) => void;
+  updateProfile: (profile: Partial<UserProfile>, revision?: number) => void;
+  setRevisions: (revisions: { cartRevision: number; wishlistRevision: number; profileRevision: number; addressRevision: number }) => void;
+  setPreferences: (prefs: Record<string, any>) => void;
+  addOfflineOperation: (op: Omit<OfflineOperation, 'operationId' | 'createdAt' | 'retryCount'>) => void;
+  removeOfflineOperation: (opId: string) => void;
+  incrementRetryCount: (opId: string) => void;
+  setOnlineStatus: (status: boolean) => void;
+  setSyncingStatus: (status: boolean) => void;
+}
+
+const getInitialAuth = () => {
+  try {
+    const token = localStorage.getItem('hf_auth_token');
+    const profile = localStorage.getItem('hf_user_profile');
+    if (token && profile) {
+      return { user: JSON.parse(profile), accessToken: token, isLoggedIn: true };
+    }
+  } catch {}
+  return { user: null, accessToken: null, isLoggedIn: false };
+};
+
+const getInitialCart = () => {
+  try {
+    const saved = localStorage.getItem('hf_user_cart') || sessionStorage.getItem('hf_guest_cart');
+    return saved ? JSON.parse(saved) : [];
+  } catch {}
+  return [];
+};
+
+const getInitialWishlist = () => {
+  try {
+    const saved = localStorage.getItem('hf_wishlist');
+    return saved ? JSON.parse(saved) : [];
+  } catch {}
+  return [];
+};
+
+const getInitialQueue = () => {
+  try {
+    const saved = localStorage.getItem('hf_offline_queue');
+    return saved ? JSON.parse(saved) : [];
+  } catch {}
+  return [];
+};
+
+export const useSyncStore = create<SyncState>((set) => ({
+  ...getInitialAuth(),
+  cartItems: getInitialCart(),
+  cartRevision: 0,
+  wishlistItems: getInitialWishlist(),
+  wishlistRevision: 0,
+  addresses: [],
+  addressRevision: 0,
+  profileRevision: 0,
+  preferences: {},
+  offlineQueue: getInitialQueue(),
+  isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+  isSyncing: false,
+
+  login: (user, accessToken, refreshToken) => {
+    localStorage.setItem('hf_auth_token', accessToken);
+    localStorage.setItem('hf_refresh_token', refreshToken);
+    localStorage.setItem('hf_user_profile', JSON.stringify(user));
+    set({ user, accessToken, isLoggedIn: true });
+  },
+
+  logout: () => {
+    localStorage.removeItem('hf_auth_token');
+    localStorage.removeItem('hf_refresh_token');
+    localStorage.removeItem('hf_user_profile');
+    localStorage.removeItem('hf_user_cart');
+    localStorage.removeItem('hf_wishlist');
+    localStorage.removeItem('hf_offline_queue');
+    sessionStorage.removeItem('hf_guest_cart');
+    set({
+      user: null,
+      accessToken: null,
+      isLoggedIn: false,
+      cartItems: [],
+      cartRevision: 0,
+      wishlistItems: [],
+      wishlistRevision: 0,
+      addresses: [],
+      addressRevision: 0,
+      profileRevision: 0,
+      preferences: {},
+      offlineQueue: [],
+    });
+  },
+
+  setCart: (items, revision) => {
+    set((state) => {
+      const nextRev = revision !== undefined ? revision : state.cartRevision + 1;
+      const key = state.isLoggedIn ? 'hf_user_cart' : 'hf_guest_cart';
+      if (state.isLoggedIn) {
+        localStorage.setItem(key, JSON.stringify(items));
+      } else {
+        sessionStorage.setItem(key, JSON.stringify(items));
+      }
+      if (revision === undefined && state.isLoggedIn) {
+        syncBus.emit('cart.changed', items);
+      }
+      return { cartItems: items, cartRevision: nextRev };
+    });
+  },
+
+  setWishlist: (items, revision) => {
+    set((state) => {
+      const nextRev = revision !== undefined ? revision : state.wishlistRevision + 1;
+      localStorage.setItem('hf_wishlist', JSON.stringify(items));
+      if (revision === undefined && state.isLoggedIn) {
+        syncBus.emit('wishlist.changed', items);
+      }
+      return { wishlistItems: items, wishlistRevision: nextRev };
+    });
+  },
+
+  setAddresses: (addresses, revision) => {
+    set((state) => {
+      const nextRev = revision !== undefined ? revision : state.addressRevision + 1;
+      if (revision === undefined && state.isLoggedIn) {
+        syncBus.emit('address.changed', addresses);
+      }
+      return { addresses, addressRevision: nextRev };
+    });
+  },
+
+  updateProfile: (profile, revision) => {
+    set((state) => {
+      if (!state.user) return {};
+      const nextUser = { ...state.user, ...profile };
+      localStorage.setItem('hf_user_profile', JSON.stringify(nextUser));
+      const nextRev = revision !== undefined ? revision : state.profileRevision + 1;
+      if (revision === undefined && state.isLoggedIn) {
+        syncBus.emit('profile.changed', nextUser);
+      }
+      return { user: nextUser, profileRevision: nextRev };
+    });
+  },
+
+  setRevisions: (revisions) => {
+    set({
+      cartRevision: revisions.cartRevision,
+      wishlistRevision: revisions.wishlistRevision,
+      profileRevision: revisions.profileRevision,
+      addressRevision: revisions.addressRevision,
+    });
+  },
+
+  setPreferences: (preferences) => {
+    set({ preferences });
+  },
+
+  addOfflineOperation: (op) => {
+    set((state) => {
+      const fullOp: OfflineOperation = {
+        ...op,
+        operationId: 'op_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now().toString(36),
+        createdAt: new Date().toISOString(),
+        retryCount: 0,
+      };
+      const nextQueue = [...state.offlineQueue, fullOp];
+      localStorage.setItem('hf_offline_queue', JSON.stringify(nextQueue));
+      return { offlineQueue: nextQueue };
+    });
+  },
+
+  removeOfflineOperation: (opId) => {
+    set((state) => {
+      const nextQueue = state.offlineQueue.filter((o) => o.operationId !== opId);
+      localStorage.setItem('hf_offline_queue', JSON.stringify(nextQueue));
+      return { offlineQueue: nextQueue };
+    });
+  },
+
+  incrementRetryCount: (opId) => {
+    set((state) => {
+      const nextQueue = state.offlineQueue.map((o) =>
+        o.operationId === opId ? { ...o, retryCount: o.retryCount + 1 } : o
+      );
+      localStorage.setItem('hf_offline_queue', JSON.stringify(nextQueue));
+      return { offlineQueue: nextQueue };
+    });
+  },
+
+  setOnlineStatus: (isOnline) => set({ isOnline }),
+  setSyncingStatus: (isSyncing) => set({ isSyncing }),
+}));

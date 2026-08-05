@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { CuratedProcessSection } from './components/CuratedProcessSection';
@@ -10,8 +10,9 @@ import { LogoutConfirmModal } from './components/LogoutConfirmModal';
 import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
 import { type CartItem } from './data/bestsellers';
-import { fetchCurrentUser, logoutCustomer, getSavedUserProfile, type UserProfile } from './services/authService';
-import { getStoredCart, fetchRemoteCart, saveCartItems, clearCartStorage, mergeCartItems, checkRemoteCartRevision, resetLocalRevision, getIsSyncingCart } from './services/cartStorage';
+import { type UserProfile } from './services/authService';
+import { useSyncStore } from './store/useSyncStore';
+import { initSyncManager, bootstrapSync, replayOfflineQueue, updatePollingInterval } from './services/syncManager';
 
 export function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'shop'>('home');
@@ -19,120 +20,48 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeNotification, setActiveNotification] = useState<string | null>(null);
 
+  // Read state from Zustand store
+  const user = useSyncStore((state) => state.user);
+  const isLoggedIn = useSyncStore((state) => state.isLoggedIn);
+  const cartItems = useSyncStore((state) => state.cartItems);
+  const cartRevision = useSyncStore((state) => state.cartRevision);
 
-  // User Auth & Modal States with instant persistence across page refreshes
-  const [user, setUser] = useState<UserProfile | null>(() => getSavedUserProfile());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState<boolean>(false);
-
-  // Cart & Orders Drawer State
-  const [cartItems, setCartItems] = useState<CartItem[]>(() => getStoredCart(!!getSavedUserProfile()));
-  const cartItemsRef = useRef<CartItem[]>(cartItems);
-  useEffect(() => {
-    cartItemsRef.current = cartItems;
-  }, [cartItems]);
 
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [cartDrawerInitialTab, setCartDrawerInitialTab] = useState<'cart' | 'orders'>('cart');
 
-  // Sync logged-in user details & cart on mount and 3-second live polling across devices
+  // Initialize Sync Manager and Adaptive Polling
   useEffect(() => {
-    let isMounted = true;
+    initSyncManager();
+    updatePollingInterval('general');
+  }, []);
 
-    const syncUserAndCart = () => {
-      console.log('[CartSync] syncUserAndCart triggered');
-      fetchCurrentUser().then((u) => {
-        if (isMounted && u) {
-          console.log('[CartSync] fetchCurrentUser success:', u.email);
-          setUser(u);
-        } else {
-          console.log('[CartSync] fetchCurrentUser returned empty/null user');
-        }
-      });
-      checkRemoteCartRevision().then(({ shouldUpdate, revision: serverRevision }) => {
-        if (shouldUpdate && isMounted) {
-          fetchRemoteCart(serverRevision).then(({ items: remoteItems }) => {
-            if (isMounted && remoteItems && Array.isArray(remoteItems)) {
-              setCartItems((prev) => {
-                if (JSON.stringify(prev) === JSON.stringify(remoteItems)) {
-                  return prev;
-                }
-                console.log('[CartSync] syncUserAndCart updating state to', remoteItems);
-                cartItemsRef.current = remoteItems;
-                return remoteItems;
-              });
-            }
-          });
-        }
-      });
+  // Listen for session expiry and administrative account deletion events
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      useSyncStore.getState().logout();
+      showToast('Your session has expired. Please log in again.');
+      setIsAuthModalOpen(true);
     };
 
-    syncUserAndCart();
-
-    let timerId: ReturnType<typeof setTimeout>;
-
-    const scheduleNextPoll = () => {
-      if (!isMounted) return;
-      timerId = setTimeout(async () => {
-        const token = localStorage.getItem('hf_auth_token');
-        if (token && !getIsSyncingCart()) {
-          try {
-            const { shouldUpdate, revision: serverRevision } = await checkRemoteCartRevision();
-            if (shouldUpdate && isMounted) {
-              const { items: remoteItems } = await fetchRemoteCart(serverRevision);
-              if (isMounted && remoteItems && Array.isArray(remoteItems)) {
-                setCartItems((prev) => {
-                  if (JSON.stringify(prev) === JSON.stringify(remoteItems)) return prev;
-                  cartItemsRef.current = remoteItems;
-                  return remoteItems;
-                });
-              }
-            }
-          } catch {}
-        }
-        scheduleNextPoll();
-      }, 1500);
-    };
-
-    scheduleNextPoll();
-
-    const handleFocusOrVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        syncUserAndCart();
-      }
-    };
-
-    const handleCartCleared = () => {
-      if (isMounted) {
-        cartItemsRef.current = [];
-        setCartItems([]);
-      }
-    };
     const handleAccountDeleted = () => {
-      if (isMounted) {
-        setUser(null);
-        cartItemsRef.current = [];
-        setCartItems([]);
-        setIsCartOpen(false);
-      }
+      useSyncStore.getState().logout();
+      alert('Your account has been deleted by an administrator. You have been logged out.');
+      window.location.reload();
     };
 
-    window.addEventListener('focus', handleFocusOrVisibility);
-    document.addEventListener('visibilitychange', handleFocusOrVisibility);
-    window.addEventListener('hf_cart_cleared', handleCartCleared);
+    window.addEventListener('hf_auth_expired', handleAuthExpired);
     window.addEventListener('hf_account_deleted', handleAccountDeleted);
 
     return () => {
-      isMounted = false;
-      clearTimeout(timerId);
-      window.removeEventListener('focus', handleFocusOrVisibility);
-      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
-      window.removeEventListener('hf_cart_cleared', handleCartCleared);
+      window.removeEventListener('hf_auth_expired', handleAuthExpired);
       window.removeEventListener('hf_account_deleted', handleAccountDeleted);
     };
-  }, [user]);
+  }, []);
 
-  // Sync hash URL navigation (e.g. #shop, #track)
+  // Sync hash URL navigation
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
@@ -151,7 +80,11 @@ export function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // Bottom Toast Notification
+  // Adjust polling interval when cart drawer state changes
+  useEffect(() => {
+    updatePollingInterval(isCartOpen ? 'cart' : 'general');
+  }, [isCartOpen]);
+
   const showToast = (message: string) => {
     setActiveNotification(message);
     setTimeout(() => {
@@ -195,44 +128,53 @@ export function App() {
   };
 
   // Auth Callbacks
-  const handleAuthSuccess = (loggedUser: UserProfile) => {
-    setUser(loggedUser);
-    resetLocalRevision();
-    const guestCart = getStoredCart(false);
+  const handleAuthSuccess = async (loggedUser: UserProfile, accessToken: string, refreshToken: string) => {
+    const guestItems = [...useSyncStore.getState().cartItems];
+    useSyncStore.getState().login(loggedUser, accessToken, refreshToken);
+    
+    // Instantly load data from WooCommerce customer database
+    await bootstrapSync();
 
-    fetchRemoteCart().then(({ items: remoteItems }) => {
-      const accountCart = (remoteItems && remoteItems.length > 0) ? remoteItems : getStoredCart(true);
-      if (guestCart && guestCart.length > 0) {
-        const merged = mergeCartItems(accountCart, guestCart);
-        cartItemsRef.current = merged;
-        setCartItems(merged);
-        saveCartItems(merged, true);
-        try {
-          sessionStorage.removeItem('hf_guest_cart');
-        } catch {}
-        showToast(`Welcome, ${loggedUser.firstName}! Your guest cart was merged.`);
-      } else {
-        cartItemsRef.current = accountCart;
-        setCartItems(accountCart);
-        showToast(`Welcome to Homemade Foods, ${loggedUser.firstName}!`);
+    const accountItems = useSyncStore.getState().cartItems;
+    if (guestItems.length > 0) {
+      // Merge guest items with server items using union/quantity merge algorithm
+      const mergedMap = new Map<string, CartItem>();
+      for (const item of accountItems) {
+        mergedMap.set(item.id, item);
       }
-    });
+      for (const gItem of guestItems) {
+        if (mergedMap.has(gItem.id)) {
+          const existing = mergedMap.get(gItem.id)!;
+          existing.quantity = Math.max(existing.quantity, gItem.quantity);
+        } else {
+          mergedMap.set(gItem.id, gItem);
+        }
+      }
+      const merged = Array.from(mergedMap.values());
+      useSyncStore.getState().setCart(merged);
+      
+      // Sync merged cart items to WooCommerce Customer Metadata
+      useSyncStore.getState().addOfflineOperation({
+        type: 'UPDATE_CART',
+        payload: { items: merged }
+      });
+      replayOfflineQueue();
+      
+      showToast(`Welcome, ${loggedUser.firstName}! Your guest cart was merged.`);
+    } else {
+      showToast(`Welcome to Homemade Foods, ${loggedUser.firstName}!`);
+    }
   };
 
   const handleUserLogout = () => {
-    logoutCustomer();
-    setUser(null);
-    resetLocalRevision();
-    const stored = getStoredCart(false);
-    cartItemsRef.current = stored;
-    setCartItems(stored);
+    useSyncStore.getState().logout();
     showToast('Logged out successfully');
   };
 
-  // Cart Operations: Add to Cart (Shows interactive Toast) vs Order Now (Opens Cart Directly)
+  // Cart Operations
   const handleAddToCart = (newItem: Omit<CartItem, 'id' | 'quantity'>) => {
     const compositeId = `${newItem.productId}-${newItem.weight}`;
-    const currentItems = cartItemsRef.current;
+    const currentItems = useSyncStore.getState().cartItems;
     const existingItem = currentItems.find((item: CartItem) => item.id === compositeId);
     let updated: CartItem[];
     if (existingItem) {
@@ -242,15 +184,13 @@ export function App() {
     } else {
       updated = [...currentItems, { ...newItem, id: compositeId, quantity: 1 }];
     }
-    cartItemsRef.current = updated;
-    setCartItems(updated);
-    saveCartItems(updated, !!user);
+    useSyncStore.getState().setCart(updated);
     showToast('Item added to cart!');
   };
 
   const handleOrderNow = (newItem: Omit<CartItem, 'id' | 'quantity'>) => {
     const compositeId = `${newItem.productId}-${newItem.weight}`;
-    const currentItems = cartItemsRef.current;
+    const currentItems = useSyncStore.getState().cartItems;
     const existingItem = currentItems.find((item: CartItem) => item.id === compositeId);
     let updated: CartItem[];
     if (existingItem) {
@@ -260,9 +200,7 @@ export function App() {
     } else {
       updated = [...currentItems, { ...newItem, id: compositeId, quantity: 1 }];
     }
-    cartItemsRef.current = updated;
-    setCartItems(updated);
-    saveCartItems(updated, !!user);
+    useSyncStore.getState().setCart(updated);
     setCartDrawerInitialTab('cart');
     setIsCartOpen(true);
   };
@@ -272,31 +210,25 @@ export function App() {
       handleRemoveFromCart(id);
       return;
     }
-    const currentItems = cartItemsRef.current;
+    const currentItems = useSyncStore.getState().cartItems;
     const updated = currentItems.map((item: CartItem) => (item.id === id ? { ...item, quantity: newQty } : item));
-    cartItemsRef.current = updated;
-    setCartItems(updated);
-    saveCartItems(updated, !!user);
+    useSyncStore.getState().setCart(updated);
   };
 
   const handleRemoveFromCart = (id: string) => {
-    const currentItems = cartItemsRef.current;
+    const currentItems = useSyncStore.getState().cartItems;
     const updated = currentItems.filter((item: CartItem) => item.id !== id);
-    cartItemsRef.current = updated;
-    setCartItems(updated);
-    saveCartItems(updated, !!user);
+    useSyncStore.getState().setCart(updated);
     showToast('Cart updated');
   };
 
   const handleClearCart = () => {
-    cartItemsRef.current = [];
-    setCartItems([]);
-    clearCartStorage(!!user);
+    useSyncStore.getState().setCart([]);
     showToast('Cart cleared');
   };
 
   const handleUpdateItemWeight = (oldId: string, newWeight: string, newPricePerUnit: number) => {
-    const currentItems = cartItemsRef.current;
+    const currentItems = useSyncStore.getState().cartItems;
     const targetItem = currentItems.find((i: CartItem) => i.id === oldId);
     if (!targetItem) return;
 
@@ -322,9 +254,7 @@ export function App() {
     }
 
     const finalItems = Array.from(consolidatedMap.values());
-    cartItemsRef.current = finalItems;
-    setCartItems(finalItems);
-    saveCartItems(finalItems, !!user);
+    useSyncStore.getState().setCart(finalItems);
     showToast('Pack weight updated');
   };
 
@@ -428,13 +358,14 @@ export function App() {
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         items={cartItems}
+        cartRevision={cartRevision}
         onUpdateQuantity={handleUpdateQuantity}
         onUpdateItemWeight={handleUpdateItemWeight}
         onRemoveItem={handleRemoveFromCart}
         onClearCart={handleClearCart}
         onExploreShop={() => handleNavigatePage('shop', 'all', '')}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
-        isLoggedIn={!!user}
+        isLoggedIn={isLoggedIn}
         user={user}
         initialTab={cartDrawerInitialTab}
       />

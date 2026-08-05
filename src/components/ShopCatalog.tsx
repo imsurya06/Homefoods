@@ -4,6 +4,8 @@ import { PRODUCTS, type Product } from '../data/products';
 import { getLiveProducts, getCachedProductsSync } from '../services/productService';
 import { calculatePriceDetails, type CartItem } from '../data/bestsellers';
 import { CustomDropdown } from './CustomDropdown';
+import { ProductImageSlider } from './ProductImageSlider';
+import { ProductImageLightbox } from './ProductImageLightbox';
 
 interface ShopCatalogProps {
   initialCategory?: string;
@@ -30,6 +32,35 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
 
   // Track selected variant index for each product ID
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
+
+  // Lightbox Modal State
+  const [lightboxState, setLightboxState] = useState<{
+    isOpen: boolean;
+    images: { id: number; src: string; alt: string }[];
+    initialIndex: number;
+    productName: string;
+  }>({
+    isOpen: false,
+    images: [],
+    initialIndex: 0,
+    productName: '',
+  });
+
+  const openLightbox = (product: Product, index: number) => {
+    const imgs = product.images && product.images.length > 0
+      ? product.images
+      : [{ id: 0, src: product.imageUrl, alt: product.name }];
+    setLightboxState({
+      isOpen: true,
+      images: imgs,
+      initialIndex: index,
+      productName: product.name,
+    });
+  };
+
+  const closeLightbox = () => {
+    setLightboxState((prev) => ({ ...prev, isOpen: false }));
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -401,21 +432,22 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                       key={product.id}
                       className="group bg-white rounded-xl sm:rounded-2xl border border-gray-200 overflow-hidden shadow-xs hover:shadow-xl hover:border-[#95CD1A]/60 transition-all duration-300 flex flex-col justify-between h-full text-left"
                     >
-                      {/* Product Image Frame */}
+                      {/* Product Image Frame with Slider */}
                       <div className="relative aspect-square sm:aspect-4/3 w-full overflow-hidden bg-gray-100 border-b border-gray-100">
-                        <img
-                          src={product.imageUrl}
-                          alt={product.name}
-                          loading="lazy"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                        <ProductImageSlider
+                          images={product.images && product.images.length > 0 
+                            ? product.images 
+                            : [{ id: 0, src: product.imageUrl, alt: product.name }]}
+                          productName={product.name}
+                          onImageClick={(index) => openLightbox(product, index)}
                         />
 
                         {/* Category Badge (Desktop) */}
-                        <span className="hidden sm:block absolute top-2 left-2 bg-white/90 backdrop-blur-xs text-[#1F2937] text-[10px] font-extrabold px-2.5 py-0.5 rounded-md shadow-xs border border-gray-200">
+                        <span className="hidden sm:block absolute top-2 left-2 bg-white/90 backdrop-blur-xs text-[#1F2937] text-[10px] font-extrabold px-2.5 py-0.5 rounded-md shadow-xs border border-gray-200 pointer-events-none z-10">
                           {product.categoryName}
                         </span>
 
-                        <span className="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-md">
+                        <span className="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-md pointer-events-none z-10">
                           {product.gstPercentage}% GST
                         </span>
                       </div>
@@ -497,6 +529,15 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
         </div>
 
       </div>
+
+      {/* Dynamic Lightbox Modal */}
+      <ProductImageLightbox
+        isOpen={lightboxState.isOpen}
+        onClose={closeLightbox}
+        images={lightboxState.images}
+        initialIndex={lightboxState.initialIndex}
+        productName={lightboxState.productName}
+      />
     </section>
   );
 };

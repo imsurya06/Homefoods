@@ -29,7 +29,6 @@ export async function validateCart(
     console.warn('Backend cart validation failed, computing client-side fallback:', error);
   }
 
-  // Fallback local calculation
   const subtotal = items.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
   const gst = Math.round(subtotal * 0.05);
   const shippingCharge = subtotal >= 499 ? 0 : 40;
@@ -44,4 +43,15 @@ export async function validateCart(
     appliedCoupon: null,
     freeShippingThresholdMet: shippingCharge === 0,
   };
+}
+
+export async function syncCartRemote(
+  items: CartItem[],
+  revision: number,
+  operationId: string
+): Promise<{ success: boolean; revision: number; items: CartItem[] }> {
+  return fetchApi<{ success: boolean; revision: number; items: CartItem[] }>('/sync/cart', {
+    method: 'POST',
+    body: JSON.stringify({ items, revision, operationId }),
+  });
 }

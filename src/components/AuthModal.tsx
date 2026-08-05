@@ -5,7 +5,7 @@ import { loginOrSignupCustomer, sendForgotPasswordOtp, resetPasswordWithOtp, typ
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (user: UserProfile) => void;
+  onSuccess: (user: UserProfile, accessToken: string, refreshToken: string) => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -50,8 +50,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setLoading(true);
     try {
       const res = await loginOrSignupCustomer(email, password);
-      if (res.success && res.user) {
-        onSuccess(res.user);
+      if (res.success && res.user && res.accessToken) {
+        onSuccess(res.user, res.accessToken, res.refreshToken);
         onClose();
       } else {
         setError('Authentication failed. Please check your email and password.');
@@ -104,8 +104,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setLoading(true);
     try {
       const res = await resetPasswordWithOtp(email, otpCode, password);
-      if (res.success && res.user) {
-        onSuccess(res.user);
+      if (res.success && res.user && res.accessToken) {
+        onSuccess(res.user, res.accessToken, res.refreshToken);
         onClose();
       } else {
         setError('Invalid OTP code or password reset failed.');

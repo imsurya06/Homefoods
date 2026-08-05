@@ -21,12 +21,14 @@ export interface CheckoutPayload {
   };
   items: CartItem[];
   couponCode?: string;
+  cartRevision?: number;
 }
 
 export async function processRazorpayCheckout(
   payload: CheckoutPayload,
   onSuccess: (response: { wcOrderId: number; paymentId: string; orderRefCode?: string }) => void,
-  onError: (errorMsg: string) => void
+  onError: (errorMsg: string, isOutOfSync?: boolean) => void,
+  onReservationCreated?: (wcOrderId: number, expiresAt: number) => void
 ) {
   try {
     let orderRes: any;
@@ -38,11 +40,20 @@ export async function processRazorpayCheckout(
         amountInPaise: number;
         currency: string;
         keyId: string;
+        expiresAt?: number;
       }>('/checkout/create-order', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-    } catch {
+
+      if (orderRes.success && orderRes.wcOrderId && onReservationCreated) {
+        const expTime = orderRes.expiresAt || (Date.now() + 10 * 60 * 1000);
+        onReservationCreated(orderRes.wcOrderId, expTime);
+      }
+    } catch (err: any) {
+      if (err.status === 409 || err.code === 'CART_OUT_OF_SYNC') {
+        throw err;
+      }
       const subtotal = payload.items.reduce((s, i) => s + i.pricePerUnit * i.quantity, 0);
       const totalAmount = subtotal > 0 ? subtotal + 40 : 0;
       orderRes = {
@@ -150,7 +161,8 @@ export async function processRazorpayCheckout(
     rzp.open();
   } catch (err: any) {
     console.error('Checkout error:', err);
-    onError(err.message || 'Checkout failed to initialize.');
+    const isOutOfSync = err.status === 409 || err.code === 'CART_OUT_OF_SYNC';
+    onError(err.message || 'Checkout failed to initialize.', isOutOfSync);
   }
 }
 
@@ -167,4 +179,17 @@ export async function trackSingleOrder(orderId: number | string) {
     return { notFound: true, message: err?.message || 'Order not found' };
   }
   return { notFound: true };
+}
+
+export async function cancelInventoryReservation(wcOrderId: number): Promise<boolean> {
+  try {
+    const res = await fetchApi<{ success: boolean }>('/checkout/cancel-order', {
+      method: 'POST',
+      body: JSON.stringify({ wcOrderId })
+    });
+    return res && res.success;
+  } catch (err: any) {
+    console.error('Failed to cancel inventory reservation:', err.message);
+    return false;
+  }
 }

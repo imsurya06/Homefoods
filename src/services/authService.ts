@@ -36,8 +36,27 @@ export interface CustomerOrderHistoryItem {
   total: string;
   currency: string;
   dateCreated: string;
-  items: { name: string; quantity: number; total?: string }[];
+  items: { name: string; quantity: number }[];
   shippingAddress: string;
+}
+
+export function getDeviceId(): string {
+  let id = localStorage.getItem('hf_device_id');
+  if (!id) {
+    id = 'dev_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now().toString(36);
+    localStorage.setItem('hf_device_id', id);
+  }
+  return id;
+}
+
+export function getDeviceName(): string {
+  const ua = navigator.userAgent;
+  if (/android/i.test(ua)) return 'Android Device';
+  if (/iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream) return 'iOS Device';
+  if (/Macintosh/i.test(ua)) return 'macOS Device';
+  if (/Windows/i.test(ua)) return 'Windows PC';
+  if (/Linux/i.test(ua)) return 'Linux PC';
+  return 'Web Browser';
 }
 
 export function getSavedToken(): string | null {
@@ -49,102 +68,42 @@ export function getSavedToken(): string | null {
 }
 
 export async function sendForgotPasswordOtp(email: string): Promise<{ success: boolean; message: string; testOtp?: string }> {
-  try {
-    return await fetchApi<{ success: boolean; message: string; testOtp?: string }>('/auth/forgot-password', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
-  } catch {
-    return {
-      success: true,
-      message: `6-Digit OTP (123456) sent to ${email}`,
-      testOtp: '123456',
-    };
-  }
-}
-
-function safeGenerateToken(id: number, email: string): string {
-  try {
-    return btoa(encodeURIComponent(`${id}:${email}:${Date.now()}`));
-  } catch {
-    return `tok_${id}_${Date.now()}`;
-  }
-}
-
-function getRegisteredPasswords(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem('hf_user_passwords');
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveRegisteredPassword(email: string, pass: string) {
-  try {
-    const map = getRegisteredPasswords();
-    map[email.trim().toLowerCase()] = pass;
-    localStorage.setItem('hf_user_passwords', JSON.stringify(map));
-  } catch {}
-}
-
-export function getDeterministicUserId(email: string): number {
-  const clean = email.trim().toLowerCase();
-  let hash = 0;
-  for (let i = 0; i < clean.length; i++) {
-    const char = clean.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
-
-export async function resetPasswordWithOtp(email: string, otp: string, newPassword: string): Promise<{ success: boolean; token: string; user: UserProfile }> {
-  try {
-    const res = await fetchApi<{ success: boolean; token: string; user: UserProfile }>('/auth/reset-password', {
-      method: 'POST',
-      body: JSON.stringify({ email, otp, newPassword }),
-    });
-    if (res.success && res.token) {
-      saveRegisteredPassword(email, newPassword);
-      localStorage.setItem('hf_auth_token', res.token);
-      localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
-    }
-    return res;
-  } catch {
-    const cleanEmail = email.trim().toLowerCase();
-    saveRegisteredPassword(cleanEmail, newPassword);
-    const userId = getDeterministicUserId(cleanEmail);
-    const mockUser: UserProfile = {
-      id: userId,
-      email: cleanEmail,
-      firstName: cleanEmail.split('@')[0],
-      lastName: '',
-      displayName: cleanEmail.split('@')[0],
-      phone: '',
-      billing: { first_name: cleanEmail.split('@')[0], last_name: '', email: cleanEmail, phone: '', address_1: '', city: 'Madurai', state: 'TN', postcode: '625001' },
-      shipping: { first_name: cleanEmail.split('@')[0], last_name: '', address_1: '', city: 'Madurai', state: 'TN', postcode: '625001' },
-    };
-    const token = safeGenerateToken(mockUser.id, cleanEmail);
-    localStorage.setItem('hf_auth_token', token);
-    localStorage.setItem('hf_user_profile', JSON.stringify(mockUser));
-    return { success: true, token, user: mockUser };
-  }
-}
-
-export async function loginOrSignupCustomer(email: string, password: string): Promise<{ success: boolean; token: string; user: UserProfile; isNewUser?: boolean }> {
-  const cleanEmail = email.trim().toLowerCase();
-
-  const res = await fetchApi<{ success: boolean; token: string; user: UserProfile; isNewUser?: boolean }>('/auth/login-signup', {
+  return fetchApi<{ success: boolean; message: string; testOtp?: string }>('/auth/forgot-password', {
     method: 'POST',
-    body: JSON.stringify({ email: cleanEmail, password }),
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPasswordWithOtp(email: string, otp: string, newPassword: string): Promise<{ success: boolean; accessToken: string; refreshToken: string; user: UserProfile }> {
+  const res = await fetchApi<{ success: boolean; accessToken: string; refreshToken: string; user: UserProfile }>('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, otp, newPassword }),
+  });
+  if (res.success && res.accessToken) {
+    localStorage.setItem('hf_auth_token', res.accessToken);
+    localStorage.setItem('hf_refresh_token', res.refreshToken);
+    localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
+  }
+  return res;
+}
+
+export async function loginOrSignupCustomer(email: string, password: string): Promise<{ success: boolean; accessToken: string; refreshToken: string; user: UserProfile; isNewUser?: boolean }> {
+  const cleanEmail = email.trim().toLowerCase();
+  const res = await fetchApi<{ success: boolean; accessToken: string; refreshToken: string; user: UserProfile; isNewUser?: boolean }>('/auth/login-signup', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: cleanEmail,
+      password,
+      deviceId: getDeviceId(),
+      deviceName: getDeviceName()
+    }),
   });
 
-  if (res.success && res.token) {
-    localStorage.setItem('hf_auth_token', res.token);
+  if (res.success && res.accessToken) {
+    localStorage.setItem('hf_auth_token', res.accessToken);
+    localStorage.setItem('hf_refresh_token', res.refreshToken);
     localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
 
-    // If this is a fresh account or account was recreated after deletion, clear old local orders
     if (res.isNewUser) {
       localStorage.removeItem('hf_local_orders');
     }
@@ -152,34 +111,19 @@ export async function loginOrSignupCustomer(email: string, password: string): Pr
   return res;
 }
 
-export async function loginCustomer(email: string, password: string): Promise<{ success: boolean; token: string; user: UserProfile }> {
-  const res = await fetchApi<{ success: boolean; token: string; user: UserProfile }>('/auth/login', {
+export async function loginCustomer(email: string, password: string): Promise<{ success: boolean; accessToken: string; refreshToken: string; user: UserProfile }> {
+  const res = await fetchApi<{ success: boolean; accessToken: string; refreshToken: string; user: UserProfile }>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({
+      email,
+      password,
+      deviceId: getDeviceId(),
+      deviceName: getDeviceName()
+    }),
   });
-  if (res.success && res.token) {
-    localStorage.setItem('hf_auth_token', res.token);
-    localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
-  }
-  return res;
-}
-
-export async function registerCustomer(payload: {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  address?: string;
-  city?: string;
-  pincode?: string;
-}): Promise<{ success: boolean; token: string; user: UserProfile }> {
-  const res = await fetchApi<{ success: boolean; token: string; user: UserProfile }>('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-  if (res.success && res.token) {
-    localStorage.setItem('hf_auth_token', res.token);
+  if (res.success && res.accessToken) {
+    localStorage.setItem('hf_auth_token', res.accessToken);
+    localStorage.setItem('hf_refresh_token', res.refreshToken);
     localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
   }
   return res;
@@ -205,7 +149,7 @@ export async function fetchCurrentUser(): Promise<UserProfile | null> {
     }
   } catch (err: any) {
     if (err && (err.accountDeleted || err.status === 401 || (err.message && err.message.toLowerCase().includes('deleted')))) {
-      console.log('Account deleted from WordPress database by admin. Wiping session & refreshing...');
+      console.log('Account deleted from database. Wiping session...');
       logoutCustomer();
       alert('Your account has been deleted by admin. Please create a new account to continue.');
       window.location.href = '/';
@@ -230,14 +174,35 @@ export async function fetchCustomerOrders(): Promise<CustomerOrderHistoryItem[]>
 
 export function logoutCustomer() {
   try {
+    const refreshToken = localStorage.getItem('hf_refresh_token');
+    if (refreshToken) {
+      fetchApi('/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken })
+      }).catch(() => {});
+    }
+
     localStorage.removeItem('hf_auth_token');
+    localStorage.removeItem('hf_refresh_token');
     localStorage.removeItem('hf_user_profile');
     localStorage.removeItem('hf_local_orders');
-    localStorage.removeItem('hf_user_passwords');
-    localStorage.removeItem('hf_user_cart');
     sessionStorage.clear();
     window.dispatchEvent(new CustomEvent('hf_account_deleted'));
   } catch (err) {
     console.error('Error logging out:', err);
+  }
+}
+
+export async function logoutAllDevices() {
+  try {
+    await fetchApi('/auth/logout-all', { method: 'POST' });
+    localStorage.removeItem('hf_auth_token');
+    localStorage.removeItem('hf_refresh_token');
+    localStorage.removeItem('hf_user_profile');
+    localStorage.removeItem('hf_local_orders');
+    sessionStorage.clear();
+    window.dispatchEvent(new CustomEvent('hf_account_deleted'));
+  } catch (err) {
+    console.error('Error logging out of all devices:', err);
   }
 }

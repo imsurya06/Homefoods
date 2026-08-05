@@ -3,6 +3,12 @@ export interface ProductVariant {
   basePrice: number;
 }
 
+export interface ProductImage {
+  id: number;
+  src: string;
+  alt: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -17,6 +23,7 @@ export interface Product {
   gstPercentage: number;
   isAvailable: boolean;
   variants: ProductVariant[];
+  images?: ProductImage[];
 }
 
 export const CATEGORY_FILTERS = [
