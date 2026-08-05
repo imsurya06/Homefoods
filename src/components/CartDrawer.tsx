@@ -167,6 +167,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [orderSuccess, setOrderSuccess] = useState<{ wcOrderId: number; paymentId: string; orderRefCode?: string } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [checkoutStep, setCheckoutStep] = useState<'cart' | 'shipping'>('cart');
 
   // Coupon and Real-time Pricing Validation States
   const [couponCode, setCouponCode] = useState<string>('');
@@ -318,6 +319,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   }, [customerName, email, mobileNumber, shippingAddress, city, pincode]);
 
   const hasFetchedOrdersOnce = useRef<boolean>(false);
+  const scrollableBodyRef = useRef<HTMLDivElement>(null);
 
   // Prevent background page from scrolling while drawer is open
   useEffect(() => {
@@ -327,6 +329,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       document.body.style.overflow = '';
       hasFetchedOrdersOnce.current = false;
       setOrderSuccess(null);
+      setCheckoutStep('cart');
     }
     return () => {
       document.body.style.overflow = '';
@@ -612,6 +615,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 onClick={() => {
                   setActiveTab('cart');
                   setOrderSuccess(null);
+                  setCheckoutStep('cart');
                 }}
                 className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   activeTab === 'cart'
@@ -632,6 +636,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 onClick={() => {
                   setActiveTab('orders');
                   setOrderSuccess(null);
+                  setCheckoutStep('cart');
                 }}
                 className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   activeTab === 'orders'
@@ -652,7 +657,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
           {/* TAB 1: SHOPPING CART CONTENT */}
           {activeTab === 'cart' && (
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+            <div ref={scrollableBodyRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
               {orderSuccess ? (
                 /* Order Placed Success Confirmation View */
                 <div className="py-8 text-center space-y-5 animate-in zoom-in-95 duration-300">
@@ -768,259 +773,299 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </button>
                 </div>
               ) : (
-                /* Cart Items List & Delivery Form */
+                /* 2-Step Checkout Wizard Stepper */
                 <>
-                  {/* Cart Items List */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-xs font-extrabold text-gray-400 uppercase tracking-wider">
-                      <span>Selected Items ({totalQuantity})</span>
+                  <div className="flex items-center justify-between bg-gray-50 border border-gray-100 p-3 rounded-2xl shrink-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black shadow-xs ${
+                        checkoutStep === 'cart'
+                          ? 'bg-[#95CD1A] text-white ring-2 ring-[#95CD1A]/20'
+                          : 'bg-green-100 text-[#95CD1A]'
+                      }`}>
+                        1
+                      </span>
+                      <span className={`text-[11px] font-extrabold ${checkoutStep === 'cart' ? 'text-[#1F2937]' : 'text-gray-400'}`}>
+                        Review Cart
+                      </span>
                     </div>
-
-                    <div className="divide-y divide-gray-100 border-y border-gray-100">
-                      {items.map((item, index) => (
-                        <div key={`${item.id}-${index}`} className="py-3.5 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <img
-                              src={item.imageUrl}
-                              alt={item.name}
-                              className="w-12 h-12 rounded-xl object-cover bg-gray-100 shrink-0 border border-gray-100"
-                            />
-                            <div className="min-w-0 text-left">
-                              <h4 className="text-xs sm:text-sm font-extrabold text-[#1F2937] truncate leading-tight">
-                                {item.name}
-                              </h4>
-                              <div className="mt-1 flex items-center gap-1.5">
-                                <span className="text-[10px] uppercase font-bold text-gray-400">Pack:</span>
-                                <select
-                                  value={item.weight}
-                                  onChange={(e) => {
-                                    const selectedWeight = e.target.value;
-                                    const opts = getWeightOptionsForItem(item);
-                                    const chosen = opts.find((o) => o.weight === selectedWeight);
-                                    const newPrice = chosen ? chosen.price : item.pricePerUnit;
-                                    if (onUpdateItemWeight) {
-                                      onUpdateItemWeight(item.id, selectedWeight, newPrice);
-                                    }
-                                  }}
-                                  className="text-[11px] font-extrabold text-[#1F2937] bg-gray-100 hover:bg-gray-200 border border-gray-200/80 rounded-md px-1.5 py-0.5 outline-none cursor-pointer transition-all"
-                                >
-                                  {getWeightOptionsForItem(item).map((opt) => (
-                                    <option key={opt.weight} value={opt.weight}>
-                                      {opt.weight} (₹{opt.price})
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                              <p className="text-xs font-black text-[#95CD1A] font-numeric mt-0.5">
-                                ₹{item.pricePerUnit * item.quantity}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-gray-50/50">
-                              <button
-                                onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
-                                className="px-2 py-1 text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer"
-                              >
-                                <Minus className="w-3 h-3" />
-                              </button>
-                              <span className="px-2 text-xs font-extrabold text-[#1F2937] font-numeric">
-                                {item.quantity}
-                              </span>
-                              <button
-                                onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                                className="px-2 py-1 text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer"
-                              >
-                                <Plus className="w-3 h-3" />
-                              </button>
-                            </div>
-
-                            <button
-                              onClick={() => onRemoveItem(item.id)}
-                              className="p-1.5 text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
-                              title="Remove item"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="flex-1 h-[2px] mx-3 bg-gray-200" />
+                    <div className="flex items-center gap-2">
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black shadow-xs ${
+                        checkoutStep === 'shipping'
+                          ? 'bg-[#95CD1A] text-white ring-2 ring-[#95CD1A]/20'
+                          : 'bg-gray-100 text-gray-400'
+                      }`}>
+                        2
+                      </span>
+                      <span className={`text-[11px] font-extrabold ${checkoutStep === 'shipping' ? 'text-[#1F2937]' : 'text-gray-400'}`}>
+                        Shipping & Payment
+                      </span>
                     </div>
                   </div>
 
-                  {/* Customer Shipping & Contact Details Form */}
-                  <div className="pt-2 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-extrabold uppercase tracking-wider text-gray-400">
-                        Delivery & Shipping Details
-                      </span>
-                      {!isLoggedIn && onOpenAuthModal && (
-                        <button
-                          onClick={onOpenAuthModal}
-                          className="text-[11px] font-bold text-[#95CD1A] hover:underline cursor-pointer"
-                        >
-                          Login for Auto-Fill
-                        </button>
-                      )}
-                    </div>
+                  {checkoutStep === 'cart' ? (
+                    /* Step 1: Review Items */
+                    <div className="space-y-3 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between text-xs font-extrabold text-gray-400 uppercase tracking-wider">
+                        <span>Selected Items ({totalQuantity})</span>
+                      </div>
 
-                    <div className="bg-gray-50/80 p-3.5 rounded-2xl border border-gray-200/80 space-y-3 text-left">
-                      <div>
-                        <label className="block text-[11px] font-bold text-gray-600 mb-1">Full Name</label>
-                        <input
-                          type="text"
-                          value={customerName}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setCustomerName(val);
-                            if (val.trim() && !validateName(val)) {
-                              setFieldErrors((prev) => ({ ...prev, customerName: 'Name must contain only letters and be at least 2 characters.' }));
-                            } else {
-                              setFieldErrors((prev) => ({ ...prev, customerName: '' }));
-                            }
-                          }}
-                          placeholder="Full Name"
-                          className={`w-full px-3 py-2 bg-white rounded-xl border ${
-                            fieldErrors.customerName ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
-                          } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all text-xs sm:text-sm`}
-                        />
-                        {fieldErrors.customerName && (
-                          <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.customerName}</p>
+                      <div className="divide-y divide-gray-100 border-y border-gray-100">
+                        {items.map((item, index) => (
+                          <div key={`${item.id}-${index}`} className="py-3.5 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <img
+                                src={item.imageUrl}
+                                alt={item.name}
+                                className="w-12 h-12 rounded-xl object-cover bg-gray-100 shrink-0 border border-gray-100"
+                              />
+                              <div className="min-w-0 text-left">
+                                <h4 className="text-xs sm:text-sm font-extrabold text-[#1F2937] truncate leading-tight">
+                                  {item.name}
+                                </h4>
+                                <div className="mt-1 flex items-center gap-1.5">
+                                  <span className="text-[10px] uppercase font-bold text-gray-400">Pack:</span>
+                                  <select
+                                    value={item.weight}
+                                    onChange={(e) => {
+                                      const selectedWeight = e.target.value;
+                                      const opts = getWeightOptionsForItem(item);
+                                      const chosen = opts.find((o) => o.weight === selectedWeight);
+                                      const newPrice = chosen ? chosen.price : item.pricePerUnit;
+                                      if (onUpdateItemWeight) {
+                                        onUpdateItemWeight(item.id, selectedWeight, newPrice);
+                                      }
+                                    }}
+                                    className="text-[11px] font-extrabold text-[#1F2937] bg-gray-100 hover:bg-gray-200 border border-gray-200/80 rounded-md px-1.5 py-0.5 outline-none cursor-pointer transition-all"
+                                  >
+                                    {getWeightOptionsForItem(item).map((opt) => (
+                                      <option key={opt.weight} value={opt.weight}>
+                                        {opt.weight} (₹{opt.price})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <p className="text-xs font-black text-[#95CD1A] font-numeric mt-0.5">
+                                  ₹{item.pricePerUnit * item.quantity}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-gray-50/50">
+                                <button
+                                  onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
+                                  className="px-2 py-1 text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                                <span className="px-2 text-xs font-extrabold text-[#1F2937] font-numeric">
+                                  {item.quantity}
+                                </span>
+                                <button
+                                  onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                                  className="px-2 py-1 text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+
+                              <button
+                                onClick={() => onRemoveItem(item.id)}
+                                className="p-1.5 text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
+                                title="Remove item"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Step 2: Shipping & Details Form */
+                    <div className="space-y-4 text-left animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-extrabold uppercase tracking-wider text-gray-400">
+                          Delivery & Shipping Details
+                        </span>
+                        {!isLoggedIn && onOpenAuthModal && (
+                          <button
+                            onClick={onOpenAuthModal}
+                            className="text-[11px] font-bold text-[#95CD1A] hover:underline cursor-pointer"
+                          >
+                            Login for Auto-Fill
+                          </button>
                         )}
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="bg-gray-50/80 p-3.5 rounded-2xl border border-gray-200/80 space-y-3.5">
                         <div>
-                          <label className="block text-[11px] font-bold text-gray-600 mb-1">Mobile Number</label>
-                          <div className="relative">
-                            <input
-                              type="tel"
-                              value={mobileNumber}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setMobileNumber(val);
-                                if (val.trim() && !validateMobile(val)) {
-                                  setFieldErrors((prev) => ({ ...prev, mobileNumber: 'Enter a valid 10-digit Indian mobile number.' }));
-                                } else {
-                                  setFieldErrors((prev) => ({ ...prev, mobileNumber: '' }));
-                                }
-                              }}
-                              placeholder="9876543210"
-                              className={`w-full pl-7 pr-2 py-2 bg-white rounded-xl border ${
-                                fieldErrors.mobileNumber ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
-                              } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all text-xs`}
-                            />
-                            <Phone className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
-                          </div>
-                          {fieldErrors.mobileNumber && (
-                            <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.mobileNumber}</p>
+                          <label className="block text-[11px] font-bold text-gray-600 mb-1">Full Name</label>
+                          <input
+                            type="text"
+                            value={customerName}
+                            autoComplete="name"
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCustomerName(val);
+                              if (val.trim() && !validateName(val)) {
+                                setFieldErrors((prev) => ({ ...prev, customerName: 'Name must contain only letters and be at least 2 characters.' }));
+                              } else {
+                                setFieldErrors((prev) => ({ ...prev, customerName: '' }));
+                              }
+                            }}
+                            placeholder="Full Name"
+                            className={`w-full px-3 py-2 bg-white rounded-xl border ${
+                              fieldErrors.customerName ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
+                            } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all text-xs sm:text-sm`}
+                          />
+                          {fieldErrors.customerName && (
+                            <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.customerName}</p>
                           )}
                         </div>
 
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-[11px] font-bold text-gray-600 mb-1">Mobile Number</label>
+                            <div className="relative">
+                              <input
+                                type="tel"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                autoComplete="tel"
+                                value={mobileNumber}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setMobileNumber(val);
+                                  if (val.trim() && !validateMobile(val)) {
+                                    setFieldErrors((prev) => ({ ...prev, mobileNumber: 'Enter a valid 10-digit Indian mobile number.' }));
+                                  } else {
+                                    setFieldErrors((prev) => ({ ...prev, mobileNumber: '' }));
+                                  }
+                                }}
+                                placeholder="9876543210"
+                                className={`w-full pl-7 pr-2 py-2 bg-white rounded-xl border ${
+                                  fieldErrors.mobileNumber ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
+                                } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all text-xs`}
+                              />
+                              <Phone className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
+                            </div>
+                            {fieldErrors.mobileNumber && (
+                              <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.mobileNumber}</p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-gray-600 mb-1">Email Address</label>
+                            <div className="relative">
+                              <input
+                                type="email"
+                                autoComplete="email"
+                                value={email}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setEmail(val);
+                                  if (val.trim() && !validateEmail(val)) {
+                                    setFieldErrors((prev) => ({ ...prev, email: 'Please enter a valid email address.' }));
+                                  } else {
+                                    setFieldErrors((prev) => ({ ...prev, email: '' }));
+                                  }
+                                }}
+                                placeholder="name@email.com"
+                                className={`w-full pl-7 pr-2 py-2 bg-white rounded-xl border ${
+                                  fieldErrors.email ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
+                                } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all text-xs`}
+                              />
+                              <Mail className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
+                            </div>
+                            {fieldErrors.email && (
+                              <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.email}</p>
+                            )}
+                          </div>
+                        </div>
+
                         <div>
-                          <label className="block text-[11px] font-bold text-gray-600 mb-1">Email Address</label>
-                          <div className="relative">
+                          <label className="block text-[11px] font-bold text-gray-600 mb-1">Shipping Address</label>
+                          <textarea
+                            rows={2}
+                            value={shippingAddress}
+                            autoComplete="street-address"
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setShippingAddress(val);
+                              if (val.trim() && val.trim().length < 10) {
+                                setFieldErrors((prev) => ({ ...prev, shippingAddress: 'Address must be at least 10 characters long.' }));
+                              } else {
+                                setFieldErrors((prev) => ({ ...prev, shippingAddress: '' }));
+                              }
+                            }}
+                            placeholder="Door No, Street Name, Area"
+                            className={`w-full px-3 py-2 bg-white rounded-xl border ${
+                              fieldErrors.shippingAddress ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
+                            } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium resize-none transition-all text-xs`}
+                          />
+                          {fieldErrors.shippingAddress && (
+                            <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.shippingAddress}</p>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[11px] font-bold text-gray-600 mb-1">City</label>
                             <input
-                              type="email"
-                              value={email}
+                              type="text"
+                              value={city}
+                              autoComplete="address-level2"
                               onChange={(e) => {
                                 const val = e.target.value;
-                                setEmail(val);
-                                if (val.trim() && !validateEmail(val)) {
-                                  setFieldErrors((prev) => ({ ...prev, email: 'Please enter a valid email address.' }));
+                                setCity(val);
+                                if (val.trim() && val.trim().length < 2) {
+                                  setFieldErrors((prev) => ({ ...prev, city: 'City must be at least 2 characters.' }));
                                 } else {
-                                  setFieldErrors((prev) => ({ ...prev, email: '' }));
+                                  setFieldErrors((prev) => ({ ...prev, city: '' }));
                                 }
                               }}
-                              placeholder="name@email.com"
-                              className={`w-full pl-7 pr-2 py-2 bg-white rounded-xl border ${
-                                fieldErrors.email ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
+                              placeholder="Madurai"
+                              className={`w-full px-3 py-2 bg-white rounded-xl border ${
+                                fieldErrors.city ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
                               } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all text-xs`}
                             />
-                            <Mail className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
+                            {fieldErrors.city && (
+                              <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.city}</p>
+                            )}
                           </div>
-                          {fieldErrors.email && (
-                            <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.email}</p>
-                          )}
-                        </div>
-                      </div>
 
-                      <div>
-                        <label className="block text-[11px] font-bold text-gray-600 mb-1">Shipping Address</label>
-                        <textarea
-                          rows={2}
-                          value={shippingAddress}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setShippingAddress(val);
-                            if (val.trim() && val.trim().length < 10) {
-                              setFieldErrors((prev) => ({ ...prev, shippingAddress: 'Address must be at least 10 characters long.' }));
-                            } else {
-                              setFieldErrors((prev) => ({ ...prev, shippingAddress: '' }));
-                            }
-                          }}
-                          placeholder="Door No, Street Name, Area"
-                          className={`w-full px-3 py-2 bg-white rounded-xl border ${
-                            fieldErrors.shippingAddress ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
-                          } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium resize-none transition-all text-xs`}
-                        />
-                        {fieldErrors.shippingAddress && (
-                          <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.shippingAddress}</p>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[11px] font-bold text-gray-600 mb-1">City</label>
-                          <input
-                            type="text"
-                            value={city}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setCity(val);
-                              if (val.trim() && val.trim().length < 2) {
-                                setFieldErrors((prev) => ({ ...prev, city: 'City must be at least 2 characters.' }));
-                              } else {
-                                setFieldErrors((prev) => ({ ...prev, city: '' }));
-                              }
-                            }}
-                            placeholder="Madurai"
-                            className={`w-full px-3 py-2 bg-white rounded-xl border ${
-                              fieldErrors.city ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
-                            } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium transition-all text-xs`}
-                          />
-                          {fieldErrors.city && (
-                            <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.city}</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-bold text-gray-600 mb-1">Pincode</label>
-                          <input
-                            type="text"
-                            value={pincode}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setPincode(val);
-                              if (val.trim() && !validatePincode(val)) {
-                                setFieldErrors((prev) => ({ ...prev, pincode: 'Please enter a valid 6-digit pincode.' }));
-                              } else {
-                                setFieldErrors((prev) => ({ ...prev, pincode: '' }));
-                              }
-                            }}
-                            placeholder="625001"
-                            className={`w-full px-3 py-2 bg-white rounded-xl border ${
-                              fieldErrors.pincode ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
-                            } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all text-xs`}
-                          />
-                          {fieldErrors.pincode && (
-                            <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.pincode}</p>
-                          )}
+                          <div>
+                            <label className="block text-[11px] font-bold text-gray-600 mb-1">Pincode</label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              autoComplete="postal-code"
+                              value={pincode}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setPincode(val);
+                                if (val.trim() && !validatePincode(val)) {
+                                  setFieldErrors((prev) => ({ ...prev, pincode: 'Please enter a valid 6-digit pincode.' }));
+                                } else {
+                                  setFieldErrors((prev) => ({ ...prev, pincode: '' }));
+                                }
+                              }}
+                              placeholder="625001"
+                              className={`w-full px-3 py-2 bg-white rounded-xl border ${
+                                fieldErrors.pincode ? 'border-red-500 bg-red-50/30' : 'border-gray-200 focus:border-[#95CD1A]'
+                              } focus:ring-1 focus:ring-[#95CD1A] focus:outline-none text-gray-800 font-medium font-numeric transition-all text-xs`}
+                            />
+                            {fieldErrors.pincode && (
+                              <p className="text-[10px] text-red-500 font-extrabold mt-0.5">{fieldErrors.pincode}</p>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </>
               )}
             </div>
@@ -1304,60 +1349,77 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
           {/* Cart Footer & Checkout Panel (Only Visible in Shopping Cart Tab) */}
           {activeTab === 'cart' && items.length > 0 && !orderSuccess && (
-            <div className="p-4 sm:p-6 bg-white border-t border-gray-200 space-y-4 shadow-lg shrink-0">
+            <div className="p-4 sm:p-5 bg-white border-t border-gray-200 space-y-3.5 shadow-lg shrink-0">
               
-              {/* Coupon Promo Code Input */}
-              <div className="pb-3 border-b border-gray-100 space-y-2 text-left">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
-                  Promo / Coupon Code
-                </span>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={couponCode}
-                    disabled={couponStatus?.success || isValidating}
-                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                    placeholder="E.G. FEST50"
-                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#95CD1A] focus:outline-none text-xs font-bold text-gray-800 uppercase"
-                  />
-                  {couponStatus?.success ? (
-                    <button
-                      type="button"
-                      onClick={handleRemoveCoupon}
-                      className="px-3.5 py-2 bg-red-50 text-red-500 hover:bg-red-100 font-extrabold text-xs rounded-xl transition-all cursor-pointer"
-                    >
-                      Remove
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleApplyCoupon}
-                      disabled={!couponCode.trim() || isValidating}
-                      className="px-4 py-2 bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 font-extrabold text-xs rounded-xl transition-all cursor-pointer"
-                    >
-                      Apply
-                    </button>
+              {/* Coupon Block */}
+              {checkoutStep === 'cart' ? (
+                /* Step 1 Coupon Input */
+                <div className="pb-2.5 border-b border-gray-100 space-y-2 text-left">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
+                    Promo / Coupon Code
+                  </span>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={couponCode}
+                      disabled={couponStatus?.success || isValidating}
+                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                      placeholder="E.G. FEST50"
+                      className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#95CD1A] focus:outline-none text-xs font-bold text-gray-800 uppercase"
+                    />
+                    {couponStatus?.success ? (
+                      <button
+                        type="button"
+                        onClick={handleRemoveCoupon}
+                        className="px-3.5 py-2 bg-red-50 text-red-500 hover:bg-red-100 font-extrabold text-xs rounded-xl transition-all cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleApplyCoupon}
+                        disabled={!couponCode.trim() || isValidating}
+                        className="px-4 py-2 bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 font-extrabold text-xs rounded-xl transition-all cursor-pointer"
+                      >
+                        Apply
+                      </button>
+                    )}
+                  </div>
+                  {couponStatus && (
+                    <p className={`text-[10px] font-extrabold ${couponStatus.success ? 'text-green-600' : 'text-red-500'}`}>
+                      {couponStatus.message}
+                    </p>
                   )}
                 </div>
-                {couponStatus && (
-                  <p className={`text-[10px] font-extrabold ${couponStatus.success ? 'text-green-600' : 'text-red-500'}`}>
-                    {couponStatus.message}
-                  </p>
-                )}
-              </div>
+              ) : (
+                /* Step 2 Read-Only Coupon Badge */
+                couponStatus?.success && (
+                  <div className="pb-2 border-b border-gray-100 flex items-center justify-between animate-in fade-in duration-200">
+                    <div className="flex items-center gap-1.5 text-xs text-green-700 font-extrabold">
+                      <span className="bg-green-100 text-[#95CD1A] px-2 py-0.5 rounded-lg border border-[#95CD1A]/20 uppercase text-[10px]">
+                        🎟️ {couponCode}
+                      </span>
+                      <span>Coupon Applied</span>
+                    </div>
+                    <span className="text-xs text-green-700 font-black">-₹{calcSummary?.discountAmount || 0}</span>
+                  </div>
+                )
+              )}
 
-              <div className={`space-y-2 transition-opacity duration-200 ${isValidating ? 'opacity-65' : ''}`}>
-                <div className="flex items-center justify-between text-xs text-gray-500 font-bold">
+              {/* Pricing calculations */}
+              <div className={`space-y-1.5 transition-opacity duration-200 text-xs ${isValidating ? 'opacity-65' : ''}`}>
+                <div className="flex items-center justify-between text-gray-500 font-bold">
                   <span>Subtotal ({totalQuantity} items)</span>
-                  <span>₹{calcSummary ? calcSummary.subtotal : subtotal}</span>
+                  <span className="font-extrabold text-gray-800">₹{calcSummary ? calcSummary.subtotal : subtotal}</span>
                 </div>
                 {calcSummary?.discountAmount > 0 && (
-                  <div className="flex items-center justify-between text-xs text-green-600 font-extrabold animate-in slide-in-from-top-1">
+                  <div className="flex items-center justify-between text-green-600 font-extrabold animate-in slide-in-from-top-1">
                     <span>Coupon Discount</span>
                     <span>-₹{calcSummary.discountAmount}</span>
                   </div>
                 )}
-                <div className="flex items-center justify-between text-xs text-gray-500 font-bold">
+                <div className="flex items-center justify-between text-gray-500 font-bold">
                   <span>Delivery Charge</span>
                   <div className="flex items-center gap-2">
                     {calcSummary?.delivery?.estimatedDays && (
@@ -1372,32 +1434,34 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center justify-between text-xs text-gray-500 font-bold">
+                <div className="flex items-center justify-between text-gray-500 font-bold">
                   <span>GST (5%)</span>
                   <span className="text-[#1F2937] font-extrabold">
                     ₹{calcSummary ? calcSummary.gst : Math.round(subtotal * 0.05)}
                   </span>
                 </div>
+                
+                {/* Grand Total */}
                 <div className="pt-2 border-t border-gray-100 flex flex-wrap items-baseline justify-between gap-1">
                   <div>
-                    <span className="text-xs font-extrabold text-gray-700 uppercase tracking-wider block">
+                    <span className="text-[10px] font-extrabold text-gray-700 uppercase tracking-wider block">
                       Grand Total
                     </span>
-                    <span className="text-2xl font-black text-[#1F2937]">
+                    <span className="text-xl sm:text-2xl font-black text-[#1F2937]">
                       ₹{calcSummary ? calcSummary.grandTotal : grandTotal}
                     </span>
                   </div>
-                  <span className="text-[11px] text-gray-400 font-semibold">
+                  <span className="text-[10px] text-gray-400 font-semibold">
                     (Includes Shipping & GST)
                   </span>
                 </div>
               </div>
 
-              {activeReservationOrderId && timeLeft > 0 && (
-                <div className="bg-[#FAFBF6] border border-[#ECF9CA] rounded-xl p-3 flex items-center justify-between animate-in fade-in duration-300">
+              {activeReservationOrderId && timeLeft > 0 && checkoutStep === 'shipping' && (
+                <div className="bg-[#FAFBF6] border border-[#ECF9CA] rounded-xl p-2.5 flex items-center justify-between animate-in fade-in duration-300">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-[#95CD1A] animate-pulse" />
-                    <span className="text-[11px] font-extrabold text-gray-700">
+                    <span className="text-[10px] font-extrabold text-gray-700">
                       Stock temporarily reserved for checkout
                     </span>
                   </div>
@@ -1411,27 +1475,63 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <p className="text-xs text-red-500 font-extrabold text-center">{checkoutError}</p>
               )}
 
-              {/* Order Now CTA */}
-              <button
-                type="button"
-                onClick={handleOrderNow}
-                disabled={isProcessing}
-                className="w-full py-4 px-4 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm sm:text-base rounded-2xl transition-all duration-300 shadow-xl shadow-[#95CD1A]/30 hover:shadow-2xl transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2.5 cursor-pointer text-center disabled:opacity-50"
-              >
-                {isProcessing ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
-                ) : (
-                  <ShoppingBag className="w-5 h-5 text-white shrink-0" />
-                )}
-                <span>{isProcessing ? 'Processing Order...' : 'Order Now'}</span>
-              </button>
+              {/* Action Buttons based on checkoutStep */}
+              {checkoutStep === 'cart' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (items.length > 0) {
+                        setCheckoutStep('shipping');
+                        if (scrollableBodyRef.current) {
+                          scrollableBodyRef.current.scrollTop = 0;
+                        }
+                      }
+                    }}
+                    className="w-full py-3.5 px-4 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm sm:text-base rounded-2xl transition-all duration-300 shadow-xl shadow-[#95CD1A]/30 hover:shadow-2xl flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Proceed to Shipping & Details</span>
+                    <ArrowRight className="w-4.5 h-4.5" />
+                  </button>
 
-              <button
-                onClick={onClearCart}
-                className="w-full py-2 text-xs font-bold text-gray-400 hover:text-red-500 transition-colors cursor-pointer text-center"
-              >
-                Clear Entire Cart
-              </button>
+                  <button
+                    onClick={onClearCart}
+                    className="w-full py-2 text-xs font-bold text-gray-400 hover:text-red-500 transition-colors cursor-pointer text-center"
+                  >
+                    Clear Entire Cart
+                  </button>
+                </>
+              ) : (
+                <div className="space-y-2.5">
+                  <button
+                    type="button"
+                    onClick={handleOrderNow}
+                    disabled={isProcessing}
+                    className="w-full py-3.5 px-4 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm sm:text-base rounded-2xl transition-all duration-300 shadow-xl shadow-[#95CD1A]/30 hover:shadow-2xl flex items-center justify-center gap-2.5 cursor-pointer text-center disabled:opacity-50"
+                  >
+                    {isProcessing ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+                    ) : (
+                      <ShoppingBag className="w-5 h-5 text-white shrink-0" />
+                    )}
+                    <span>{isProcessing ? 'Processing Order...' : 'Pay & Place Order'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCheckoutStep('cart');
+                      if (scrollableBodyRef.current) {
+                        scrollableBodyRef.current.scrollTop = 0;
+                      }
+                    }}
+                    className="w-full py-2.5 border border-gray-200 hover:bg-gray-50 text-gray-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5"
+                  >
+                    <span>← Back to Cart Details</span>
+                  </button>
+                </div>
+              )}
+
             </div>
           )}
 
