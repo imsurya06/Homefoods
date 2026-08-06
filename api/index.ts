@@ -1010,6 +1010,7 @@ async function sendOrderTrackingEmail(options: {
     console.log(`✉️ Professional order confirmation email sent to ${toEmail} for Order Ref ${orderRefCode}`);
   } catch (err: any) {
     console.warn('Email sending warning:', err.message);
+    throw new Error(`Email sending failed: ${err.message}`);
   }
 }
 
@@ -1311,6 +1312,7 @@ async function sendEmailOtp(email: string, otp: string, purpose: 'login' | 'chec
     console.log(`✉️ OTP email sent to ${email} for ${purpose}`);
   } catch (err: any) {
     console.error(`[Mail] Failed to send OTP email for ${purpose}:`, err.message);
+    throw new Error(`Email delivery failed: ${err.message}`);
   }
 }
 
