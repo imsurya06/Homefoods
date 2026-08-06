@@ -12,7 +12,6 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import dns from 'dns';
-import { Redis } from '@upstash/redis';
 
 dotenv.config();
 
@@ -34,22 +33,99 @@ const JWT_SECRET = requireEnv('JWT_SECRET');
 const JWT_REFRESH_SECRET = requireEnv('JWT_REFRESH_SECRET');
 const ENCRYPTION_KEY = requireEnv('ENCRYPTION_KEY');
 
-// Initialize Upstash Redis connection
-let redis: Redis | null = null;
-const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
-const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
-
-if (redisUrl && redisToken) {
-  redis = new Redis({
-    url: redisUrl,
-    token: redisToken,
-  });
-  console.log('[Redis] Centralized Upstash Redis connection initialized successfully.');
-} else {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('CRITICAL CONFIGURATION ERROR: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required in production.');
+// WordPress Transients Database Caching Helper functions
+async function setOtpInDatabase(email: string, otp: string): Promise<{ success: boolean; message?: string }> {
+  try {
+    const storeUrl = (process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com').replace(/\/$/, '');
+    const consumerKey = process.env.WC_CONSUMER_KEY || 'ck_48a6c149fa81c87736460d25a0af0c9b439d8a49';
+    
+    const res = await fetch(`${storeUrl}/wp-json/homefoods/v1/otp/set`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Homefoods-Secret': consumerKey
+      },
+      body: JSON.stringify({ email, otp })
+    });
+    
+    const data: any = await res.json();
+    if (res.ok && data.success) return { success: true };
+    return { success: false, message: data.message || 'Failed to send OTP.' };
+  } catch (err: any) {
+    console.error('[WordPress OTP Set Error]:', err.message);
+    return { success: false, message: err.message };
   }
-  console.warn('[Redis] Warning: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN not set. Falling back to in-memory caching.');
+}
+
+async function verifyOtpInDatabase(email: string, otp: string): Promise<{ success: boolean; code?: string; message?: string; attempts_remaining?: number }> {
+  try {
+    const storeUrl = (process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com').replace(/\/$/, '');
+    const consumerKey = process.env.WC_CONSUMER_KEY || 'ck_48a6c149fa81c87736460d25a0af0c9b439d8a49';
+    
+    const res = await fetch(`${storeUrl}/wp-json/homefoods/v1/otp/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Homefoods-Secret': consumerKey
+      },
+      body: JSON.stringify({ email, otp })
+    });
+    
+    const data: any = await res.json();
+    if (res.ok && data.success) return { success: true };
+    return { 
+      success: false, 
+      code: data.code || 'FAILED', 
+      message: data.message || 'Verification failed.',
+      attempts_remaining: data.attempts_remaining 
+    };
+  } catch (err: any) {
+    console.error('[WordPress OTP Verify Error]:', err.message);
+    return { success: false, message: err.message };
+  }
+}
+
+async function setIdempotencyInDatabase(key: string, payload: any): Promise<boolean> {
+  try {
+    const storeUrl = (process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com').replace(/\/$/, '');
+    const consumerKey = process.env.WC_CONSUMER_KEY || 'ck_48a6c149fa81c87736460d25a0af0c9b439d8a49';
+    
+    const res = await fetch(`${storeUrl}/wp-json/homefoods/v1/idempotency/set`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Homefoods-Secret': consumerKey
+      },
+      body: JSON.stringify({ key, payload })
+    });
+    return res.ok;
+  } catch (err: any) {
+    console.error('[WordPress Idempotency Set Error]:', err.message);
+    return false;
+  }
+}
+
+async function getIdempotencyFromDatabase(key: string): Promise<any | null> {
+  try {
+    const storeUrl = (process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com').replace(/\/$/, '');
+    const consumerKey = process.env.WC_CONSUMER_KEY || 'ck_48a6c149fa81c87736460d25a0af0c9b439d8a49';
+    
+    const res = await fetch(`${storeUrl}/wp-json/homefoods/v1/idempotency/get`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Homefoods-Secret': consumerKey
+      },
+      body: JSON.stringify({ key })
+    });
+    
+    const data: any = await res.json();
+    if (res.ok && data.success && data.payload) return data.payload;
+    return null;
+  } catch (err: any) {
+    console.error('[WordPress Idempotency Get Error]:', err.message);
+    return null;
+  }
 }
 
 const APP_URL = (process.env.FRONTEND_URL || 'https://www.homemadefoodsmadurai.com').replace(/\/$/, '');
@@ -1168,48 +1244,13 @@ app.post(['/api/v1/auth/send-otp', '/api/auth/send-otp', '/v1/auth/send-otp', '/
       return res.status(400).json({ success: false, message: 'Invalid OTP purpose requested.' });
     }
 
-    // OTP Send Rate Limiting (3 requests per 10 minutes)
-    if (redis) {
-      const limitKey = `otp-limit:${cleanEmail}`;
-      const count = await redis.incr(limitKey);
-      if (count === 1) {
-        await redis.expire(limitKey, 600); // 10 minutes (600s)
-      }
-      if (count > 3) {
-        return res.status(429).json({ success: false, message: 'Too many OTP requests. Please wait 10 minutes before requesting a new code.' });
-      }
-    } else {
-      const now = Date.now();
-      let limit = otpSendLimits.get(cleanEmail);
-      if (!limit || now > limit.resetAt) {
-        limit = { count: 0, resetAt: now + 10 * 60 * 1000 };
-      }
-      limit.count += 1;
-      otpSendLimits.set(cleanEmail, limit);
-      if (limit.count > 3) {
-        return res.status(429).json({ success: false, message: 'Too many OTP requests. Please wait 10 minutes before requesting a new code.' });
-      }
-    }
-
     // Generate random 6-digit OTP code
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Store in cache
-    if (redis) {
-      await redis.set(
-        `otp:${cleanEmail}`,
-        JSON.stringify({
-          otp,
-          attempts: 0
-        }),
-        { ex: 300 } // 5 minutes (300s)
-      );
-    } else {
-      otpCache.set(cleanEmail, {
-        otp,
-        expiresAt: Date.now() + 5 * 60 * 1000,
-        attempts: 0
-      });
+    // Store in WordPress Database cache (transients)
+    const dbRes = await setOtpInDatabase(cleanEmail, otp);
+    if (!dbRes.success) {
+      return res.status(400).json({ success: false, message: dbRes.message || 'Failed to send verification code. Please try again.' });
     }
 
     // Send email using custom SMTP notifier
@@ -1237,56 +1278,19 @@ app.post(['/api/v1/auth/verify-otp', '/api/auth/verify-otp', '/v1/auth/verify-ot
       return res.status(400).json({ success: false, message: 'Email and verification code are required.' });
     }
 
-    let session: { otp: string; attempts: number } | null = null;
-
-    if (redis) {
-      const data = await redis.get<{ otp: string; attempts: number }>(`otp:${cleanEmail}`);
-      if (data) {
-        session = data;
+    const dbRes = await verifyOtpInDatabase(cleanEmail, cleanOtp);
+    if (!dbRes.success) {
+      if (dbRes.code === 'EXPIRED') {
+        return res.status(400).json({ success: false, message: 'Verification code not found or expired. Please request a new code.' });
       }
-    } else {
-      const localSession = otpCache.get(cleanEmail);
-      if (localSession && Date.now() <= localSession.expiresAt) {
-        session = { otp: localSession.otp, attempts: localSession.attempts };
+      if (dbRes.code === 'MAX_ATTEMPTS') {
+        return res.status(400).json({ success: false, message: 'Too many incorrect attempts. Please request a new verification code.' });
       }
-    }
-
-    if (!session) {
-      return res.status(400).json({ success: false, message: 'Verification code not found or expired. Please request a new code.' });
-    }
-
-    if (session.attempts >= 5) {
-      if (redis) {
-        await redis.del(`otp:${cleanEmail}`);
-      } else {
-        otpCache.delete(cleanEmail);
+      if (dbRes.code === 'INVALID') {
+        const remaining = dbRes.attempts_remaining !== undefined ? dbRes.attempts_remaining : 5;
+        return res.status(400).json({ success: false, message: `Invalid verification code. Please check your email and try again. (${remaining} attempts remaining)` });
       }
-      return res.status(400).json({ success: false, message: 'Too many incorrect attempts. Please request a new verification code.' });
-    }
-
-    if (session.otp !== cleanOtp) {
-      const newAttempts = session.attempts + 1;
-      if (redis) {
-        await redis.set(
-          `otp:${cleanEmail}`,
-          JSON.stringify({ otp: session.otp, attempts: newAttempts }),
-          { ex: 300 }
-        );
-      } else {
-        const localSession = otpCache.get(cleanEmail);
-        if (localSession) {
-          localSession.attempts = newAttempts;
-          otpCache.set(cleanEmail, localSession);
-        }
-      }
-      return res.status(400).json({ success: false, message: `Invalid verification code. Please check your email and try again. (${5 - newAttempts} attempts remaining)` });
-    }
-
-    // Code matched, consume/delete it
-    if (redis) {
-      await redis.del(`otp:${cleanEmail}`);
-    } else {
-      otpCache.delete(cleanEmail);
+      return res.status(400).json({ success: false, message: dbRes.message || 'Verification failed.' });
     }
 
     if (cleanPurpose === 'login') {
@@ -3149,13 +3153,8 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
     const idempotencyKey = clientIdempotency ? `idempotency:${clientIdempotency}` : `idempotency:auto:${autoKey}`;
     const now = Date.now();
 
-    let existingRecentOrder: any = null;
-    if (redis) {
-      const cached = await redis.get<any>(idempotencyKey);
-      if (cached) {
-        existingRecentOrder = cached;
-      }
-    } else {
+    let existingRecentOrder: any = await getIdempotencyFromDatabase(idempotencyKey);
+    if (!existingRecentOrder) {
       existingRecentOrder = recentCreatedOrdersMap.get(idempotencyKey);
     }
 
@@ -3302,11 +3301,8 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       trackingToken,
     };
 
-    if (redis) {
-      await redis.set(idempotencyKey, JSON.stringify(resPayload), { ex: 600 }); // 10 minutes
-    } else {
-      recentCreatedOrdersMap.set(idempotencyKey, resPayload);
-    }
+    await setIdempotencyInDatabase(idempotencyKey, resPayload);
+    recentCreatedOrdersMap.set(idempotencyKey, resPayload);
 
     // Asynchronous background cleanup of expired pending orders
     cleanupExpiredPendingOrders().catch((err) => console.error('[Background Cleanup Error]:', err.message));
