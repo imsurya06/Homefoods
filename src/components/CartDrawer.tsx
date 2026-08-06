@@ -16,13 +16,15 @@ import {
   Clock,
   Truck,
   PackageCheck,
+  AlertCircle,
 } from 'lucide-react';
 import { type CartItem } from '../data/bestsellers';
 import { processRazorpayCheckout, type CheckoutPayload, trackSingleOrder, cancelInventoryReservation } from '../services/checkoutService';
-import { fetchCustomerOrders, type CustomerOrderHistoryItem, type UserProfile } from '../services/authService';
+import { fetchCustomerOrders, sendEmailOtp, verifyEmailOtp, type CustomerOrderHistoryItem, type UserProfile } from '../services/authService';
 import { getCachedProductsSync } from '../services/productService';
 import { validateCart } from '../services/cartService';
 import { bootstrapSync } from '../services/syncManager';
+import { useSyncStore } from '../store/useSyncStore';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -114,6 +116,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
   }, [initialTab, isOpen]);
 
+  // Email Verification OTP State
+  const [checkoutEmailVerified, setCheckoutEmailVerified] = useState<string | null>(null);
+  const [showOtpPopup, setShowOtpPopup] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+
   // Shipping & Contact Details State with LocalStorage persistence
   const [customerName, setCustomerName] = useState<string>(() => {
     try {
@@ -202,6 +212,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       if (user.billing?.postcode && !pincode) setPincode(user.billing.postcode);
     }
   }, [user, isOpen]);
+
+  // Resend OTP cooldown timer effect
+  useEffect(() => {
+    let interval: any = null;
+    if (resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [resendTimer]);
 
   // 1. Countdown timer effect for inventory reservations
   useEffect(() => {
@@ -431,6 +454,49 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setCouponStatus(null);
   };
 
+  const triggerCheckoutOtp = async () => {
+    setOtpError(null);
+    setOtpLoading(true);
+    try {
+      const res = await sendEmailOtp(email.trim(), 'checkout');
+      if (res.success) {
+        setShowOtpPopup(true);
+        setResendTimer(60);
+      } else {
+        setCheckoutError(res.message || 'Failed to send verification code. Please try again.');
+      }
+    } catch (err: any) {
+      setCheckoutError(err.message || 'Error sending verification code.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleVerifyCheckoutOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOtpError(null);
+    setOtpLoading(true);
+    try {
+      const res = await verifyEmailOtp(email.trim(), otpCode, 'checkout');
+      if (res.success) {
+        setCheckoutEmailVerified(email.trim().toLowerCase());
+        setShowOtpPopup(false);
+        setOtpCode('');
+        
+        // Immediately place order on verification success!
+        setTimeout(() => {
+          handleOrderNowInternal();
+        }, 100);
+      } else {
+        setOtpError(res.message || 'Incorrect verification code. Please try again.');
+      }
+    } catch (err: any) {
+      setOtpError(err.message || 'Invalid verification code.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   const handleOrderNow = async () => {
     setCheckoutError(null);
     setFieldErrors({});
@@ -471,6 +537,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       return;
     }
 
+    // Determine if Email Verification is required
+    const targetEmail = email.trim().toLowerCase();
+    const needsVerification = !isLoggedIn || !user || user.email.toLowerCase() !== targetEmail;
+
+    if (needsVerification && checkoutEmailVerified !== targetEmail) {
+      await triggerCheckoutOtp();
+      return;
+    }
+
+    await handleOrderNowInternal();
+  };
+
+  const handleOrderNowInternal = async () => {
     setIsProcessing(true);
 
     const payload: CheckoutPayload = {
@@ -503,6 +582,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         setCalcSummary(null);
         setCheckoutError(null);
         setFieldErrors({});
+
+        // Auto-login new registered customer
+        if (response && response.accessToken && response.refreshToken && response.user) {
+          try {
+            useSyncStore.getState().login(response.user, response.accessToken, response.refreshToken);
+          } catch (e) {
+            console.error('Error logging in guest account after auto-registration:', e);
+          }
+        }
+
         if (response && response.wcOrderId) {
           setExpandedOrderId(response.wcOrderId);
         }
@@ -1537,6 +1626,90 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
         </div>
       </div>
+
+      {/* Checkout Email Verification Code Popup */}
+      {showOtpPopup && (
+        <div className="fixed inset-0 z-50 overflow-hidden text-[#1F2937] flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+            onClick={() => setShowOtpPopup(false)}
+          />
+
+          <div className="relative bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 z-10 overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-200 text-left">
+            <button
+              onClick={() => setShowOtpPopup(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center mb-5">
+              <div className="w-10 h-10 rounded-xl bg-[#F7FCE8] text-[#95CD1A] flex items-center justify-center mx-auto mb-2.5 shadow-xs border border-[#ECF9CA]">
+                <Mail className="w-5 h-5" />
+              </div>
+              <h4 className="font-extrabold text-lg text-[#1F2937]">Verify Email Code</h4>
+              <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
+                We sent a 6-digit order verification code to <strong className="text-gray-800">{email}</strong>. Please enter it below.
+              </p>
+            </div>
+
+            {otpError && (
+              <div className="mb-3.5 p-2.5 bg-red-50 border border-red-200 rounded-xl flex items-center gap-1.5 text-[11px] text-red-600 font-semibold animate-in slide-in-from-top-1">
+                <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                <span>{otpError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleVerifyCheckoutOtp} className="space-y-4">
+              <div>
+                <input
+                  type="text"
+                  required
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••••"
+                  className="w-full py-2.5 bg-gray-50 rounded-xl border border-gray-200 focus:border-[#95CD1A] focus:bg-white focus:outline-none font-black tracking-[8px] text-center text-lg font-numeric"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  type="submit"
+                  disabled={otpLoading}
+                  className="w-full py-3 px-4 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {otpLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <span>Confirm & Pay Order</span>
+                  )}
+                </button>
+
+                <div className="flex items-center justify-between text-[11px] font-extrabold pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowOtpPopup(false)}
+                    className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={resendTimer > 0 || otpLoading}
+                    onClick={() => triggerCheckoutOtp()}
+                    className="text-[#95CD1A] hover:underline disabled:text-gray-400 disabled:no-underline cursor-pointer"
+                  >
+                    {resendTimer > 0 ? `Resend (${resendTimer}s)` : 'Resend Code'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

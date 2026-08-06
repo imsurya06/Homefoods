@@ -1007,7 +1007,14 @@ const loginSchema = z.object({
   deviceName: z.string().optional()
 });
 
-async function sendEmailOtp(email: string, otp: string) {
+interface OtpSession {
+  otp: string;
+  expiresAt: number;
+  attempts: number;
+}
+const otpCache = new Map<string, OtpSession>();
+
+async function sendEmailOtp(email: string, otp: string, purpose: 'login' | 'checkout' | 'email_change' | 'forgot_password' = 'forgot_password') {
   const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
@@ -1015,7 +1022,7 @@ async function sendEmailOtp(email: string, otp: string) {
   const secure = smtpPort === 465;
 
   if (!smtpUser || !smtpPass) {
-    console.warn('[Mail] SMTP credentials not set. OTP is:', otp);
+    console.warn(`[Mail] SMTP credentials not set. OTP for ${purpose} to ${email} is:`, otp);
     return;
   }
 
@@ -1026,18 +1033,36 @@ async function sendEmailOtp(email: string, otp: string) {
     auth: { user: smtpUser, pass: smtpPass },
   });
 
+  let subject = `Password Reset Verification Code: ${otp}`;
+  let title = 'Password Reset Request';
+  let desc = 'We received a request to reset your password. Use the following verification code to complete the process:';
+
+  if (purpose === 'login') {
+    subject = `🔐 Verification Code: ${otp} - Homemade Foods`;
+    title = 'Login Verification';
+    desc = 'Use the following verification code to sign in to your Homemade Foods account:';
+  } else if (purpose === 'checkout') {
+    subject = `🎟️ Checkout Verification Code: ${otp} - Homemade Foods`;
+    title = 'Checkout Email Verification';
+    desc = 'Use the following verification code to verify your email address and proceed with your order:';
+  } else if (purpose === 'email_change') {
+    subject = `🔄 Email Change Code: ${otp} - Homemade Foods`;
+    title = 'Verify Email Change';
+    desc = 'Use the following verification code to confirm changing your account email address:';
+  }
+
   const mailOptions = {
-    from: `"Homemade Foods Support" <${smtpUser}>`,
+    from: `"Homemade Foods" <${smtpUser}>`,
     to: email,
-    subject: `Password Reset Verification Code: ${otp}`,
+    subject: subject,
     html: `
       <div style="font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
-        <h2 style="color: #1F2937; margin-bottom: 20px;">Password Reset Request</h2>
-        <p style="color: #4B5563; font-size: 14px;">We received a request to reset your password. Use the following verification code to complete the process:</p>
+        <h2 style="color: #1F2937; margin-bottom: 20px;">${title}</h2>
+        <p style="color: #4B5563; font-size: 14px;">${desc}</p>
         <div style="padding: 16px; background-color: #FAFBF6; border: 1px solid #ECF9CA; border-radius: 8px; font-size: 24px; font-weight: bold; color: #95CD1A; text-align: center; margin: 20px 0; letter-spacing: 4px;">
           ${otp}
         </div>
-        <p style="color: #9CA3AF; font-size: 11px; margin-bottom: 12px;">This code will expire in 15 minutes. If you did not make this request, you can safely ignore this email.</p>
+        <p style="color: #9CA3AF; font-size: 11px; margin-bottom: 12px;">This code will expire in 5 minutes. If you did not make this request, you can safely ignore this email.</p>
         <hr style="border: 0; border-top: 1px solid #E5E7EB; margin: 16px 0;" />
         <p style="margin: 0; font-size: 11px; color: #9CA3AF; text-align: center; line-height: 1.5;">
           <strong>Homemade Foods Madurai</strong><br/>
@@ -1050,10 +1075,222 @@ async function sendEmailOtp(email: string, otp: string) {
 
   try {
     await transporter.sendMail(mailOptions);
+    console.log(`✉️ OTP email sent to ${email} for ${purpose}`);
   } catch (err: any) {
-    console.error('[Mail] Failed to send OTP email:', err.message);
+    console.error(`[Mail] Failed to send OTP email for ${purpose}:`, err.message);
   }
 }
+
+// POST /api/v1/auth/send-otp
+app.post(['/api/v1/auth/send-otp', '/api/auth/send-otp', '/v1/auth/send-otp', '/auth/send-otp'], authLimiter, async (req, res) => {
+  try {
+    const { email, purpose } = req.body;
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPurpose = (purpose || 'login').trim();
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      return res.status(400).json({ success: false, message: 'A valid email address is required.' });
+    }
+
+    if (!['login', 'checkout', 'email_change'].includes(cleanPurpose)) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP purpose requested.' });
+    }
+
+    // Generate random 6-digit OTP code
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Store in cache
+    otpCache.set(cleanEmail, {
+      otp,
+      expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
+      attempts: 0
+    });
+
+    // Send email using custom SMTP notifier
+    await sendEmailOtp(cleanEmail, otp, cleanPurpose as any);
+
+    return res.json({
+      success: true,
+      message: 'Verification code sent successfully to your email address.',
+      testOtp: process.env.NODE_ENV !== 'production' ? otp : undefined
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/v1/auth/verify-otp
+app.post(['/api/v1/auth/verify-otp', '/api/auth/verify-otp', '/v1/auth/verify-otp', '/auth/verify-otp'], authLimiter, async (req, res) => {
+  try {
+    const { email, otp, purpose, name, phone, deviceId, deviceName } = req.body;
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanOtp = (otp || '').trim();
+    const cleanPurpose = (purpose || 'login').trim();
+
+    if (!cleanEmail || !cleanOtp) {
+      return res.status(400).json({ success: false, message: 'Email and verification code are required.' });
+    }
+
+    const session = otpCache.get(cleanEmail);
+    if (!session) {
+      return res.status(400).json({ success: false, message: 'Verification code not found or expired. Please request a new code.' });
+    }
+
+    if (Date.now() > session.expiresAt) {
+      otpCache.delete(cleanEmail);
+      return res.status(400).json({ success: false, message: 'Verification code expired. Please request a new code.' });
+    }
+
+    if (session.attempts >= 5) {
+      otpCache.delete(cleanEmail);
+      return res.status(400).json({ success: false, message: 'Too many incorrect attempts. Please request a new verification code.' });
+    }
+
+    if (session.otp !== cleanOtp) {
+      session.attempts += 1;
+      return res.status(400).json({ success: false, message: `Invalid verification code. Please check your email and try again. (${5 - session.attempts} attempts remaining)` });
+    }
+
+    // Code matched, consume/delete it
+    otpCache.delete(cleanEmail);
+
+    if (cleanPurpose === 'login') {
+      // Find or create WooCommerce customer
+      let customerId = '';
+      let customerUser: any = null;
+      let isExistingUser = false;
+
+      const fullName = (name || 'Customer').trim();
+      const firstName = fullName.split(' ')[0] || 'Customer';
+      const lastName = fullName.split(' ').slice(1).join(' ') || '';
+      const cleanPhone = (phone || '').trim();
+
+      try {
+        const searchRes = await wcFetch('customers', { params: { email: cleanEmail } });
+        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+          const found = searchRes.data[0];
+          customerId = found.id.toString();
+          isExistingUser = true;
+          try {
+            const fullCustRes = await wcFetch(`customers/${customerId}`);
+            customerUser = (fullCustRes.ok && fullCustRes.data) ? fullCustRes.data : found;
+          } catch {
+            customerUser = found;
+          }
+        }
+      } catch {}
+
+      if (!customerUser) {
+        const username = `${cleanEmail.split('@')[0]}_${Math.floor(1000 + Math.random() * 9000)}`;
+        const customerPayload = {
+          email: cleanEmail,
+          first_name: firstName,
+          last_name: lastName,
+          username,
+          billing: {
+            first_name: firstName,
+            last_name: lastName,
+            email: cleanEmail,
+            phone: cleanPhone,
+          },
+          shipping: {
+            first_name: firstName,
+            last_name: lastName,
+          },
+          meta_data: [
+            { key: 'hf_cart_revision', value: '1' },
+            { key: 'hf_wishlist_revision', value: '1' },
+            { key: 'hf_profile_revision', value: '1' },
+            { key: 'hf_address_revision', value: '1' }
+          ],
+        };
+
+        try {
+          const wcRes = await wcFetch('customers', { method: 'POST', body: customerPayload });
+          if (wcRes.ok && wcRes.data && wcRes.data.id) {
+            customerUser = wcRes.data;
+            customerId = wcRes.data.id.toString();
+          }
+        } catch {
+          customerId = getDeterministicUserId(cleanEmail);
+          customerUser = { id: customerId, email: cleanEmail, first_name: firstName, last_name: lastName };
+        }
+      }
+
+      if (!customerId) {
+        customerId = getDeterministicUserId(cleanEmail);
+      }
+
+      // Claim guest orders
+      linkGuestOrdersToCustomer(cleanEmail, customerId);
+
+      // Create session tokens
+      const sessionId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+      const accessToken = jwt.sign({ customerId: parseInt(customerId, 10), email: cleanEmail }, JWT_SECRET, { expiresIn: '15m' });
+      const refreshToken = jwt.sign({ customerId: parseInt(customerId, 10), sessionId }, JWT_REFRESH_SECRET, { expiresIn: '30d' });
+
+      const activeSessions = getSavedSessionHashes(customerUser);
+      activeSessions.push({
+        hash: sha256(refreshToken),
+        deviceId: deviceId || 'unknown_device',
+        deviceName: deviceName || 'Web Browser',
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        lastUsedAt: new Date().toISOString()
+      });
+
+      await saveSessionHashes(customerId, activeSessions);
+
+      res.cookie('jid', refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: 30 * 24 * 60 * 60 * 1000
+      });
+
+      return res.json({
+        success: true,
+        accessToken,
+        refreshToken,
+        isNewUser: !isExistingUser,
+        user: {
+          id: customerId,
+          email: cleanEmail,
+          firstName: customerUser?.first_name || firstName,
+          lastName: customerUser?.last_name || lastName,
+          displayName: customerUser?.display_name || `${firstName} ${lastName}`.trim(),
+          phone: customerUser?.billing?.phone || cleanPhone || '',
+          billing: customerUser?.billing || {
+            first_name: firstName,
+            last_name: lastName,
+            email: cleanEmail,
+            phone: cleanPhone,
+            address_1: '',
+            city: '',
+            state: 'Tamil Nadu',
+            postcode: ''
+          },
+          shipping: customerUser?.shipping || {
+            first_name: firstName,
+            last_name: lastName,
+            address_1: '',
+            city: '',
+            state: 'Tamil Nadu',
+            postcode: ''
+          }
+        }
+      });
+    }
+
+    // For checkout or email_change verification, just return success
+    return res.json({
+      success: true,
+      message: 'Email address verified successfully.'
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 // POST /api/v1/auth/login-signup (Instant Auto-Registration & Customer Login)
 app.post(['/api/v1/auth/login-signup', '/api/auth/login-signup', '/v1/auth/login-signup', '/auth/login-signup'], authLimiter, async (req, res) => {
@@ -2829,13 +3066,85 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
     } catch {}
 
     const cleanEmail = (customerEmail || '').trim().toLowerCase();
+    let customerUser: any = null;
+    let customerId = '';
+    let accessToken = '';
+    let refreshToken = '';
+
     if (cleanEmail) {
       userCartsMap.set(cleanEmail, []);
       userCartLocks.set(cleanEmail, Date.now() + 5000);
-      wcFetch('customers', { params: { email: cleanEmail } }).then((searchRes) => {
+
+      // Find or create WooCommerce customer
+      const fullName = (customerName || 'Customer').trim();
+      const firstName = fullName.split(' ')[0] || 'Customer';
+      const lastName = fullName.split(' ').slice(1).join(' ') || '';
+      const cleanPhone = (phone || '').trim();
+
+      try {
+        const searchRes = await wcFetch('customers', { params: { email: cleanEmail } });
         if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-          const wcId = searchRes.data[0].id;
-          wcFetch(`customers/${wcId}`, {
+          const found = searchRes.data[0];
+          customerId = found.id.toString();
+          try {
+            const fullCustRes = await wcFetch(`customers/${customerId}`);
+            customerUser = (fullCustRes.ok && fullCustRes.data) ? fullCustRes.data : found;
+          } catch {
+            customerUser = found;
+          }
+        }
+      } catch {}
+
+      if (!customerUser) {
+        const username = `${cleanEmail.split('@')[0]}_${Math.floor(1000 + Math.random() * 9000)}`;
+        const customerPayload = {
+          email: cleanEmail,
+          first_name: firstName,
+          last_name: lastName,
+          username,
+          billing: {
+            first_name: firstName,
+            last_name: lastName,
+            email: cleanEmail,
+            phone: cleanPhone,
+            address_1: shippingAddress ? shippingAddress.split(',')[0]?.trim() || '' : '',
+            city: shippingAddress ? shippingAddress.split(',')[1]?.split('-')[0]?.trim() || '' : '',
+            state: 'Tamil Nadu',
+            postcode: shippingAddress ? shippingAddress.split('-')?.[1]?.trim() || '' : '',
+          },
+          shipping: {
+            first_name: firstName,
+            last_name: lastName,
+            address_1: shippingAddress ? shippingAddress.split(',')[0]?.trim() || '' : '',
+            city: shippingAddress ? shippingAddress.split(',')[1]?.split('-')[0]?.trim() || '' : '',
+            state: 'Tamil Nadu',
+            postcode: shippingAddress ? shippingAddress.split('-')?.[1]?.trim() || '' : '',
+          },
+          meta_data: [
+            { key: 'hf_saved_cart', value: '[]' },
+            { key: '_saved_cart', value: '[]' },
+            { key: 'hf_cart_revision', value: '1' },
+            { key: 'hf_wishlist_revision', value: '1' },
+            { key: 'hf_profile_revision', value: '1' },
+            { key: 'hf_address_revision', value: '1' }
+          ],
+        };
+
+        try {
+          const wcRes = await wcFetch('customers', { method: 'POST', body: customerPayload });
+          if (wcRes.ok && wcRes.data && wcRes.data.id) {
+            customerUser = wcRes.data;
+            customerId = wcRes.data.id.toString();
+          }
+        } catch (createErr: any) {
+          console.error('[Verify Payment] Customer creation failed:', createErr.message);
+          customerId = getDeterministicUserId(cleanEmail);
+          customerUser = { id: customerId, email: cleanEmail, first_name: firstName, last_name: lastName };
+        }
+      } else {
+        // Clear saved cart revision
+        try {
+          await wcFetch(`customers/${customerId}`, {
             method: 'PUT',
             body: {
               meta_data: [
@@ -2843,9 +3152,40 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
                 { key: '_saved_cart', value: '[]' },
               ],
             },
-          }).catch(() => {});
-        }
-      }).catch(() => {});
+          });
+        } catch {}
+      }
+
+      if (!customerId) {
+        customerId = getDeterministicUserId(cleanEmail);
+      }
+
+      // link guest orders
+      linkGuestOrdersToCustomer(cleanEmail, customerId);
+
+      // Create JWT session for auto-login
+      const sessionId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+      accessToken = jwt.sign({ customerId: parseInt(customerId, 10), email: cleanEmail }, JWT_SECRET, { expiresIn: '15m' });
+      refreshToken = jwt.sign({ customerId: parseInt(customerId, 10), sessionId }, JWT_REFRESH_SECRET, { expiresIn: '30d' });
+
+      const activeSessions = getSavedSessionHashes(customerUser);
+      activeSessions.push({
+        hash: sha256(refreshToken),
+        deviceId: 'checkout_auto_registration',
+        deviceName: 'Web Checkout',
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        lastUsedAt: new Date().toISOString()
+      });
+
+      await saveSessionHashes(customerId, activeSessions);
+
+      res.cookie('jid', refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: 30 * 24 * 60 * 60 * 1000
+      });
     }
 
     const displayOrderCode = orderRefCode || `HF-${wcOrderId}`;
@@ -2865,7 +3205,41 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
       });
     }
 
-    return res.json({ success: true, message: 'Payment verified', wcOrderId, orderRefCode: displayOrderCode, trackingLink });
+    return res.json({
+      success: true,
+      message: 'Payment verified',
+      wcOrderId,
+      orderRefCode: displayOrderCode,
+      trackingLink,
+      accessToken: accessToken || undefined,
+      refreshToken: refreshToken || undefined,
+      user: customerUser ? {
+        id: customerId,
+        email: cleanEmail,
+        firstName: customerUser?.first_name || (customerName || 'Customer').split(' ')[0],
+        lastName: customerUser?.last_name || (customerName || 'Customer').split(' ').slice(1).join(' '),
+        displayName: customerUser?.display_name || customerName || 'Customer',
+        phone: customerUser?.billing?.phone || phone || '',
+        billing: customerUser?.billing || {
+          first_name: customerUser?.first_name || (customerName || 'Customer').split(' ')[0],
+          last_name: customerUser?.last_name || (customerName || 'Customer').split(' ').slice(1).join(' '),
+          email: cleanEmail,
+          phone: phone || '',
+          address_1: '',
+          city: '',
+          state: 'Tamil Nadu',
+          postcode: ''
+        },
+        shipping: customerUser?.shipping || {
+          first_name: customerUser?.first_name || (customerName || 'Customer').split(' ')[0],
+          last_name: customerUser?.last_name || (customerName || 'Customer').split(' ').slice(1).join(' '),
+          address_1: '',
+          city: '',
+          state: 'Tamil Nadu',
+          postcode: ''
+        }
+      } : undefined
+    });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }

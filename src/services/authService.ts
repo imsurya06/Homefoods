@@ -206,3 +206,54 @@ export async function logoutAllDevices() {
     console.error('Error logging out of all devices:', err);
   }
 }
+
+export async function sendEmailOtp(
+  email: string,
+  purpose: 'login' | 'checkout' | 'email_change'
+): Promise<{ success: boolean; message: string; testOtp?: string }> {
+  return fetchApi<{ success: boolean; message: string; testOtp?: string }>('/auth/send-otp', {
+    method: 'POST',
+    body: JSON.stringify({ email: email.trim().toLowerCase(), purpose })
+  });
+}
+
+export async function verifyEmailOtp(
+  email: string,
+  otp: string,
+  purpose: 'login' | 'checkout' | 'email_change',
+  name?: string,
+  phone?: string
+): Promise<{ success: boolean; message?: string; accessToken?: string; refreshToken?: string; user?: UserProfile; isNewUser?: boolean }> {
+  const cleanEmail = email.trim().toLowerCase();
+  const res = await fetchApi<{
+    success: boolean;
+    message?: string;
+    accessToken?: string;
+    refreshToken?: string;
+    user?: UserProfile;
+    isNewUser?: boolean;
+  }>('/auth/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: cleanEmail,
+      otp: otp.trim(),
+      purpose,
+      name,
+      phone,
+      deviceId: getDeviceId(),
+      deviceName: getDeviceName()
+    })
+  });
+
+  if (res.success && res.accessToken && res.user) {
+    localStorage.setItem('hf_auth_token', res.accessToken);
+    localStorage.setItem('hf_refresh_token', res.refreshToken || '');
+    localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
+
+    if (res.isNewUser) {
+      localStorage.removeItem('hf_local_orders');
+    }
+  }
+
+  return res;
+}
