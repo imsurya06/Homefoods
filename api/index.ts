@@ -147,8 +147,8 @@ app.use(
     origin: (origin, callback) => {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
-      } else if (origin.endsWith('.vercel.app') && process.env.NODE_ENV !== 'production') {
-        // Only allow dynamic Vercel previews in staging / preview deployments
+      } else if (origin.endsWith('.vercel.app')) {
+        // Allow dynamic Vercel previews
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
