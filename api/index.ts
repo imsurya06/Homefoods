@@ -832,6 +832,7 @@ async function sendOrderTrackingEmail(options: {
     const smtpPass = process.env.SMTP_PASS || '';
     const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
     const secure = smtpPort === 465;
+    const smtpFromEmail = process.env.SMTP_FROM_EMAIL || smtpUser;
 
     if (!smtpUser || !smtpPass) {
       console.log(`✉️ Email notification logged (SMTP credentials not configured): Order ${orderRefCode} (#${wcOrderId}) for ${toEmail}. Track Link: ${trackingLink}`);
@@ -847,18 +848,19 @@ async function sendOrderTrackingEmail(options: {
 
     const itemsHtml = items.length > 0
       ? items.map((item) => `
-        <tr style="border-bottom: 1px solid #f0f0f0;">
-          <td style="padding: 12px 8px; font-weight: bold; color: #1F2937;">${item.name}</td>
-          <td style="padding: 12px 8px; text-align: center; color: #6B7280;">${item.weight || 'Standard'}</td>
-          <td style="padding: 12px 8px; text-align: center; font-weight: bold; color: #1F2937;">${item.quantity}</td>
-          <td style="padding: 12px 8px; text-align: right; font-weight: bold; color: #95CD1A;">₹${(item.pricePerUnit || 0) * item.quantity}</td>
+        <tr style="border-bottom: 1px solid #F3F4F6;">
+          <td style="padding: 16px 12px; font-weight: 800; color: #1F2937; font-size: 14px;">${item.name}</td>
+          <td style="padding: 16px 12px; text-align: center; color: #4B5563; font-weight: 600; font-size: 13px;">${item.weight || 'Standard'}</td>
+          <td style="padding: 16px 12px; text-align: center; font-weight: 800; color: #1F2937; font-size: 14px;">${item.quantity}</td>
+          <td style="padding: 16px 12px; text-align: right; font-weight: 800; color: #1F2937; font-size: 14px;">₹${(item.pricePerUnit || 0) * item.quantity}</td>
         </tr>
       `).join('')
-      : `<tr><td colspan="4" style="padding: 12px; text-align: center; color: #6B7280;">Authentic Homemade South Indian Food Package</td></tr>`;
+      : `<tr><td colspan="4" style="padding: 16px; text-align: center; color: #6B7280; font-weight: 500;">Authentic Homemade South Indian Food Package</td></tr>`;
 
     const mailOptions = {
-      from: `"Homemade Foods" <${smtpUser}>`,
+      from: `"Homemade Foods" <${smtpFromEmail}>`,
       to: toEmail,
+      replyTo: 'care.homemadefoods@gmail.com',
       subject: `🎉 Order Confirmed! Reference: ${orderRefCode}`,
       html: `
         <!DOCTYPE html>
@@ -868,103 +870,133 @@ async function sendOrderTrackingEmail(options: {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Order Confirmation - Homemade Foods</title>
         </head>
-        <body style="margin: 0; padding: 0; background-color: #F7FCE8; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1F2937;">
-          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+        <body style="margin: 0; padding: 0; background-color: #F3F4F6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1F2937;">
+          <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03); border: 1px solid #E5E7EB;">
+            <!-- Header Banner -->
             <tr>
-              <td align="center" style="padding: 20px 10px;">
-                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.08); border: 1px solid #ECF9CA;">
+              <td style="padding: 32px 40px; background-color: #1F2937; text-align: center;">
+                <h1 style="margin: 0; font-family: 'Georgia', serif; font-size: 26px; font-weight: 900; color: #95CD1A; letter-spacing: 1px; text-transform: uppercase;">
+                  Homemade Foods
+                </h1>
+                <p style="margin: 4px 0 0 0; font-size: 11px; font-weight: 800; color: #9CA3AF; letter-spacing: 2px; text-transform: uppercase;">
+                  Handcrafted South Indian Tradition
+                </p>
+              </td>
+            </tr>
+            
+            <!-- Content Body -->
+            <tr>
+              <td style="padding: 40px 40px 32px 40px;">
+                <h2 style="margin: 0 0 12px 0; font-size: 20px; font-weight: 800; color: #1F2937; letter-spacing: -0.5px;">
+                  Thank you for your order, ${customerName}! 🎉
+                </h2>
+                <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 1.6; color: #4B5563; font-weight: 500;">
+                  We have received your payment, and our kitchen team has started preparing your fresh, traditional South Indian delicacies.
+                </p>
+                
+                <!-- Order Overview Box -->
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FAFBF6; border: 1px solid #ECF9CA; border-radius: 16px; padding: 20px; margin-bottom: 28px;">
                   <tr>
-                    <td align="center" style="background-color: #95CD1A; padding: 32px 24px; text-align: center;">
-                      <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 900; letter-spacing: -0.5px;">Homemade Foods</h1>
-                      <p style="color: #ffffff; margin: 6px 0 0 0; font-size: 14px; font-weight: 600; opacity: 0.95;">A taste of tradition in every bite.</p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 32px 28px;">
-                      <h2 style="font-size: 22px; font-weight: 800; margin: 0 0 8px 0; color: #1F2937;">
-                        Thank you for your order, ${customerName}! 🎉
-                      </h2>
-                      <p style="font-size: 14px; color: #4B5563; line-height: 1.6; margin: 0 0 16px 0;">
-                        We have received your payment and our kitchen team has started preparing your fresh, traditional South Indian delicacies.
-                      </p>
-                      <p style="font-size: 14px; color: #4B5563; line-height: 1.6; margin: 0 0 24px 0; background-color: #FAFBF6; padding: 14px; border-left: 4px solid #95CD1A; border-radius: 8px;">
-                        💡 <strong>Order Tracking Info:</strong> You can track this order anytime on our website using your <strong>Order ID: <span style="font-family: monospace; font-size: 15px; color: #95CD1A;">${orderRefCode}</span></strong>.
-                      </p>
-                      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FAFBF6; border: 1px solid #ECF9CA; border-radius: 14px; padding: 18px; margin-bottom: 24px;">
+                    <td>
+                      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-size: 13px;">
                         <tr>
-                          <td>
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                              <tr>
-                                <td style="padding-bottom: 8px; font-size: 13px; color: #6B7280;">Order Reference:</td>
-                                <td style="padding-bottom: 8px; font-size: 15px; font-weight: 900; color: #95CD1A; text-align: right;">${orderRefCode}</td>
-                              </tr>
-                              <tr>
-                                <td style="padding-bottom: 8px; font-size: 13px; color: #6B7280;">Store Order ID:</td>
-                                <td style="padding-bottom: 8px; font-size: 13px; font-weight: 800; color: #1F2937; text-align: right;">#${wcOrderId}</td>
-                              </tr>
-                              <tr>
-                                <td style="padding-bottom: 8px; font-size: 13px; color: #6B7280;">Payment Status:</td>
-                                <td style="padding-bottom: 8px; font-size: 13px; font-weight: 800; color: #10B981; text-align: right;">✓ Paid via Razorpay</td>
-                              </tr>
-                              <tr>
-                                <td style="font-size: 13px; color: #6B7280;">Current Status:</td>
-                                <td style="font-size: 13px; font-weight: 800; color: #1F2937; text-align: right;">🍳 Kitchen Prep & Packing</td>
-                              </tr>
-                            </table>
-                          </td>
+                          <td style="padding-bottom: 8px; color: #6B7280; font-weight: 600;">Order Reference:</td>
+                          <td style="padding-bottom: 8px; font-weight: 800; color: #95CD1A; text-align: right;">${orderRefCode}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding-bottom: 8px; color: #6B7280; font-weight: 600;">Store Order ID:</td>
+                          <td style="padding-bottom: 8px; font-weight: 800; color: #1F2937; text-align: right;">#${wcOrderId}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding-bottom: 8px; color: #6B7280; font-weight: 600;">Payment Status:</td>
+                          <td style="padding-bottom: 8px; font-weight: 800; color: #10B981; text-align: right;">✓ Paid via Razorpay</td>
+                        </tr>
+                        <tr>
+                          <td style="color: #6B7280; font-weight: 600;">Current Status:</td>
+                          <td style="font-weight: 800; color: #1F2937; text-align: right;">🍳 Kitchen Prep & Packing</td>
                         </tr>
                       </table>
-                      <h3 style="font-size: 15px; font-weight: 800; margin: 0 0 12px 0; color: #1F2937; text-transform: uppercase; letter-spacing: 0.5px;">Order Items Summary</h3>
-                      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse; margin-bottom: 24px; font-size: 13px;">
-                        <thead>
-                          <tr style="background-color: #F9FAFB; border-bottom: 2px solid #E5E7EB;">
-                            <th align="left" style="padding: 10px 8px; font-weight: 800; color: #374151;">Food Item</th>
-                            <th align="center" style="padding: 10px 8px; font-weight: 800; color: #374151;">Pack</th>
-                            <th align="center" style="padding: 10px 8px; font-weight: 800; color: #374151;">Qty</th>
-                            <th align="right" style="padding: 10px 8px; font-weight: 800; color: #374151;">Price</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          ${itemsHtml}
-                        </tbody>
-                        <tfoot>
-                          <tr>
-                            <td colspan="3" align="right" style="padding: 12px 8px 4px 8px; font-size: 13px; color: #6B7280; font-weight: 600;">Delivery Charge:</td>
-                            <td align="right" style="padding: 12px 8px 4px 8px; font-size: 13px; font-weight: 800; color: #1F2937;">₹40</td>
-                          </tr>
-                          <tr>
-                            <td colspan="3" align="right" style="padding: 4px 8px 12px 8px; font-size: 16px; font-weight: 900; color: #1F2937;">Total Amount Paid:</td>
-                            <td align="right" style="padding: 4px 8px 12px 8px; font-size: 18px; font-weight: 900; color: #95CD1A;">₹${totalAmount}</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                      ${shippingAddress ? `
-                      <div style="background-color: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; margin-bottom: 28px;">
-                        <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: 800; color: #374151; text-transform: uppercase;">Shipping Address</h4>
-                        <p style="margin: 0; font-size: 13px; color: #4B5563; line-height: 1.5;">
-                          <strong>${customerName}</strong> (${phone})<br/>
-                          ${shippingAddress}
-                        </p>
-                      </div>
-                      ` : ''}
-                      <div style="text-align: center; margin: 32px 0 24px 0;">
-                        <a href="${trackingLink}" style="background-color: #95CD1A; color: #ffffff; padding: 16px 36px; text-decoration: none; border-radius: 14px; font-weight: 900; font-size: 15px; display: inline-block; box-shadow: 0 6px 20px rgba(149, 205, 26, 0.35);">
-                          🚚 Track Your Order Live →
-                        </a>
-                      </div>
-                      <p style="font-size: 12px; color: #9CA3AF; text-align: center; margin: 0;">
-                        Tracking link: <a href="${trackingLink}" style="color: #95CD1A;">${trackingLink}</a>
-                      </p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td align="center" style="background-color: #F9FAFB; padding: 20px 24px; border-top: 1px solid #E5E7EB; font-size: 12px; color: #6B7280; text-align: center;">
-                      <p style="margin: 0 0 4px 0; font-weight: 700; color: #374151;">Homemade Foods Madurai</p>
-                      <p style="margin: 0 0 4px 0;">Handcrafted traditional delicacies • Madurai, Tamil Nadu, India</p>
-                      <p style="margin: 0; font-size: 11px; color: #9CA3AF;">Support: +91 86677 26345 | care.homemadefoods@gmail.com</p>
                     </td>
                   </tr>
                 </table>
+
+                <!-- Items Table -->
+                <h3 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 800; color: #1F2937; text-transform: uppercase; letter-spacing: 0.5px;">
+                  Order Items Summary
+                </h3>
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse; margin-bottom: 28px;">
+                  <thead>
+                    <tr style="background-color: #F9FAFB; border-bottom: 2px solid #E5E7EB; font-size: 11px;">
+                      <th align="left" style="padding: 12px; font-weight: 800; color: #4B5563; text-transform: uppercase; letter-spacing: 0.5px;">Food Item</th>
+                      <th align="center" style="padding: 12px; font-weight: 800; color: #4B5563; text-transform: uppercase; letter-spacing: 0.5px;">Pack</th>
+                      <th align="center" style="padding: 12px; font-weight: 800; color: #4B5563; text-transform: uppercase; letter-spacing: 0.5px;">Qty</th>
+                      <th align="right" style="padding: 12px; font-weight: 800; color: #4B5563; text-transform: uppercase; letter-spacing: 0.5px;">Price</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${itemsHtml}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="3" align="right" style="padding: 16px 12px 6px 12px; font-size: 13px; color: #6B7280; font-weight: 600;">Delivery Charge:</td>
+                      <td align="right" style="padding: 16px 12px 6px 12px; font-size: 13px; font-weight: 800; color: #1F2937;">₹40</td>
+                    </tr>
+                    <tr>
+                      <td colspan="3" align="right" style="padding: 6px 12px 16px 12px; font-size: 14px; font-weight: 800; color: #1F2937;">Total Amount Paid:</td>
+                      <td align="right" style="padding: 6px 12px 16px 12px; font-size: 18px; font-weight: 900; color: #95CD1A;">₹${totalAmount}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+
+                <!-- Shipping Address Box -->
+                ${shippingAddress ? `
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 16px; padding: 20px; margin-bottom: 32px;">
+                  <tr>
+                    <td>
+                      <h4 style="margin: 0 0 8px 0; font-size: 12px; font-weight: 800; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Shipping Address</h4>
+                      <p style="margin: 0; font-size: 13px; color: #4B5563; line-height: 1.5; font-weight: 500;">
+                        <strong>${customerName}</strong> (${phone})<br/>
+                        ${shippingAddress}
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+                ` : ''}
+
+                <!-- Track Button -->
+                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr>
+                    <td align="center" style="padding-bottom: 24px;">
+                      <a href="${trackingLink}" style="display: inline-block; background-color: #95CD1A; color: #ffffff; padding: 16px 36px; text-decoration: none; border-radius: 14px; font-weight: 900; font-size: 14px; box-shadow: 0 4px 14px rgba(149, 205, 26, 0.35); text-transform: uppercase; letter-spacing: 0.5px;">
+                        🚚 Track Your Order Live →
+                      </a>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center">
+                      <p style="margin: 0; font-size: 11px; color: #9CA3AF; font-weight: 600;">
+                        Direct link: <a href="${trackingLink}" style="color: #95CD1A; text-decoration: none;">${trackingLink}</a>
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            
+            <!-- Footer -->
+            <tr>
+              <td style="padding: 24px 40px 32px 40px; background-color: #FAFBF6; border-top: 1px solid #ECF9CA; text-align: center;">
+                <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 800; color: #1F2937; text-transform: uppercase; letter-spacing: 0.5px;">
+                  Need Assistance?
+                </p>
+                <p style="margin: 0 0 20px 0; font-size: 12px; line-height: 1.5; color: #4B5563; font-weight: 600;">
+                  Call/WhatsApp: <a href="tel:+918608857705" style="color: #95CD1A; text-decoration: none; font-weight: 800;">+91 86088 57705</a> <br/>
+                  Email Support: <a href="mailto:care.homemadefoods@gmail.com" style="color: #95CD1A; text-decoration: none; font-weight: 800;">care.homemadefoods@gmail.com</a>
+                </p>
+                <hr style="border: 0; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
+                <p style="margin: 0; font-size: 10px; line-height: 1.5; color: #9CA3AF; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                  © ${new Date().getFullYear()} Homemade Foods Madurai. All rights reserved.
+                </p>
               </td>
             </tr>
           </table>
@@ -1166,6 +1198,7 @@ async function sendEmailOtp(email: string, otp: string, purpose: 'login' | 'chec
   const smtpPass = process.env.SMTP_PASS;
   const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
   const secure = smtpPort === 465;
+  const smtpFromEmail = process.env.SMTP_FROM_EMAIL || smtpUser || '';
 
   if (!smtpUser || !smtpPass) {
     console.warn(`[Mail] SMTP credentials not set. OTP for ${purpose} to ${email} is:`, otp);
@@ -1198,24 +1231,76 @@ async function sendEmailOtp(email: string, otp: string, purpose: 'login' | 'chec
   }
 
   const mailOptions = {
-    from: `"Homemade Foods" <${smtpUser}>`,
+    from: `"Homemade Foods" <${smtpFromEmail}>`,
     to: email,
+    replyTo: 'care.homemadefoods@gmail.com',
     subject: subject,
     html: `
-      <div style="font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
-        <h2 style="color: #1F2937; margin-bottom: 20px;">${title}</h2>
-        <p style="color: #4B5563; font-size: 14px;">${desc}</p>
-        <div style="padding: 16px; background-color: #FAFBF6; border: 1px solid #ECF9CA; border-radius: 8px; font-size: 24px; font-weight: bold; color: #95CD1A; text-align: center; margin: 20px 0; letter-spacing: 4px;">
-          ${otp}
-        </div>
-        <p style="color: #9CA3AF; font-size: 11px; margin-bottom: 12px;">This code will expire in 5 minutes. If you did not make this request, you can safely ignore this email.</p>
-        <hr style="border: 0; border-top: 1px solid #E5E7EB; margin: 16px 0;" />
-        <p style="margin: 0; font-size: 11px; color: #9CA3AF; text-align: center; line-height: 1.5;">
-          <strong>Homemade Foods Madurai</strong><br/>
-          Handcrafted traditional delicacies • Madurai, Tamil Nadu, India<br/>
-          Support: +91 86677 26345 | care.homemadefoods@gmail.com
-        </p>
-      </div>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${title} - Homemade Foods</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #F3F4F6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+        <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03); border: 1px solid #E5E7EB;">
+          <!-- Header Banner -->
+          <tr>
+            <td style="padding: 32px 40px; background-color: #1F2937; text-align: center;">
+              <h1 style="margin: 0; font-family: 'Georgia', serif; font-size: 26px; font-weight: 900; color: #95CD1A; letter-spacing: 1px; text-transform: uppercase;">
+                Homemade Foods
+              </h1>
+              <p style="margin: 4px 0 0 0; font-size: 11px; font-weight: 800; color: #9CA3AF; letter-spacing: 2px; text-transform: uppercase;">
+                Handcrafted South Indian Tradition
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Content Body -->
+          <tr>
+            <td style="padding: 40px 40px 32px 40px;">
+              <h2 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 800; color: #1F2937; letter-spacing: -0.5px;">
+                ${title}
+              </h2>
+              <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 1.6; color: #4B5563; font-weight: 500;">
+                ${desc}
+              </p>
+              
+              <!-- OTP Box Container -->
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F7FCE8; border: 2px dashed #95CD1A; border-radius: 16px; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 20px; text-align: center; font-size: 32px; font-weight: 900; color: #1F2937; letter-spacing: 6px; font-family: Courier, monospace;">
+                    ${otp}
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="margin: 0 0 24px 0; font-size: 11px; line-height: 1.5; color: #9CA3AF; font-weight: 600;">
+                ⚠️ This verification code is valid for exactly <strong>5 minutes</strong>. If you did not request this code, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Footer Details -->
+          <tr>
+            <td style="padding: 24px 40px 32px 40px; background-color: #FAFBF6; border-top: 1px solid #ECF9CA; text-align: center;">
+              <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 800; color: #1F2937; text-transform: uppercase; letter-spacing: 0.5px;">
+                Need Assistance?
+              </p>
+              <p style="margin: 0 0 20px 0; font-size: 12px; line-height: 1.5; color: #4B5563; font-weight: 600;">
+                Call/WhatsApp: <a href="tel:+918608857705" style="color: #95CD1A; text-decoration: none; font-weight: 800;">+91 86088 57705</a> <br/>
+                Email Support: <a href="mailto:care.homemadefoods@gmail.com" style="color: #95CD1A; text-decoration: none; font-weight: 800;">care.homemadefoods@gmail.com</a>
+              </p>
+              <hr style="border: 0; border-top: 1px solid #E5E7EB; margin: 20px 0;" />
+              <p style="margin: 0; font-size: 10px; line-height: 1.5; color: #9CA3AF; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                © ${new Date().getFullYear()} Homemade Foods Madurai. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `
   };
 
