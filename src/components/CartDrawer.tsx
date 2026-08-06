@@ -293,26 +293,26 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     return () => clearTimeout(timer);
   }, [items, pincode, couponStatus]);
 
-  // Auto-search guest order if id parameter is present in URL hash
+  // Auto-search guest order if token/id parameter is present in URL hash
   useEffect(() => {
     if (isOpen && activeTab === 'orders') {
       const hash = window.location.hash;
-      if (hash.includes('?id=')) {
+      if (hash.includes('?token=') || hash.includes('?id=')) {
         const urlParams = new URLSearchParams(hash.substring(hash.indexOf('?')));
-        const idParam = urlParams.get('id');
-        if (idParam) {
-          const decoded = decodeURIComponent(idParam);
+        const tokenParam = urlParams.get('token') || urlParams.get('id');
+        if (tokenParam) {
+          const decoded = decodeURIComponent(tokenParam);
           setGuestSearchInput(decoded);
           
           setGuestSearchLoading(true);
           setGuestSearchError(null);
-          trackSingleOrder(decoded.trim().replace(/^#/, ''))
+          trackSingleOrder(decoded.trim())
             .then((data) => {
               if (data && data.orderId && !data.notFound) {
                 setGuestSearchResult(data);
                 setExpandedOrderId(data.orderId);
               } else {
-                setGuestSearchError(data?.message || 'Order not found. Check ID.');
+                setGuestSearchError(data?.message || 'Order not found. Check parameters.');
               }
             })
             .catch(() => {

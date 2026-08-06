@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@upstash/redis": "^1.38.2",
     "@woocommerce/woocommerce-rest-api": "^1.0.2",
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",

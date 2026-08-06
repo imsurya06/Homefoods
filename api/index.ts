@@ -12,8 +12,45 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import dns from 'dns';
+import { Redis } from '@upstash/redis';
 
 dotenv.config();
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`CRITICAL CONFIGURATION ERROR: Environment variable "${name}" is required but missing in production.`);
+    }
+    // Development Fallbacks
+    if (name === 'JWT_SECRET') return 'hf-jwt-access-secret-2026-key-development-fallback';
+    if (name === 'JWT_REFRESH_SECRET') return 'hf-jwt-refresh-secret-2026-key-development-fallback';
+    if (name === 'ENCRYPTION_KEY') return 'hf_default_secret_encryption_key_32';
+  }
+  return value || '';
+}
+
+const JWT_SECRET = requireEnv('JWT_SECRET');
+const JWT_REFRESH_SECRET = requireEnv('JWT_REFRESH_SECRET');
+const ENCRYPTION_KEY = requireEnv('ENCRYPTION_KEY');
+
+// Initialize Upstash Redis connection
+let redis: Redis | null = null;
+const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
+const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+if (redisUrl && redisToken) {
+  redis = new Redis({
+    url: redisUrl,
+    token: redisToken,
+  });
+  console.log('[Redis] Centralized Upstash Redis connection initialized successfully.');
+} else {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('CRITICAL CONFIGURATION ERROR: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required in production.');
+  }
+  console.warn('[Redis] Warning: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN not set. Falling back to in-memory caching.');
+}
 
 const APP_URL = (process.env.FRONTEND_URL || 'https://www.homemadefoodsmadurai.com').replace(/\/$/, '');
 
@@ -34,7 +71,10 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else if (origin.endsWith('.vercel.app') && process.env.NODE_ENV !== 'production') {
+        // Only allow dynamic Vercel previews in staging / preview deployments
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -44,9 +84,6 @@ app.use(
   })
 );
 app.use(express.json());
-
-const JWT_SECRET = process.env.JWT_SECRET || 'hf-jwt-access-secret-2026-key';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'hf-jwt-refresh-secret-2026-key';
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -162,8 +199,6 @@ async function authenticateToken(req: any, res: any, next: any) {
 function sha256(content: string): string {
   return crypto.createHash('sha256').update(content).digest('hex');
 }
-
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'hf_default_secret_encryption_key_32';
 
 function encryptData(text: string): string {
   if (!text) return '';
@@ -484,7 +519,7 @@ const CACHE_TTL_MS = 15 * 1000; // 15 seconds product cache TTL
 const userCartsMap = new Map<string, any[]>();
 const userCartLocks = new Map<string, number>();
 const globalPasswordMap = new Map<string, string>();
-const recentCreatedOrdersMap = new Map<string, { wcOrderId: number; orderRefCode: string; razorpayOrderId: string; amount: number; amountInPaise: number; keyId: string; timestamp: number }>();
+const recentCreatedOrdersMap = new Map<string, { wcOrderId: number; orderRefCode: string; razorpayOrderId: string; amount: number; amountInPaise: number; keyId: string; timestamp: number; trackingToken?: string }>();
 
 const PASS_FILE = path.join('/tmp', 'hf_passwords.json');
 
@@ -1013,6 +1048,7 @@ interface OtpSession {
   attempts: number;
 }
 const otpCache = new Map<string, OtpSession>();
+const otpSendLimits = new Map<string, { count: number; resetAt: number }>();
 
 async function sendEmailOtp(email: string, otp: string, purpose: 'login' | 'checkout' | 'email_change' | 'forgot_password' = 'forgot_password') {
   const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
@@ -1096,15 +1132,49 @@ app.post(['/api/v1/auth/send-otp', '/api/auth/send-otp', '/v1/auth/send-otp', '/
       return res.status(400).json({ success: false, message: 'Invalid OTP purpose requested.' });
     }
 
+    // OTP Send Rate Limiting (3 requests per 10 minutes)
+    if (redis) {
+      const limitKey = `otp-limit:${cleanEmail}`;
+      const count = await redis.incr(limitKey);
+      if (count === 1) {
+        await redis.expire(limitKey, 600); // 10 minutes (600s)
+      }
+      if (count > 3) {
+        return res.status(429).json({ success: false, message: 'Too many OTP requests. Please wait 10 minutes before requesting a new code.' });
+      }
+    } else {
+      const now = Date.now();
+      let limit = otpSendLimits.get(cleanEmail);
+      if (!limit || now > limit.resetAt) {
+        limit = { count: 0, resetAt: now + 10 * 60 * 1000 };
+      }
+      limit.count += 1;
+      otpSendLimits.set(cleanEmail, limit);
+      if (limit.count > 3) {
+        return res.status(429).json({ success: false, message: 'Too many OTP requests. Please wait 10 minutes before requesting a new code.' });
+      }
+    }
+
     // Generate random 6-digit OTP code
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Store in cache
-    otpCache.set(cleanEmail, {
-      otp,
-      expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
-      attempts: 0
-    });
+    if (redis) {
+      await redis.set(
+        `otp:${cleanEmail}`,
+        JSON.stringify({
+          otp,
+          attempts: 0
+        }),
+        { ex: 300 } // 5 minutes (300s)
+      );
+    } else {
+      otpCache.set(cleanEmail, {
+        otp,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+        attempts: 0
+      });
+    }
 
     // Send email using custom SMTP notifier
     await sendEmailOtp(cleanEmail, otp, cleanPurpose as any);
@@ -1131,28 +1201,57 @@ app.post(['/api/v1/auth/verify-otp', '/api/auth/verify-otp', '/v1/auth/verify-ot
       return res.status(400).json({ success: false, message: 'Email and verification code are required.' });
     }
 
-    const session = otpCache.get(cleanEmail);
+    let session: { otp: string; attempts: number } | null = null;
+
+    if (redis) {
+      const data = await redis.get<{ otp: string; attempts: number }>(`otp:${cleanEmail}`);
+      if (data) {
+        session = data;
+      }
+    } else {
+      const localSession = otpCache.get(cleanEmail);
+      if (localSession && Date.now() <= localSession.expiresAt) {
+        session = { otp: localSession.otp, attempts: localSession.attempts };
+      }
+    }
+
     if (!session) {
       return res.status(400).json({ success: false, message: 'Verification code not found or expired. Please request a new code.' });
     }
 
-    if (Date.now() > session.expiresAt) {
-      otpCache.delete(cleanEmail);
-      return res.status(400).json({ success: false, message: 'Verification code expired. Please request a new code.' });
-    }
-
     if (session.attempts >= 5) {
-      otpCache.delete(cleanEmail);
+      if (redis) {
+        await redis.del(`otp:${cleanEmail}`);
+      } else {
+        otpCache.delete(cleanEmail);
+      }
       return res.status(400).json({ success: false, message: 'Too many incorrect attempts. Please request a new verification code.' });
     }
 
     if (session.otp !== cleanOtp) {
-      session.attempts += 1;
-      return res.status(400).json({ success: false, message: `Invalid verification code. Please check your email and try again. (${5 - session.attempts} attempts remaining)` });
+      const newAttempts = session.attempts + 1;
+      if (redis) {
+        await redis.set(
+          `otp:${cleanEmail}`,
+          JSON.stringify({ otp: session.otp, attempts: newAttempts }),
+          { ex: 300 }
+        );
+      } else {
+        const localSession = otpCache.get(cleanEmail);
+        if (localSession) {
+          localSession.attempts = newAttempts;
+          otpCache.set(cleanEmail, localSession);
+        }
+      }
+      return res.status(400).json({ success: false, message: `Invalid verification code. Please check your email and try again. (${5 - newAttempts} attempts remaining)` });
     }
 
     // Code matched, consume/delete it
-    otpCache.delete(cleanEmail);
+    if (redis) {
+      await redis.del(`otp:${cleanEmail}`);
+    } else {
+      otpCache.delete(cleanEmail);
+    }
 
     if (cleanPurpose === 'login') {
       // Find or create WooCommerce customer
@@ -2924,6 +3023,7 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       customer_note: notes || 'Order placed via Headless Storefront',
     };
 
+    let trackingToken = '';
     let wcOrderId = Date.now();
     orderRefCode = `HF-${wcOrderId}`;
     try {
@@ -2940,6 +3040,10 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
         
         totalAmountInRupees = parseFloat(wcRes.data.total) || totalAmountInRupees;
         
+        // Generate a cryptographically secure guest tracking token
+        trackingToken = crypto.randomBytes(24).toString('hex');
+        const trackingTokenExpires = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
+
         // Save the correct reference code to WooCommerce metadata
         await wcFetch(`orders/${wcOrderId}`, {
           method: 'PUT',
@@ -2947,6 +3051,8 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
             meta_data: [
               { key: '_order_ref_code', value: orderRefCode },
               { key: '_customer_phone', value: customerPhone },
+              { key: '_tracking_token', value: trackingToken },
+              { key: '_tracking_token_expires', value: trackingTokenExpires.toString() },
             ],
           },
         }).catch(() => {});
@@ -2981,6 +3087,7 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       amountInPaise,
       keyId,
       timestamp: now,
+      trackingToken,
     });
 
     await releaseLock();
@@ -2994,6 +3101,7 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       amountInPaise,
       currency: 'INR',
       keyId,
+      trackingToken,
       expiresAt: now + 10 * 60 * 1000 // 10-minute reservation countdown
     });
   } catch (error: any) {
@@ -3188,8 +3296,22 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
       });
     }
 
+    let trackingToken = '';
+    try {
+      const orderDataRes = await wcFetch(`orders/${wcOrderId}`);
+      if (orderDataRes.ok && orderDataRes.data) {
+        const orderObj = orderDataRes.data;
+        const trackingMeta = (orderObj.meta_data || []).find((m: any) => m.key === '_tracking_token');
+        if (trackingMeta && trackingMeta.value) {
+          trackingToken = trackingMeta.value;
+        }
+      }
+    } catch {}
+
     const displayOrderCode = orderRefCode || `HF-${wcOrderId}`;
-    const trackingLink = `${APP_URL}/#track?id=${encodeURIComponent(displayOrderCode)}`;
+    const trackingLink = trackingToken 
+      ? `${APP_URL}/#track?token=${encodeURIComponent(trackingToken)}`
+      : `${APP_URL}/#track?id=${encodeURIComponent(displayOrderCode)}`;
 
     if (customerEmail && customerEmail.includes('@')) {
       sendOrderTrackingEmail({
@@ -3246,84 +3368,82 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
 });
 
 // GET /api/v1/checkout/track/*id
-app.get(['/api/v1/checkout/track/*id', '/api/checkout/track/*id', '/v1/checkout/track/*id', '/checkout/track/*id'], async (req, res) => {
+app.get(['/api/v1/checkout/track/:tokenOrId', '/api/checkout/track/:tokenOrId', '/v1/checkout/track/:tokenOrId', '/checkout/track/:tokenOrId'], async (req, res) => {
   try {
-    const idParam = req.params.id;
-    const rawInput = Array.isArray(idParam) ? idParam.join('/') : (idParam || '').trim();
-    const cleanId = rawInput.replace(/^#/, '').trim();
-    const searchCore = cleanId.replace(/^HF-/i, '').trim();
-    const searchLower = cleanId.toLowerCase();
+    const { tokenOrId } = req.params;
+    const cleanParam = (typeof tokenOrId === 'string' ? tokenOrId : '').trim();
+
+    if (!cleanParam) {
+      return res.status(400).json({ success: false, message: 'Invalid or missing tracking parameters.' });
+    }
 
     let order: any = null;
 
-    // Strategy 1: Direct numeric order ID fetch
-    let numericId = '';
-    if (searchCore.includes('/')) {
-      const parts = searchCore.split('/');
-      const lastPart = parts[parts.length - 1];
-      if (/^\d+$/.test(lastPart)) {
-        numericId = lastPart;
+    // Check if the parameter is a 48-char tracking token (hex of 24 bytes is 48 chars)
+    if (cleanParam.length === 48 && /^[0-9a-fA-F]+$/.test(cleanParam)) {
+      const wcRes = await wcFetch('orders', {
+        params: {
+          meta_key: '_tracking_token',
+          meta_value: cleanParam
+        }
+      });
+      if (wcRes.ok && Array.isArray(wcRes.data) && wcRes.data.length > 0) {
+        const candidate = wcRes.data[0];
+        // Check token expiration
+        const expMeta = (candidate.meta_data || []).find((m: any) => m.key === '_tracking_token_expires');
+        const expTime = expMeta ? parseInt(expMeta.value, 10) : 0;
+        if (expTime && Date.now() > expTime) {
+          return res.status(410).json({ success: false, message: 'Tracking link has expired.' });
+        }
+        order = candidate;
       }
     } else {
-      const splitId = searchCore.split('-')[0];
-      if (/^\d+$/.test(splitId)) {
-        numericId = splitId;
+      // If it's a numeric ID or reference code, check if the caller is the logged-in owner of this order
+      let authCustomerId = 0;
+      let authUserEmail = '';
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+          const token = authHeader.split(' ')[1];
+          const decoded = jwt.verify(token, JWT_SECRET) as { customerId: number; email: string };
+          if (decoded && decoded.customerId) {
+            authCustomerId = decoded.customerId;
+          }
+          if (decoded && decoded.email) {
+            authUserEmail = decoded.email.trim().toLowerCase();
+          }
+        } catch {}
+      }
+
+      // Fetch the order directly
+      const cleanId = cleanParam.replace(/^#/, '').trim();
+      const searchCore = cleanId.replace(/^HF-/i, '').trim();
+
+      let numericId = '';
+      if (/^\d+$/.test(searchCore)) {
+        numericId = searchCore;
+      }
+
+      if (numericId) {
+        const wcRes = await wcFetch(`orders/${numericId}`);
+        if (wcRes.ok && wcRes.data && wcRes.data.id) {
+          const candidate = wcRes.data;
+          
+          // Verify ownership: customer_id match or email match
+          const orderCustomer = candidate.customer_id;
+          const orderEmail = (candidate.billing?.email || '').trim().toLowerCase();
+
+          const isOwner = (authCustomerId && orderCustomer === authCustomerId) || (authUserEmail && orderEmail === authUserEmail);
+
+          if (isOwner) {
+            order = candidate;
+          }
+        }
       }
     }
 
-    if (numericId) {
-      try {
-        const wcRes = await wcFetch(`orders/${numericId}`);
-        if (wcRes.ok && wcRes.data && wcRes.data.id) {
-          if (wcRes.data.status !== 'trash') {
-            order = wcRes.data;
-          }
-        }
-      } catch {}
-    }
-
-    // Strategy 2: WooCommerce Native Search Query API (Searches billing names, addresses, emails, phones, etc.)
     if (!order) {
-      try {
-        const searchRes = await wcFetch('orders', { params: { search: cleanId, per_page: 5 } });
-        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-          order = searchRes.data.find((o: any) => o && o.status !== 'trash');
-        }
-      } catch {}
-    }
-
-    // Strategy 3: Scan recent 100 orders as a fallback (for older custom metadata reference codes)
-    if (!order) {
-      try {
-        const recentOrdersRes = await wcFetch('orders', { params: { per_page: 100 } });
-        if (recentOrdersRes.ok && Array.isArray(recentOrdersRes.data)) {
-          order = recentOrdersRes.data.find((o: any) => {
-            if (o.status === 'trash') return false;
-            const oIdStr = o.id.toString();
-            if (oIdStr === cleanId || oIdStr === searchCore) return true;
-            
-            const refMeta = (o.meta_data || []).find((m: any) => m.key === '_order_ref_code');
-            const refVal = (refMeta?.value || '').toLowerCase().trim();
-            const normRefVal = refVal.replace(/\/+/g, '/');
-            const normSearchLower = searchLower.replace(/\/+/g, '/');
-
-            if (normRefVal && (normRefVal === normSearchLower || normRefVal.includes(normSearchLower) || normSearchLower.includes(normRefVal))) return true;
-
-            const bEmail = (o.billing?.email || '').toLowerCase().trim();
-            if (bEmail && (bEmail === searchLower || (searchLower.includes('@') && bEmail.includes(searchLower)))) return true;
-
-            const bPhone = (o.billing?.phone || '').replace(/\D/g, '');
-            const searchPhone = searchLower.replace(/\D/g, '');
-            if (searchPhone && searchPhone.length >= 10 && bPhone.includes(searchPhone)) return true;
-
-            return false;
-          });
-        }
-      } catch {}
-    }
-
-    if (!order) {
-      return res.status(404).json({ success: false, message: `Order #${rawInput} not found. Please check Order ID.` });
+      return res.status(403).json({ success: false, message: 'Unauthorized or invalid tracking token. Please use the secure link sent to your email.' });
     }
 
     const refCodeMeta = (order.meta_data || []).find((m: any) => m.key === '_order_ref_code');
