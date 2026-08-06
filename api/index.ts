@@ -34,16 +34,17 @@ const JWT_REFRESH_SECRET = requireEnv('JWT_REFRESH_SECRET');
 const ENCRYPTION_KEY = requireEnv('ENCRYPTION_KEY');
 
 // WordPress Transients Database Caching Helper functions
+const sharedSecret = 'homefoods_secure_transient_secret_token_2026';
+
 async function setOtpInDatabase(email: string, otp: string): Promise<{ success: boolean; message?: string }> {
   try {
     const storeUrl = (process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com').replace(/\/$/, '');
-    const consumerKey = process.env.WC_CONSUMER_KEY || 'ck_48a6c149fa81c87736460d25a0af0c9b439d8a49';
     
     const res = await fetch(`${storeUrl}/wp-json/homefoods/v1/otp/set`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Homefoods-Secret': consumerKey
+        'X-Homefoods-Secret': sharedSecret
       },
       body: JSON.stringify({ email, otp })
     });
@@ -60,13 +61,12 @@ async function setOtpInDatabase(email: string, otp: string): Promise<{ success: 
 async function verifyOtpInDatabase(email: string, otp: string): Promise<{ success: boolean; code?: string; message?: string; attempts_remaining?: number }> {
   try {
     const storeUrl = (process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com').replace(/\/$/, '');
-    const consumerKey = process.env.WC_CONSUMER_KEY || 'ck_48a6c149fa81c87736460d25a0af0c9b439d8a49';
     
     const res = await fetch(`${storeUrl}/wp-json/homefoods/v1/otp/verify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Homefoods-Secret': consumerKey
+        'X-Homefoods-Secret': sharedSecret
       },
       body: JSON.stringify({ email, otp })
     });
@@ -88,13 +88,12 @@ async function verifyOtpInDatabase(email: string, otp: string): Promise<{ succes
 async function setIdempotencyInDatabase(key: string, payload: any): Promise<boolean> {
   try {
     const storeUrl = (process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com').replace(/\/$/, '');
-    const consumerKey = process.env.WC_CONSUMER_KEY || 'ck_48a6c149fa81c87736460d25a0af0c9b439d8a49';
     
     const res = await fetch(`${storeUrl}/wp-json/homefoods/v1/idempotency/set`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Homefoods-Secret': consumerKey
+        'X-Homefoods-Secret': sharedSecret
       },
       body: JSON.stringify({ key, payload })
     });
@@ -108,13 +107,12 @@ async function setIdempotencyInDatabase(key: string, payload: any): Promise<bool
 async function getIdempotencyFromDatabase(key: string): Promise<any | null> {
   try {
     const storeUrl = (process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com').replace(/\/$/, '');
-    const consumerKey = process.env.WC_CONSUMER_KEY || 'ck_48a6c149fa81c87736460d25a0af0c9b439d8a49';
     
     const res = await fetch(`${storeUrl}/wp-json/homefoods/v1/idempotency/get`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Homefoods-Secret': consumerKey
+        'X-Homefoods-Secret': sharedSecret
       },
       body: JSON.stringify({ key })
     });
