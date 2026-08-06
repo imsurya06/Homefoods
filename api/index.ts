@@ -864,6 +864,7 @@ async function sendOrderTrackingEmail(options: {
       to: toEmail,
       replyTo: 'care.homemadefoods@gmail.com',
       subject: `🎉 Order Confirmed! Reference: ${orderRefCode}`,
+      text: `Thank you for your order, ${customerName}! Your order reference is: ${orderRefCode}. Track it live here: ${trackingLink}`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -1239,6 +1240,7 @@ async function sendEmailOtp(email: string, otp: string, purpose: 'login' | 'chec
     to: email,
     replyTo: 'care.homemadefoods@gmail.com',
     subject: subject,
+    text: `Your Homemade Foods verification code is: ${otp}`,
     html: `
       <!DOCTYPE html>
       <html>
