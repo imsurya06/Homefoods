@@ -129,6 +129,7 @@ async function getIdempotencyFromDatabase(key: string): Promise<any | null> {
 const APP_URL = (process.env.FRONTEND_URL || 'https://www.homemadefoodsmadurai.com').replace(/\/$/, '');
 
 const app = express();
+app.set('trust proxy', 1);
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
