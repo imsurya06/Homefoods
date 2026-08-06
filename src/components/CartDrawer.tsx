@@ -576,7 +576,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         setActiveReservationOrderId(null);
         setReservationExpiresAt(null);
         setOrderSuccess(response);
-        onClearCart();
+        if (response && response.cartRevision !== undefined) {
+          useSyncStore.setState({ offlineQueue: [] });
+          useSyncStore.getState().setCart([], response.cartRevision);
+        } else {
+          onClearCart();
+        }
         setCouponCode('');
         setCouponStatus(null);
         setCalcSummary(null);

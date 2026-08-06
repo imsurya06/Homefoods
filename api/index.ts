@@ -3393,6 +3393,7 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
     let customerId = '';
     let accessToken = '';
     let refreshToken = '';
+    let finalCartRevision = 1;
 
     if (cleanEmail) {
       userCartsMap.set(cleanEmail, []);
@@ -3465,7 +3466,11 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
           customerUser = { id: customerId, email: cleanEmail, first_name: firstName, last_name: lastName };
         }
       } else {
-        // Clear saved cart revision
+        // Clear saved cart and increment revision
+        const metaList = Array.isArray(customerUser.meta_data) ? customerUser.meta_data : [];
+        const serverRevision = parseInt(metaList.find((m: any) => m.key === 'hf_cart_revision')?.value || '0', 10);
+        finalCartRevision = serverRevision + 1;
+
         try {
           await wcFetch(`customers/${customerId}`, {
             method: 'PUT',
@@ -3473,6 +3478,7 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
               meta_data: [
                 { key: 'hf_saved_cart', value: '[]' },
                 { key: '_saved_cart', value: '[]' },
+                { key: 'hf_cart_revision', value: finalCartRevision.toString() }
               ],
             },
           });
@@ -3548,6 +3554,7 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
       wcOrderId,
       orderRefCode: displayOrderCode,
       trackingLink,
+      cartRevision: finalCartRevision,
       accessToken: accessToken || undefined,
       refreshToken: refreshToken || undefined,
       user: customerUser ? {

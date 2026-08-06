@@ -1,5 +1,5 @@
 import React from 'react';
-import { PhoneCall, MapPin, Heart, ArrowUpRight, Leaf, Sparkles } from 'lucide-react';
+import { PhoneCall, MapPin, Heart, ArrowUpRight, Leaf, Sparkles, Mail } from 'lucide-react';
 
 interface FooterProps {
   onNavigatePage?: (page: 'home' | 'shop', categoryId?: string) => void;
@@ -142,7 +142,13 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage, onOpenTrackModal
             <div className="space-y-2 text-xs font-bold text-gray-600">
               <p className="flex items-center gap-2">
                 <PhoneCall className="w-4 h-4 text-[#95CD1A] shrink-0" />
-                <span>+91 86677 26345</span>
+                <span>+91 86088 57705</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-[#95CD1A] shrink-0" />
+                <a href="mailto:care.homemadefoods@gmail.com" className="hover:text-[#95CD1A] transition-colors">
+                  care.homemadefoods@gmail.com
+                </a>
               </p>
               <p className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-[#95CD1A] shrink-0" />
@@ -152,7 +158,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage, onOpenTrackModal
 
             <div className="pt-2">
               <a
-                href="tel:+918667726345"
+                href="tel:+918608857705"
                 className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-3 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-xs rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer"
               >
                 <PhoneCall className="w-3.5 h-3.5 text-white" />

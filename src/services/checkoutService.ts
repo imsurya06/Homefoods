@@ -33,6 +33,7 @@ export async function processRazorpayCheckout(
     accessToken?: string;
     refreshToken?: string;
     user?: any;
+    cartRevision?: number;
   }) => void,
   onError: (errorMsg: string, isOutOfSync?: boolean) => void,
   onReservationCreated?: (wcOrderId: number, expiresAt: number) => void
@@ -162,6 +163,7 @@ export async function processRazorpayCheckout(
               accessToken: (verifyRes as any).accessToken,
               refreshToken: (verifyRes as any).refreshToken,
               user: (verifyRes as any).user,
+              cartRevision: (verifyRes as any).cartRevision,
             });
           } else {
             onError('Payment signature verification failed.');

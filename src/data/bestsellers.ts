@@ -27,7 +27,7 @@ export interface CartItem {
   gstPercentage: number;
 }
 
-export const WHATSAPP_PHONE_NUMBER = '918667726345';
+export const WHATSAPP_PHONE_NUMBER = '918608857705';
 
 /**
  * Calculates final price including GST.
