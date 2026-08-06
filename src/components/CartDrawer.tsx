@@ -17,9 +17,12 @@ import {
   Truck,
   PackageCheck,
   AlertCircle,
+  AlertTriangle,
+  Timer,
+  CreditCard,
 } from 'lucide-react';
 import { type CartItem } from '../data/bestsellers';
-import { processRazorpayCheckout, type CheckoutPayload, trackSingleOrder, cancelInventoryReservation } from '../services/checkoutService';
+import { processRazorpayCheckout, type CheckoutPayload, trackSingleOrder, cancelInventoryReservation, retryRazorpayPayment } from '../services/checkoutService';
 import { fetchCustomerOrders, sendEmailOtp, verifyEmailOtp, type CustomerOrderHistoryItem, type UserProfile } from '../services/authService';
 import { getCachedProductsSync } from '../services/productService';
 import { validateCart } from '../services/cartService';
@@ -200,6 +203,88 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [guestSearchResult, setGuestSearchResult] = useState<any | null>(null);
   const [guestSearchError, setGuestSearchError] = useState<string | null>(null);
   const [guestSearchLoading, setGuestSearchLoading] = useState<boolean>(false);
+
+  // Real-time ticking state for live countdowns
+  const [ticks, setTicks] = useState<number>(0);
+  const [ordersRefreshTrigger, setOrdersRefreshTrigger] = useState<number>(0);
+  const [checkoutSuccessMsg, setCheckoutSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen && activeTab === 'orders') {
+      const timer = setInterval(() => {
+        setTicks((t) => t + 1);
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [isOpen, activeTab]);
+
+  const getRemainingTimeLabel = (dateCreated: string) => {
+    // Reference ticks to ensure countdown updates and triggers re-renders
+    if (ticks === -999) {
+      console.log('Ticking', ticks);
+    }
+    const createdTime = new Date(dateCreated).getTime();
+    const expiresAt = createdTime + 15 * 60 * 1000;
+    const diff = expiresAt - Date.now();
+    if (diff <= 0) return 'Expired';
+    const mins = Math.floor(diff / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    return `${mins}m ${secs.toString().padStart(2, '0')}s`;
+  };
+
+  const handleRetryPayment = async (order: any) => {
+    setIsProcessing(true);
+    setCheckoutError(null);
+    setCheckoutSuccessMsg(null);
+
+    retryRazorpayPayment(
+      {
+        wcOrderId: order.wcOrderId || order.id,
+        razorpayOrderId: order.razorpayOrderId,
+        amountInPaise: order.amountInPaise,
+        keyId: order.keyId,
+        orderRefCode: order.orderRefCode,
+        customerEmail: user?.email || '',
+        customerName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Customer',
+        phone: user?.phone || '',
+        items: order.items || [],
+        shippingAddress: order.shippingAddress || '',
+      },
+      async (response) => {
+        setIsProcessing(false);
+        setCheckoutSuccessMsg(`Payment completed successfully for Order #${response.orderRefCode || order.orderRefCode || order.id}!`);
+        
+        // Refresh orders list
+        setOrdersRefreshTrigger((prev) => prev + 1);
+      },
+      (errorMsg) => {
+        setIsProcessing(false);
+        setCheckoutError(errorMsg);
+      }
+    );
+  };
+
+  const handleCancelOrder = async (orderId: number) => {
+    if (!window.confirm('Are you sure you want to cancel this order and release the stock?')) {
+      return;
+    }
+    setIsProcessing(true);
+    setCheckoutError(null);
+    setCheckoutSuccessMsg(null);
+    try {
+      const success = await cancelInventoryReservation(orderId);
+      if (success) {
+        setCheckoutSuccessMsg('Order cancelled successfully.');
+        setOrdersRefreshTrigger((prev) => prev + 1);
+      } else {
+        setCheckoutError('Failed to cancel order.');
+      }
+    } catch (err: any) {
+      setCheckoutError(err.message || 'Failed to cancel order.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   // Auto-fill checkout fields from logged-in user profile
   useEffect(() => {
@@ -411,7 +496,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       clearInterval(pollInterval);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [isOpen, activeTab, user]);
+  }, [isOpen, activeTab, user, ordersRefreshTrigger]);
 
   if (!isOpen) return null;
 
@@ -1222,6 +1307,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
               )}
 
+              {checkoutSuccessMsg && (
+                <div className="p-3 bg-green-50 rounded-xl border border-green-200 text-xs font-extrabold text-green-700 text-center animate-in fade-in duration-200">
+                  {checkoutSuccessMsg}
+                </div>
+              )}
+              {checkoutError && (
+                <div className="p-3 bg-red-50 rounded-xl border border-red-200 text-xs font-extrabold text-red-600 text-center animate-in fade-in duration-200">
+                  {checkoutError}
+                </div>
+              )}
+
               {/* Orders List Container */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs font-extrabold text-gray-400 uppercase tracking-wider">
@@ -1246,7 +1342,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 ) : (
                   <div className="space-y-3.5">
                     {(() => {
-                      const displayList = [...orders];
+                      const displayList = orders.filter((o) => {
+                        const rawStatus = (o.status || '').toLowerCase().trim();
+                        if (['cancelled', 'failed', 'refunded'].includes(rawStatus)) {
+                          return false;
+                        }
+                        if (rawStatus === 'pending' && o.dateCreated) {
+                          const elapsed = Date.now() - new Date(o.dateCreated).getTime();
+                          if (elapsed > 15 * 60 * 1000) {
+                            return false;
+                          }
+                        }
+                        return true;
+                      });
+
                       if (guestSearchResult) {
                         const guestOrderObj = {
                           id: guestSearchResult.orderId || guestSearchResult.id,
@@ -1259,6 +1368,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           dateCreated: guestSearchResult.dateCreated,
                           items: guestSearchResult.items || [],
                           shippingAddress: guestSearchResult.shippingAddress || '',
+                          razorpayOrderId: guestSearchResult.razorpayOrderId,
+                          amountInPaise: guestSearchResult.amountInPaise,
+                          keyId: guestSearchResult.keyId,
                         };
                         if (!displayList.some(o => o.id.toString() === guestOrderObj.id.toString())) {
                           displayList.unshift(guestOrderObj);
@@ -1345,62 +1457,97 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                             {isExpanded && (
                               <div className="px-4 pb-4 pt-3 bg-[#FAFBF6] border-t border-gray-100 space-y-4 animate-in slide-in-from-top-2 duration-200">
                                 
-                                {/* 4-Step Visual Tracking Stepper */}
-                                <div className="space-y-2">
-                                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400 block">
-                                    Live Delivery Progress
-                                  </span>
-
-                                  <div className="grid grid-cols-4 gap-1 relative text-center pt-2">
-                                    {/* Progress Line */}
-                                    <div className="absolute top-5 left-[12%] right-[12%] h-1 bg-gray-200 -z-0">
-                                      <div
-                                        className="h-full bg-[#95CD1A] transition-all duration-500"
-                                        style={{ width: `${Math.max(0, Math.min(100, ((stage - 1) / 3) * 100))}%` }}
-                                      />
+                                {rawStatus === 'pending' ? (
+                                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs space-y-3 text-left">
+                                    <div className="flex items-start gap-2.5">
+                                      <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                                      <div className="space-y-0.5">
+                                        <h4 className="font-extrabold text-amber-900">Payment Pending</h4>
+                                        <p className="text-amber-700 font-semibold leading-relaxed">
+                                          Your payment attempt was not completed. Stock remains reserved for you. Please complete payment before the reservation expires.
+                                        </p>
+                                        <div className="pt-1.5 flex items-center gap-1.5 font-extrabold text-amber-950 font-numeric">
+                                          <Timer className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+                                          <span>Expires in: {getRemainingTimeLabel(ord.dateCreated)}</span>
+                                        </div>
+                                      </div>
                                     </div>
 
-                                    {/* Step 1: Confirmed */}
-                                    <div className="flex flex-col items-center gap-1 relative z-10">
-                                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                                        stage >= 1 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
-                                      }`}>
-                                        <CheckCircle2 className="w-4 h-4" />
-                                      </div>
-                                      <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Confirmed</span>
-                                    </div>
-
-                                    {/* Step 2: Kitchen */}
-                                    <div className="flex flex-col items-center gap-1 relative z-10">
-                                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                                        stage >= 2 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
-                                      }`}>
-                                        <Clock className="w-4 h-4" />
-                                      </div>
-                                      <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Kitchen</span>
-                                    </div>
-
-                                    {/* Step 3: Dispatched */}
-                                    <div className="flex flex-col items-center gap-1 relative z-10">
-                                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                                        stage >= 3 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
-                                      }`}>
-                                        <Truck className="w-4 h-4" />
-                                      </div>
-                                      <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Dispatched</span>
-                                    </div>
-
-                                    {/* Step 4: Delivered */}
-                                    <div className="flex flex-col items-center gap-1 relative z-10">
-                                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                                        stage >= 4 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
-                                      }`}>
-                                        <PackageCheck className="w-4 h-4" />
-                                      </div>
-                                      <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Delivered</span>
+                                    <div className="pt-1 flex gap-2">
+                                      <button
+                                        onClick={() => handleRetryPayment(ord)}
+                                        disabled={isProcessing}
+                                        className="flex-1 py-2 px-3 bg-[#95CD1A] hover:bg-[#7EB30E] disabled:bg-gray-400 text-white font-extrabold text-xs rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                      >
+                                        <CreditCard className="w-3.5 h-3.5" />
+                                        <span>{isProcessing ? 'Processing...' : 'Complete Payment'}</span>
+                                      </button>
+                                      <button
+                                        onClick={() => handleCancelOrder(typeof ord.id === 'string' ? parseInt(ord.id, 10) : ord.id)}
+                                        disabled={isProcessing}
+                                        className="py-2 px-3 bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 text-gray-600 hover:text-gray-800 font-extrabold text-xs rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                      >
+                                        <span>Cancel Order</span>
+                                      </button>
                                     </div>
                                   </div>
-                                </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400 block">
+                                      Live Delivery Progress
+                                    </span>
+
+                                    <div className="grid grid-cols-4 gap-1 relative text-center pt-2">
+                                      {/* Progress Line */}
+                                      <div className="absolute top-5 left-[12%] right-[12%] h-1 bg-gray-200 -z-0">
+                                        <div
+                                          className="h-full bg-[#95CD1A] transition-all duration-500"
+                                          style={{ width: `${Math.max(0, Math.min(100, ((stage - 1) / 3) * 100))}%` }}
+                                        />
+                                      </div>
+
+                                      {/* Step 1: Confirmed */}
+                                      <div className="flex flex-col items-center gap-1 relative z-10">
+                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                          stage >= 1 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
+                                        }`}>
+                                          <CheckCircle2 className="w-4 h-4" />
+                                        </div>
+                                        <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Confirmed</span>
+                                      </div>
+
+                                      {/* Step 2: Kitchen */}
+                                      <div className="flex flex-col items-center gap-1 relative z-10">
+                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                          stage >= 2 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
+                                        }`}>
+                                          <Clock className="w-4 h-4" />
+                                        </div>
+                                        <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Kitchen</span>
+                                      </div>
+
+                                      {/* Step 3: Dispatched */}
+                                      <div className="flex flex-col items-center gap-1 relative z-10">
+                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                          stage >= 3 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
+                                        }`}>
+                                          <Truck className="w-4 h-4" />
+                                        </div>
+                                        <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Dispatched</span>
+                                      </div>
+
+                                      {/* Step 4: Delivered */}
+                                      <div className="flex flex-col items-center gap-1 relative z-10">
+                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                          stage >= 4 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
+                                        }`}>
+                                          <PackageCheck className="w-4 h-4" />
+                                        </div>
+                                        <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Delivered</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
 
                                 {/* Items Breakdown List */}
                                 {ord.items && ord.items.length > 0 && (

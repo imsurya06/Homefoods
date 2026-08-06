@@ -1989,6 +1989,7 @@ app.get(['/api/v1/sync/bootstrap', '/api/sync/bootstrap', '/v1/sync/bootstrap', 
           .map((order: any) => {
             const stageInfo = getOrderStatusDetails(order.status);
             const refMeta = Array.isArray(order.meta_data) ? order.meta_data.find((m: any) => m.key === '_order_ref_code') : null;
+            const rzpOrderIdMeta = Array.isArray(order.meta_data) ? order.meta_data.find((m: any) => m.key === '_razorpay_order_id') : null;
             return {
               id: order.id,
               orderRefCode: refMeta?.value || `HF-${order.id}`,
@@ -2000,6 +2001,12 @@ app.get(['/api/v1/sync/bootstrap', '/api/sync/bootstrap', '/v1/sync/bootstrap', 
               dateCreated: order.date_created,
               items: order.line_items?.map((item: any) => ({ name: item.name, quantity: item.quantity })),
               shippingAddress: `${order.shipping?.address_1 || order.billing?.address_1 || ''}, ${order.shipping?.city || order.billing?.city || ''}`,
+              // Include payment retry parameters only if pending
+              ...(order.status === 'pending' ? {
+                razorpayOrderId: rzpOrderIdMeta?.value || '',
+                amountInPaise: Math.round((parseFloat(order.total) || 0) * 100),
+                keyId: (process.env.RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E').trim(),
+              } : {}),
             };
           })
       : [];
@@ -3673,6 +3680,8 @@ app.get(['/api/v1/checkout/track/:tokenOrId', '/api/checkout/track/:tokenOrId', 
 
     const currentStatus = getOrderStatusDetails(order.status);
 
+    const rzpOrderIdMeta = (order.meta_data || []).find((m: any) => m.key === '_razorpay_order_id');
+
     return res.json({
       success: true,
       data: {
@@ -3688,6 +3697,12 @@ app.get(['/api/v1/checkout/track/:tokenOrId', '/api/checkout/track/:tokenOrId', 
         phone: order.billing?.phone || '',
         shippingAddress: `${order.shipping?.address_1 || order.billing?.address_1 || ''}, ${order.shipping?.city || order.billing?.city || ''}`,
         items: order.line_items?.map((item: any) => ({ name: item.name, quantity: item.quantity })),
+        // Include payment retry parameters only if pending
+        ...(order.status === 'pending' ? {
+          razorpayOrderId: rzpOrderIdMeta?.value || '',
+          amountInPaise: Math.round((parseFloat(order.total) || 0) * 100),
+          keyId: (process.env.RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E').trim(),
+        } : {}),
       },
     });
   } catch (error: any) {

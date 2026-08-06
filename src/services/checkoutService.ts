@@ -220,3 +220,104 @@ export async function cancelInventoryReservation(wcOrderId: number): Promise<boo
     return false;
   }
 }
+
+export async function retryRazorpayPayment(
+  order: {
+    wcOrderId: number;
+    razorpayOrderId: string;
+    amountInPaise: number;
+    keyId: string;
+    orderRefCode?: string;
+    customerEmail?: string;
+    customerName?: string;
+    items?: any[];
+    shippingAddress?: string;
+    phone?: string;
+  },
+  onSuccess: (response: {
+    wcOrderId: number;
+    paymentId: string;
+    orderRefCode?: string;
+    accessToken?: string;
+    refreshToken?: string;
+    user?: any;
+    cartRevision?: number;
+  }) => void,
+  onError: (errorMsg: string) => void
+) {
+  try {
+    if (!window.Razorpay) {
+      onError('Razorpay SDK failed to load. Please refresh the page and try again.');
+      return;
+    }
+
+    const displayOrderCode = order.orderRefCode || `HF-${order.wcOrderId}`;
+
+    const razorpayOptions: any = {
+      key: order.keyId,
+      amount: order.amountInPaise,
+      currency: 'INR',
+      name: 'Homemade Foods',
+      description: `Complete Payment for Order #${displayOrderCode}`,
+      image: 'https://www.homemadefoodsmadurai.com/favicon.png',
+      handler: async function (response: any) {
+        try {
+          const verifyRes = await fetchApi<{
+            success: boolean;
+            orderRefCode?: string;
+            accessToken?: string;
+            refreshToken?: string;
+            user?: any;
+            cartRevision?: number;
+          }>('/checkout/verify-payment', {
+            method: 'POST',
+            body: JSON.stringify({
+              razorpay_order_id: order.razorpayOrderId,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              wcOrderId: order.wcOrderId,
+              orderRefCode: displayOrderCode,
+              customerEmail: order.customerEmail || '',
+              customerName: order.customerName || 'Valued Customer',
+              totalAmount: order.amountInPaise / 100,
+              items: order.items || [],
+              shippingAddress: order.shippingAddress || '',
+              phone: order.phone || '',
+            }),
+          });
+
+          if (verifyRes.success) {
+            onSuccess({
+              wcOrderId: order.wcOrderId,
+              paymentId: response.razorpay_payment_id,
+              orderRefCode: verifyRes.orderRefCode || displayOrderCode,
+              accessToken: (verifyRes as any).accessToken,
+              refreshToken: (verifyRes as any).refreshToken,
+              user: (verifyRes as any).user,
+              cartRevision: (verifyRes as any).cartRevision,
+            });
+          } else {
+            onError('Payment signature verification failed.');
+          }
+        } catch (err: any) {
+          onError(err.message || 'Error verifying payment signature.');
+        }
+      },
+      modal: {
+        ondismiss: function () {
+          onError('Payment process was cancelled by user.');
+        },
+      },
+    };
+
+    if (order.razorpayOrderId && order.razorpayOrderId.startsWith('order_') && !order.razorpayOrderId.startsWith('order_mock_')) {
+      razorpayOptions.order_id = order.razorpayOrderId;
+    }
+
+    const rzp = new window.Razorpay(razorpayOptions);
+    rzp.open();
+  } catch (err: any) {
+    console.error('Retry payment error:', err);
+    onError(err.message || 'Failed to open payment modal.');
+  }
+}
