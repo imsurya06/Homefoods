@@ -38,8 +38,20 @@ export async function processRazorpayCheckout(
   onReservationCreated?: (wcOrderId: number, expiresAt: number) => void
 ) {
   try {
+    const generateUUID = () => {
+      if (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) {
+        return window.crypto.randomUUID();
+      }
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+    };
+
     let orderRes: any;
     try {
+      const idKey = generateUUID();
       orderRes = await fetchApi<{
         success: boolean;
         wcOrderId: number;
@@ -50,6 +62,9 @@ export async function processRazorpayCheckout(
         expiresAt?: number;
       }>('/checkout/create-order', {
         method: 'POST',
+        headers: {
+          'Idempotency-Key': idKey,
+        },
         body: JSON.stringify(payload),
       });
 

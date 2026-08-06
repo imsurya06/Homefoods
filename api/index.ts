@@ -83,7 +83,13 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -363,6 +369,36 @@ async function getReservedQuantities(): Promise<Record<number, number>> {
   }
   
   return reservedMap;
+}
+
+async function cleanupExpiredPendingOrders() {
+  try {
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const res = await wcFetch('orders', {
+      params: {
+        status: 'pending',
+        before: fifteenMinutesAgo,
+        per_page: 50
+      }
+    });
+
+    if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+      console.log(`[Inventory Reservation Cleanup] Found ${res.data.length} expired pending orders. Cancelling...`);
+      for (const order of res.data) {
+        wcFetch(`orders/${order.id}`, {
+          method: 'PUT',
+          body: {
+            status: 'cancelled',
+            customer_note: 'Payment window expired. Reservation cancelled automatically by system.'
+          }
+        }).catch((err) => {
+          console.error(`[Inventory Reservation Cleanup] Failed to cancel order #${order.id}:`, err.message);
+        });
+      }
+    }
+  } catch (err: any) {
+    console.error('[Inventory Reservation Cleanup] Error fetching expired orders:', err.message);
+  }
 }
 
 async function validateCouponCode(couponCode: string, cartSubtotal: number): Promise<{
@@ -2668,6 +2704,115 @@ app.post(['/api/v1/webhooks/order-updated', '/webhooks/order-updated'], async (r
   }
 });
 
+// POST /api/v1/webhooks/razorpay (Razorpay Webhook Handler)
+app.post(['/api/v1/webhooks/razorpay', '/webhooks/razorpay', '/v1/webhooks/razorpay'], async (req: any, res) => {
+  try {
+    const signature = req.headers['x-razorpay-signature'];
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      console.error('[Razorpay Webhook] Webhook secret is not configured.');
+      return res.status(500).json({ success: false, message: 'Webhook secret not configured' });
+    }
+
+    if (!signature || !req.rawBody) {
+      return res.status(400).json({ success: false, message: 'Missing signature or rawBody payload.' });
+    }
+
+    const expectedSignature = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(req.rawBody)
+      .digest('hex');
+
+    if (expectedSignature !== signature) {
+      console.error('[Razorpay Webhook] Signature verification failed.');
+      return res.status(400).json({ success: false, message: 'Signature mismatch' });
+    }
+
+    const event = req.body;
+    console.log(`[Razorpay Webhook] Verified event: ${event?.event}`);
+
+    if (event && event.event === 'payment.captured') {
+      const payment = event.payload.payment.entity;
+      const rzpOrderId = payment.order_id;
+      const transactionId = payment.id;
+
+      if (!rzpOrderId) {
+        return res.json({ success: true, message: 'No Razorpay order ID in payload.' });
+      }
+
+      // Query order by metadata _razorpay_order_id
+      const wcRes = await wcFetch('orders', {
+        params: {
+          meta_key: '_razorpay_order_id',
+          meta_value: rzpOrderId
+        }
+      });
+
+      if (wcRes.ok && Array.isArray(wcRes.data) && wcRes.data.length > 0) {
+        const order = wcRes.data[0];
+        
+        if (['pending', 'on-hold', 'failed'].includes(order.status)) {
+          console.log(`[Razorpay Webhook] Setting order #${order.id} status to processing...`);
+          await wcFetch(`orders/${order.id}`, {
+            method: 'PUT',
+            body: { set_paid: true, status: 'processing', transaction_id: transactionId }
+          });
+
+          const cleanEmail = (order.billing?.email || '').trim().toLowerCase();
+          if (cleanEmail) {
+            userCartsMap.set(cleanEmail, []);
+            userCartLocks.set(cleanEmail, Date.now() + 5000);
+            
+            // Clear saved cart on customer profile
+            if (order.customer_id) {
+              wcFetch(`customers/${order.customer_id}`, {
+                method: 'PUT',
+                body: {
+                  meta_data: [
+                    { key: 'hf_saved_cart', value: '[]' },
+                    { key: '_saved_cart', value: '[]' }
+                  ]
+                }
+              }).catch(() => {});
+            }
+          }
+
+          // Extract tracking token and details
+          const trackingMeta = (order.meta_data || []).find((m: any) => m.key === '_tracking_token');
+          const trackingToken = trackingMeta?.value || '';
+          const refCodeMeta = (order.meta_data || []).find((m: any) => m.key === '_order_ref_code');
+          const orderRefCode = refCodeMeta?.value || `HF-${order.id}`;
+
+          const trackingLink = trackingToken 
+            ? `${APP_URL}/#track?token=${encodeURIComponent(trackingToken)}`
+            : `${APP_URL}/#track?id=${encodeURIComponent(orderRefCode)}`;
+
+          // Send email
+          if (cleanEmail && cleanEmail.includes('@')) {
+            sendOrderTrackingEmail({
+              toEmail: cleanEmail,
+              customerName: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Valued Customer',
+              orderRefCode,
+              wcOrderId: order.id,
+              totalAmount: parseFloat(order.total) || 0,
+              items: order.line_items?.map((it: any) => ({ name: it.name, quantity: it.quantity })) || [],
+              shippingAddress: `${order.shipping?.address_1 || order.billing?.address_1 || ''}, ${order.shipping?.city || order.billing?.city || ''}`,
+              phone: order.billing?.phone || '',
+              trackingLink
+            });
+          }
+        }
+      }
+    }
+
+    return res.json({ success: true, message: 'Webhook processed' });
+  } catch (error: any) {
+    console.error('[Razorpay Webhook Error]:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // GET /api/v1/auth/me
 app.get(['/api/v1/auth/me', '/api/auth/me', '/v1/auth/me', '/auth/me'], authenticateToken, async (req, res) => {
   try {
@@ -2957,13 +3102,25 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
     let totalAmountInRupees = Math.max(0, subtotal - couponDiscount + gst + shipping.shippingCharge);
     const amountInPaise = Math.round(totalAmountInRupees * 100);
 
-    // 45-Second Order Idempotency Deduplication Key
-    const idempotencyKey = `${customerEmail.toLowerCase()}_${amountInPaise}_${lineItems.map((i: any) => `${i.product_id}x${i.quantity}`).join('_')}`;
+    // Idempotency check using client header or auto-generated fallback payload key
+    const clientIdempotency = req.headers['idempotency-key'] || req.headers['x-idempotency-key'];
+    const autoKey = `${customerEmail.toLowerCase()}_${amountInPaise}_${lineItems.map((i: any) => `${i.product_id}x${i.quantity}`).join('_')}`;
+    const idempotencyKey = clientIdempotency ? `idempotency:${clientIdempotency}` : `idempotency:auto:${autoKey}`;
     const now = Date.now();
-    const existingRecentOrder = recentCreatedOrdersMap.get(idempotencyKey);
 
-    if (existingRecentOrder && now - existingRecentOrder.timestamp < 45000) {
+    let existingRecentOrder: any = null;
+    if (redis) {
+      const cached = await redis.get<any>(idempotencyKey);
+      if (cached) {
+        existingRecentOrder = cached;
+      }
+    } else {
+      existingRecentOrder = recentCreatedOrdersMap.get(idempotencyKey);
+    }
+
+    if (existingRecentOrder) {
       console.log(`⚡ Idempotency match: Reusing recently created Order #${existingRecentOrder.wcOrderId} for ${customerEmail}`);
+      await releaseLock();
       return res.json({
         success: true,
         wcOrderId: existingRecentOrder.wcOrderId,
@@ -2973,6 +3130,7 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
         amountInPaise: existingRecentOrder.amountInPaise,
         currency: 'INR',
         keyId: existingRecentOrder.keyId,
+        trackingToken: existingRecentOrder.trackingToken,
       });
     }
 
@@ -3079,7 +3237,20 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       }
     } catch {}
 
-    recentCreatedOrdersMap.set(idempotencyKey, {
+    if (rzpOrderId && !rzpOrderId.startsWith('order_mock_')) {
+      try {
+        await wcFetch(`orders/${wcOrderId}`, {
+          method: 'PUT',
+          body: {
+            meta_data: [
+              { key: '_razorpay_order_id', value: rzpOrderId }
+            ]
+          }
+        });
+      } catch {}
+    }
+
+    const resPayload = {
       wcOrderId,
       orderRefCode,
       razorpayOrderId: rzpOrderId,
@@ -3088,7 +3259,16 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       keyId,
       timestamp: now,
       trackingToken,
-    });
+    };
+
+    if (redis) {
+      await redis.set(idempotencyKey, JSON.stringify(resPayload), { ex: 600 }); // 10 minutes
+    } else {
+      recentCreatedOrdersMap.set(idempotencyKey, resPayload);
+    }
+
+    // Asynchronous background cleanup of expired pending orders
+    cleanupExpiredPendingOrders().catch((err) => console.error('[Background Cleanup Error]:', err.message));
 
     await releaseLock();
 
