@@ -2752,6 +2752,11 @@ app.post(['/api/v1/webhooks/razorpay', '/webhooks/razorpay', '/v1/webhooks/razor
       if (wcRes.ok && Array.isArray(wcRes.data) && wcRes.data.length > 0) {
         const order = wcRes.data[0];
         
+        if (['processing', 'completed'].includes(order.status)) {
+          console.log(`[Razorpay Webhook] Order #${order.id} is already in status '${order.status}'. Skipping processing to prevent duplicate emails/actions.`);
+          return res.json({ success: true, message: 'Webhook processed (order already paid)' });
+        }
+
         if (['pending', 'on-hold', 'failed'].includes(order.status)) {
           console.log(`[Razorpay Webhook] Setting order #${order.id} status to processing...`);
           await wcFetch(`orders/${order.id}`, {
