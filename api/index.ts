@@ -2752,9 +2752,45 @@ app.post(['/api/v1/webhooks/razorpay', '/webhooks/razorpay', '/v1/webhooks/razor
       if (wcRes.ok && Array.isArray(wcRes.data) && wcRes.data.length > 0) {
         const order = wcRes.data[0];
         
+        // 1. Ignore webhooks for cancelled or refunded orders
+        if (['cancelled', 'refunded'].includes(order.status)) {
+          console.log(`[Razorpay Webhook] Order #${order.id} has status '${order.status}'. Ignoring payment captured webhook.`);
+          return res.json({ success: true, message: `Order already marked as ${order.status}` });
+        }
+
+        // 2. Layer 1 Idempotency: Already paid status
         if (['processing', 'completed'].includes(order.status)) {
           console.log(`[Razorpay Webhook] Order #${order.id} is already in status '${order.status}'. Skipping processing to prevent duplicate emails/actions.`);
           return res.json({ success: true, message: 'Webhook processed (order already paid)' });
+        }
+
+        // 3. Layer 2 Idempotency: Check if transaction ID is already recorded
+        if (order.transaction_id === transactionId) {
+          console.log(`[Razorpay Webhook] Transaction ${transactionId} already recorded on Order #${order.id}. Skipping.`);
+          return res.json({ success: true, message: 'Payment already processed' });
+        }
+
+        // 4. Verify stored _razorpay_order_id matches webhook ID
+        const orderRzpMeta = (order.meta_data || []).find((m: any) => m.key === '_razorpay_order_id');
+        if (orderRzpMeta && orderRzpMeta.value !== rzpOrderId) {
+          console.error(`[Razorpay Webhook] Order correlation mismatch: Stored razorpay ID ${orderRzpMeta.value} does not match webhook ID ${rzpOrderId}.`);
+          return res.status(400).json({ success: false, message: 'Razorpay Order ID mismatch' });
+        }
+
+        // 5. Verify the payment amount matches the WooCommerce order total (paise to rupees)
+        const rzpTotal = payment.amount / 100;
+        const wcTotal = parseFloat(order.total) || 0;
+        if (Math.abs(rzpTotal - wcTotal) > 1.0) {
+          console.error(`[Razorpay Webhook] Amount mismatch: Razorpay total is ₹${rzpTotal}, but WooCommerce Order #${order.id} total is ₹${wcTotal}. Rejecting.`);
+          return res.status(400).json({ success: false, message: 'Amount mismatch' });
+        }
+
+        // 6. Verify currency matches
+        const rzpCurrency = (payment.currency || '').toUpperCase();
+        const wcCurrency = (order.currency || 'INR').toUpperCase();
+        if (rzpCurrency !== wcCurrency) {
+          console.error(`[Razorpay Webhook] Currency mismatch: Razorpay currency is ${rzpCurrency}, but WooCommerce currency is ${wcCurrency}. Rejecting.`);
+          return res.status(400).json({ success: false, message: 'Currency mismatch' });
         }
 
         if (['pending', 'on-hold', 'failed'].includes(order.status)) {
