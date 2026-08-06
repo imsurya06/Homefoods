@@ -844,6 +844,7 @@ async function sendOrderTrackingEmail(options: {
       port: smtpPort,
       secure: secure,
       auth: { user: smtpUser, pass: smtpPass },
+      tls: { rejectUnauthorized: false },
     });
 
     const itemsHtml = items.length > 0
@@ -1210,6 +1211,7 @@ async function sendEmailOtp(email: string, otp: string, purpose: 'login' | 'chec
     port: smtpPort,
     secure: secure,
     auth: { user: smtpUser, pass: smtpPass },
+    tls: { rejectUnauthorized: false },
   });
 
   let subject = `Password Reset Verification Code: ${otp}`;
