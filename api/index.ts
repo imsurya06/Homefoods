@@ -836,7 +836,7 @@ async function sendOrderTrackingEmail(options: {
 
     if (!smtpUser || !smtpPass) {
       console.log(`✉️ Email notification logged (SMTP credentials not configured): Order ${orderRefCode} (#${wcOrderId}) for ${toEmail}. Track Link: ${trackingLink}`);
-      return;
+      throw new Error(`SMTP Mailer failed: SMTP credentials are not set on the server (User: ${!!smtpUser}, Pass: ${!!smtpPass}).`);
     }
 
     const transporter = nodemailer.createTransport({
@@ -1204,7 +1204,7 @@ async function sendEmailOtp(email: string, otp: string, purpose: 'login' | 'chec
 
   if (!smtpUser || !smtpPass) {
     console.warn(`[Mail] SMTP credentials not set. OTP for ${purpose} to ${email} is:`, otp);
-    return;
+    throw new Error(`SMTP Mailer failed: SMTP credentials are not set on the server (User: ${!!smtpUser}, Pass: ${!!smtpPass}).`);
   }
 
   const transporter = nodemailer.createTransport({
