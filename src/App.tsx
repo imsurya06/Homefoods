@@ -112,18 +112,6 @@ export function App() {
 
             if (prevStatus && prevStatus !== currentStatus) {
               hasChanged = true;
-              const refCode = ord.orderRefCode || `HF-${ord.id}`;
-              const label = ord.statusLabel || ord.status;
-              showToast(`🔔 Order #${refCode} status updated: ${label}`);
-
-              if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-                try {
-                  new Notification(`Homemade Foods Order #${refCode}`, {
-                    body: `Status updated: ${label}`,
-                    icon: '/favicon.ico',
-                  });
-                } catch {}
-              }
             }
 
             prevMap.set(ordKey, currentStatus);
