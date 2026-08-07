@@ -26,6 +26,21 @@ export interface OfflineOperation {
   retryCount: number;
 }
 
+export interface ActiveCheckoutSession {
+  wcOrderId: number;
+  orderRefCode: string;
+  status: 'pending_payment' | 'processing' | 'cancelled' | 'expired';
+  reservationExpiresAt: number;
+  razorpayOrderId: string;
+  amountInPaise: number;
+  keyId: string;
+  cartSnapshot: CartItem[];
+  customerEmail?: string;
+  customerName?: string;
+  phone?: string;
+  shippingAddress?: string;
+}
+
 interface SyncState {
   // Auth state
   user: UserProfile | null;
@@ -35,6 +50,10 @@ interface SyncState {
   // Business state
   cartItems: CartItem[];
   cartRevision: number;
+
+  activeCheckoutSession: ActiveCheckoutSession | null;
+  isCheckoutInProgress: boolean;
+  lastCheckoutRevision: number | null;
 
   wishlistItems: number[];
   wishlistRevision: number;
@@ -58,6 +77,9 @@ interface SyncState {
   login: (user: UserProfile, accessToken: string, refreshToken: string) => void;
   logout: () => void;
   setCart: (items: CartItem[], revision?: number) => void;
+  setActiveCheckoutSession: (session: ActiveCheckoutSession | null) => void;
+  setCheckoutInProgress: (inProgress: boolean) => void;
+  setLastCheckoutRevision: (rev: number | null) => void;
   setWishlist: (items: number[], revision?: number) => void;
   setAddresses: (addresses: Address[], revision?: number) => void;
   updateProfile: (profile: Partial<UserProfile>, revision?: number) => void;
@@ -79,6 +101,21 @@ const getInitialAuth = () => {
     }
   } catch {}
   return { user: null, accessToken: null, isLoggedIn: false };
+};
+
+const getInitialActiveSession = (): ActiveCheckoutSession | null => {
+  try {
+    const saved = localStorage.getItem('hf_active_checkout_session');
+    if (saved) {
+      const session: ActiveCheckoutSession = JSON.parse(saved);
+      if (session && session.reservationExpiresAt > Date.now()) {
+        return session;
+      } else {
+        localStorage.removeItem('hf_active_checkout_session');
+      }
+    }
+  } catch {}
+  return null;
 };
 
 const getInitialCart = () => {
@@ -109,6 +146,9 @@ export const useSyncStore = create<SyncState>((set) => ({
   ...getInitialAuth(),
   cartItems: getInitialCart(),
   cartRevision: 0,
+  activeCheckoutSession: getInitialActiveSession(),
+  isCheckoutInProgress: false,
+  lastCheckoutRevision: null,
   wishlistItems: getInitialWishlist(),
   wishlistRevision: 0,
   addresses: [],
@@ -133,6 +173,7 @@ export const useSyncStore = create<SyncState>((set) => ({
     localStorage.removeItem('hf_user_cart');
     localStorage.removeItem('hf_wishlist');
     localStorage.removeItem('hf_offline_queue');
+    localStorage.removeItem('hf_active_checkout_session');
     sessionStorage.removeItem('hf_guest_cart');
     set({
       user: null,
@@ -140,6 +181,9 @@ export const useSyncStore = create<SyncState>((set) => ({
       isLoggedIn: false,
       cartItems: [],
       cartRevision: 0,
+      activeCheckoutSession: null,
+      isCheckoutInProgress: false,
+      lastCheckoutRevision: null,
       wishlistItems: [],
       wishlistRevision: 0,
       addresses: [],
@@ -149,6 +193,18 @@ export const useSyncStore = create<SyncState>((set) => ({
       offlineQueue: [],
     });
   },
+
+  setActiveCheckoutSession: (session) => {
+    if (session) {
+      localStorage.setItem('hf_active_checkout_session', JSON.stringify(session));
+    } else {
+      localStorage.removeItem('hf_active_checkout_session');
+    }
+    set({ activeCheckoutSession: session });
+  },
+
+  setCheckoutInProgress: (isCheckoutInProgress) => set({ isCheckoutInProgress }),
+  setLastCheckoutRevision: (lastCheckoutRevision) => set({ lastCheckoutRevision }),
 
   setCart: (items, revision) => {
     set((state) => {

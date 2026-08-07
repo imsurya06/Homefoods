@@ -89,8 +89,16 @@ export async function checkRevisions() {
 
       const serverRevs = res.revisions;
 
+      // Suppress cart revision trigger if checkout is currently in progress or matches checkout revision transition
+      const isCheckoutActive = state.isCheckoutInProgress || (state.lastCheckoutRevision !== null && serverRevs.cartRevision <= state.lastCheckoutRevision);
+      if (isCheckoutActive && serverRevs.cartRevision > localRevs.cart) {
+        useSyncStore.setState({ cartRevision: serverRevs.cartRevision });
+      }
+
+      const cartNeedsSync = !isCheckoutActive && serverRevs.cartRevision > localRevs.cart;
+
       if (
-        serverRevs.cartRevision > localRevs.cart ||
+        cartNeedsSync ||
         serverRevs.wishlistRevision > localRevs.wishlist ||
         serverRevs.profileRevision > localRevs.profile ||
         serverRevs.addressRevision > localRevs.address

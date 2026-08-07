@@ -17,12 +17,10 @@ import {
   Truck,
   PackageCheck,
   AlertCircle,
-  AlertTriangle,
-  Timer,
   CreditCard,
 } from 'lucide-react';
 import { type CartItem } from '../data/bestsellers';
-import { processRazorpayCheckout, type CheckoutPayload, trackSingleOrder, cancelInventoryReservation, retryRazorpayPayment } from '../services/checkoutService';
+import { processRazorpayCheckout, type CheckoutPayload, trackSingleOrder, cancelInventoryReservation, retryRazorpayPayment, fetchRetryPaymentDetails } from '../services/checkoutService';
 import { fetchCustomerOrders, sendEmailOtp, verifyEmailOtp, type CustomerOrderHistoryItem, type UserProfile } from '../services/authService';
 import { getCachedProductsSync } from '../services/productService';
 import { validateCart } from '../services/cartService';
@@ -178,9 +176,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [checkoutInfoMsg, setCheckoutInfoMsg] = useState<string | null>(null);
   const [orderSuccess, setOrderSuccess] = useState<{ wcOrderId: number; paymentId: string; orderRefCode?: string } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [checkoutStep, setCheckoutStep] = useState<'cart' | 'shipping'>('cart');
+
+  // Active Checkout Session (Zustand Store)
+  const activeCheckoutSession = useSyncStore((state) => state.activeCheckoutSession);
+  const setActiveCheckoutSession = useSyncStore((state) => state.setActiveCheckoutSession);
+  const setCheckoutInProgress = useSyncStore((state) => state.setCheckoutInProgress);
+  const setLastCheckoutRevision = useSyncStore((state) => state.setLastCheckoutRevision);
 
   // Coupon and Real-time Pricing Validation States
   const [couponCode, setCouponCode] = useState<string>('');
@@ -188,15 +193,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [calcSummary, setCalcSummary] = useState<any>(null);
   const [isValidating, setIsValidating] = useState<boolean>(false);
 
-  // Active Inventory Reservation States
-  const [activeReservationOrderId, setActiveReservationOrderId] = useState<number | null>(null);
-  const [reservationExpiresAt, setReservationExpiresAt] = useState<number | null>(null);
-  const [timeLeft, setTimeLeft] = useState<number>(0);
-
   // Orders Tab State
   const [orders, setOrders] = useState<CustomerOrderHistoryItem[]>([]);
   const [loadingOrders, setLoadingOrders] = useState<boolean>(false);
   const [expandedOrderId, setExpandedOrderId] = useState<string | number | null>(null);
+  const [showPastOrders, setShowPastOrders] = useState<boolean>(true);
 
   // Guest Order Tracking Search State
   const [guestSearchInput, setGuestSearchInput] = useState<string>('');
@@ -204,62 +205,115 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [guestSearchError, setGuestSearchError] = useState<string | null>(null);
   const [guestSearchLoading, setGuestSearchLoading] = useState<boolean>(false);
 
-  // Real-time ticking state for live countdowns
-  const [ticks, setTicks] = useState<number>(0);
+  // Real-time ticking state for live countdowns (updates every second)
+  const [now, setNow] = useState<number>(Date.now());
   const [ordersRefreshTrigger, setOrdersRefreshTrigger] = useState<number>(0);
   const [checkoutSuccessMsg, setCheckoutSuccessMsg] = useState<string | null>(null);
 
+  // Real-time ticking state for live countdowns (updates every second)
   useEffect(() => {
-    if (isOpen && activeTab === 'orders') {
-      const timer = setInterval(() => {
-        setTicks((t) => t + 1);
-      }, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [isOpen, activeTab]);
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  const getRemainingTimeLabel = (dateCreated: string) => {
-    // Reference ticks to ensure countdown updates and triggers re-renders
-    if (ticks === -999) {
-      console.log('Ticking', ticks);
+  // Check reservation auto-expiry
+  useEffect(() => {
+    if (!activeCheckoutSession || activeCheckoutSession.status !== 'pending_payment') return;
+    const remaining = Math.max(0, Math.floor((activeCheckoutSession.reservationExpiresAt - Date.now()) / 1000));
+    if (remaining <= 0) {
+      console.log('[Inventory Reservation] Reservation expired. Releasing stock...');
+      const orderIdToCancel = activeCheckoutSession.wcOrderId;
+      setActiveCheckoutSession(null);
+      setCheckoutInfoMsg('Your 10-minute stock reservation expired. We have restored your cart items for easy re-ordering.');
+      cancelInventoryReservation(orderIdToCancel).catch((err) => {
+        console.warn('Failed to release expired reservation:', err);
+      });
+      setOrdersRefreshTrigger((prev) => prev + 1);
     }
-    const createdTime = new Date(dateCreated).getTime();
-    const expiresAt = createdTime + 15 * 60 * 1000;
-    const diff = expiresAt - Date.now();
-    if (diff <= 0) return 'Expired';
-    const mins = Math.floor(diff / 60000);
-    const secs = Math.floor((diff % 60000) / 1000);
-    return `${mins}m ${secs.toString().padStart(2, '0')}s`;
+  }, [now, activeCheckoutSession]);
+
+  const renderReservationTimer = (expTime: number) => {
+    const secondsLeft = Math.max(0, Math.floor((expTime - now) / 1000));
+    if (secondsLeft <= 0) return <span className="text-xs font-bold text-gray-400">Expired</span>;
+    const mins = Math.floor(secondsLeft / 60);
+    const secs = secondsLeft % 60;
+    const timeStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+
+    const isWarning = secondsLeft <= 120; // < 2 mins: orange text
+
+    return (
+      <span className={`font-mono text-xs font-black px-2.5 py-0.5 rounded-lg border transition-all ${
+        isWarning ? 'bg-amber-50 text-amber-600 border-amber-300 animate-pulse shadow-xs' : 'bg-white text-[#95CD1A] border-[#95CD1A]/30'
+      }`}>
+        {timeStr}
+      </span>
+    );
   };
 
-  const handleRetryPayment = async (order: any) => {
+  const handleRetryPayment = async (orderOrSession: any) => {
     setIsProcessing(true);
     setCheckoutError(null);
+    setCheckoutInfoMsg(null);
     setCheckoutSuccessMsg(null);
 
+    const wcOrderId = orderOrSession.wcOrderId || orderOrSession.id;
+
+    // Fetch fresh retry payment parameters from server
+    const retryDetails = await fetchRetryPaymentDetails(wcOrderId);
+
+    const targetOrder = {
+      wcOrderId,
+      razorpayOrderId: retryDetails?.razorpayOrderId || orderOrSession.razorpayOrderId || `order_mock_${wcOrderId}`,
+      amountInPaise: retryDetails?.amountInPaise || orderOrSession.amountInPaise || Math.round(parseFloat(orderOrSession.total || '0') * 100),
+      keyId: retryDetails?.keyId || orderOrSession.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E',
+      orderRefCode: retryDetails?.orderRefCode || orderOrSession.orderRefCode || `HF-${wcOrderId}`,
+      customerEmail: retryDetails?.customerEmail || orderOrSession.customerEmail || email || user?.email || '',
+      customerName: retryDetails?.customerName || orderOrSession.customerName || customerName || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Valued Customer'),
+      phone: retryDetails?.phone || orderOrSession.phone || mobileNumber || user?.phone || '',
+      items: retryDetails?.items || orderOrSession.items || items,
+      shippingAddress: retryDetails?.shippingAddress || orderOrSession.shippingAddress || `${shippingAddress}, ${city}`,
+    };
+
+    if (retryDetails && retryDetails.expiresAt) {
+      setActiveCheckoutSession({
+        wcOrderId: targetOrder.wcOrderId,
+        orderRefCode: targetOrder.orderRefCode,
+        status: 'pending_payment',
+        reservationExpiresAt: retryDetails.expiresAt,
+        razorpayOrderId: targetOrder.razorpayOrderId,
+        amountInPaise: targetOrder.amountInPaise,
+        keyId: targetOrder.keyId,
+        cartSnapshot: targetOrder.items,
+        customerEmail: targetOrder.customerEmail,
+        customerName: targetOrder.customerName,
+        phone: targetOrder.phone,
+        shippingAddress: targetOrder.shippingAddress,
+      });
+    }
+
+    setCheckoutInProgress(true);
+
     retryRazorpayPayment(
-      {
-        wcOrderId: order.wcOrderId || order.id,
-        razorpayOrderId: order.razorpayOrderId,
-        amountInPaise: order.amountInPaise,
-        keyId: order.keyId,
-        orderRefCode: order.orderRefCode,
-        customerEmail: user?.email || '',
-        customerName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Customer',
-        phone: user?.phone || '',
-        items: order.items || [],
-        shippingAddress: order.shippingAddress || '',
-      },
+      targetOrder,
       async (response) => {
+        setCheckoutInProgress(false);
         setIsProcessing(false);
-        setCheckoutSuccessMsg(`Payment completed successfully for Order #${response.orderRefCode || order.orderRefCode || order.id}!`);
-        
-        // Refresh orders list
+        setActiveCheckoutSession(null);
+        setCheckoutStep('cart');
+        setOrderSuccess(response);
+        setCheckoutSuccessMsg(`Payment completed successfully for Order #${response.orderRefCode || targetOrder.orderRefCode}!`);
         setOrdersRefreshTrigger((prev) => prev + 1);
       },
       (errorMsg) => {
+        setCheckoutInProgress(false);
         setIsProcessing(false);
-        setCheckoutError(errorMsg);
+        if (errorMsg.includes('cancelled by user')) {
+          setCheckoutInfoMsg('Payment was cancelled. Your items are still reserved for a few minutes. You can retry payment now or continue shopping.');
+        } else {
+          setCheckoutError(errorMsg);
+        }
       }
     );
   };
@@ -270,11 +324,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
     setIsProcessing(true);
     setCheckoutError(null);
+    setCheckoutInfoMsg(null);
     setCheckoutSuccessMsg(null);
     try {
       const success = await cancelInventoryReservation(orderId);
       if (success) {
-        setCheckoutSuccessMsg('Order cancelled successfully.');
+        if (activeCheckoutSession?.wcOrderId === orderId) {
+          setActiveCheckoutSession(null);
+        }
+        setCheckoutInfoMsg('Order cancelled successfully. Stock reservation released.');
         setOrdersRefreshTrigger((prev) => prev + 1);
       } else {
         setCheckoutError('Failed to cancel order.');
@@ -310,48 +368,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       if (interval) clearInterval(interval);
     };
   }, [resendTimer]);
-
-  // 1. Countdown timer effect for inventory reservations
-  useEffect(() => {
-    if (!reservationExpiresAt || !activeReservationOrderId) return;
-
-    const interval = setInterval(async () => {
-      const remaining = Math.max(0, Math.round((reservationExpiresAt - Date.now()) / 1000));
-      setTimeLeft(remaining);
-
-      if (remaining <= 0) {
-        clearInterval(interval);
-        console.log('[Inventory Reservation] Reservation expired. Releasing stock...');
-        const orderIdToCancel = activeReservationOrderId;
-        setActiveReservationOrderId(null);
-        setReservationExpiresAt(null);
-        setIsProcessing(false);
-        setCheckoutError('Your 10-minute stock reservation expired. The items have been released.');
-        
-        try {
-          await cancelInventoryReservation(orderIdToCancel);
-        } catch (err) {
-          console.warn('Failed to release expired reservation:', err);
-        }
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [reservationExpiresAt, activeReservationOrderId]);
-
-  // 2. Cleanup reservation on drawer close (abandoned checkout)
-  useEffect(() => {
-    if (!isOpen && activeReservationOrderId) {
-      console.log('[Inventory Reservation] Drawer closed. Releasing active reservation...');
-      const orderIdToCancel = activeReservationOrderId;
-      setActiveReservationOrderId(null);
-      setReservationExpiresAt(null);
-      
-      cancelInventoryReservation(orderIdToCancel).catch((err) => {
-        console.warn('Failed to release reservation on drawer close:', err);
-      });
-    }
-  }, [isOpen, activeReservationOrderId]);
 
   // Run server-side validation dynamically when items, pincode, or coupon changes
   useEffect(() => {
@@ -636,6 +652,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   const handleOrderNowInternal = async () => {
     setIsProcessing(true);
+    setCheckoutError(null);
+    setCheckoutInfoMsg(null);
+    setCheckoutInProgress(true);
 
     const payload: CheckoutPayload = {
       customerDetails: {
@@ -657,11 +676,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     await processRazorpayCheckout(
       payload,
       (response) => {
+        setCheckoutInProgress(false);
         setIsProcessing(false);
-        setActiveReservationOrderId(null);
-        setReservationExpiresAt(null);
+        setActiveCheckoutSession(null);
+        setCheckoutStep('cart');
         setOrderSuccess(response);
         if (response && response.cartRevision !== undefined) {
+          setLastCheckoutRevision(response.cartRevision);
           useSyncStore.setState({ offlineQueue: [] });
           useSyncStore.getState().setCart([], response.cartRevision);
         } else {
@@ -671,6 +692,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         setCouponStatus(null);
         setCalcSummary(null);
         setCheckoutError(null);
+        setCheckoutInfoMsg(null);
         setFieldErrors({});
 
         // Auto-login new registered customer
@@ -687,17 +709,32 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         }
       },
       async (errorMsg, isOutOfSync) => {
+        setCheckoutInProgress(false);
         setIsProcessing(false);
         if (isOutOfSync) {
-          setCheckoutError('Your shopping cart was modified on another device. We have refreshed it. Please review and try again.');
+          setCheckoutError(null);
           await bootstrapSync();
+        } else if (errorMsg.includes('cancelled by user')) {
+          setCheckoutInfoMsg('Payment was cancelled. Your items are still reserved for a few minutes. You can retry payment now or continue shopping.');
         } else {
           setCheckoutError(errorMsg);
         }
       },
       (wcOrderId, expiresAt) => {
-        setActiveReservationOrderId(wcOrderId);
-        setReservationExpiresAt(expiresAt);
+        setActiveCheckoutSession({
+          wcOrderId,
+          orderRefCode: `HF-${wcOrderId}`,
+          status: 'pending_payment',
+          reservationExpiresAt: expiresAt,
+          razorpayOrderId: '',
+          amountInPaise: (calcSummary ? calcSummary.grandTotal : grandTotal) * 100,
+          keyId: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E',
+          cartSnapshot: [...items],
+          customerEmail: email.trim(),
+          customerName: customerName.trim(),
+          phone: normalizeMobile(mobileNumber),
+          shippingAddress: `${shippingAddress.trim()}, ${city.trim()}`,
+        });
       }
     );
   };
@@ -1340,21 +1377,31 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-3.5">
+                  <div className="space-y-4">
                     {(() => {
-                      const displayList = orders.filter((o) => {
-                        const rawStatus = (o.status || '').toLowerCase().trim();
-                        if (['cancelled', 'failed', 'refunded'].includes(rawStatus)) {
-                          return false;
+                      const displayList = [...orders];
+
+                      if (activeCheckoutSession && activeCheckoutSession.reservationExpiresAt > now) {
+                        const sessionOrder = {
+                          id: activeCheckoutSession.wcOrderId,
+                          orderRefCode: activeCheckoutSession.orderRefCode,
+                          status: 'pending',
+                          statusLabel: 'Payment Pending',
+                          stage: 1,
+                          total: (activeCheckoutSession.amountInPaise / 100).toFixed(2),
+                          currency: '₹',
+                          dateCreated: new Date().toISOString(),
+                          items: activeCheckoutSession.cartSnapshot || [],
+                          shippingAddress: activeCheckoutSession.shippingAddress || '',
+                          razorpayOrderId: activeCheckoutSession.razorpayOrderId,
+                          amountInPaise: activeCheckoutSession.amountInPaise,
+                          keyId: activeCheckoutSession.keyId,
+                          expiresAt: activeCheckoutSession.reservationExpiresAt,
+                        };
+                        if (!displayList.some((o) => o.id.toString() === sessionOrder.id.toString())) {
+                          displayList.unshift(sessionOrder);
                         }
-                        if (rawStatus === 'pending' && o.dateCreated) {
-                          const elapsed = Date.now() - new Date(o.dateCreated).getTime();
-                          if (elapsed > 15 * 60 * 1000) {
-                            return false;
-                          }
-                        }
-                        return true;
-                      });
+                      }
 
                       if (guestSearchResult) {
                         const guestOrderObj = {
@@ -1372,19 +1419,28 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           amountInPaise: guestSearchResult.amountInPaise,
                           keyId: guestSearchResult.keyId,
                         };
-                        if (!displayList.some(o => o.id.toString() === guestOrderObj.id.toString())) {
+                        if (!displayList.some((o) => o.id.toString() === guestOrderObj.id.toString())) {
                           displayList.unshift(guestOrderObj);
                         }
                       }
-                      return displayList.map((ord) => {
+
+                      const activeOrders = displayList.filter((o) => {
+                        const rawStatus = (o.status || '').toLowerCase().trim();
+                        return ['pending', 'processing', 'kitchen', 'dispatched', 'shipped', 'in_transit', 'on_hold', 'pending_payment'].includes(rawStatus);
+                      });
+
+                      const pastOrders = displayList.filter((o) => {
+                        const rawStatus = (o.status || '').toLowerCase().trim();
+                        return !['pending', 'processing', 'kitchen', 'dispatched', 'shipped', 'in_transit', 'on_hold', 'pending_payment'].includes(rawStatus);
+                      });
+
+                      const renderCard = (ord: any) => {
                         const isExpanded = expandedOrderId === ord.id || expandedOrderId?.toString() === ord.id.toString();
 
-                        // Compute food names summary
                         const foodNamesSummary = ord.items && ord.items.length > 0
                           ? ord.items.map((i: any) => `${i.name}${i.quantity > 1 ? ` (${i.quantity}x)` : ''}`).join(', ')
                           : 'Homemade South Indian Food Delicacies';
 
-                        // Status Stage & Label Calculation
                         const rawStatus = (ord.status || '').toLowerCase().trim();
                         const rawLabel = (ord.statusLabel || '').toLowerCase().trim();
 
@@ -1397,7 +1453,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           stage = 2;
                         }
 
-                        const stageLabel = ord.statusLabel || (stage === 3 ? 'Dispatched' : stage === 4 ? 'Delivered' : stage === 2 ? 'Kitchen' : 'Confirmed');
+                        const isPending = rawStatus === 'pending' || rawStatus === 'pending_payment';
+                        const isCancelled = rawStatus === 'cancelled' || rawStatus === 'failed' || rawStatus === 'expired';
+                        const isCompleted = rawStatus === 'completed' || rawStatus === 'delivered';
+
+                        const stageLabel = ord.statusLabel || (
+                          isPending ? 'Payment Pending' :
+                          isCancelled ? (rawStatus === 'expired' ? 'Payment Expired' : 'Cancelled') :
+                          isCompleted ? 'Delivered' :
+                          stage === 3 ? 'Dispatched' : stage === 2 ? 'Kitchen' : 'Confirmed'
+                        );
+
+                        const expTime = ord.expiresAt || (activeCheckoutSession?.wcOrderId === ord.id ? activeCheckoutSession?.reservationExpiresAt : null);
 
                         return (
                           <div
@@ -1408,7 +1475,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                 : 'border-gray-200 hover:border-[#95CD1A]/50 bg-white'
                             }`}
                           >
-                            {/* Order Summary Header Card (Always Visible) */}
                             <div className="p-4 space-y-2">
                               <div className="flex items-start justify-between gap-2">
                                 <div>
@@ -1416,7 +1482,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                     <span className="text-xs font-black text-[#1F2937] font-numeric">
                                       Order #{ord.orderRefCode || `HF-${ord.id}`}
                                     </span>
-                                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#F7FCE8] text-[#95CD1A] border border-[#ECF9CA]">
+                                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                                      isPending ? 'bg-[#F7FCE8] text-[#2D5A1E] border-[#ECF9CA]' :
+                                      isCancelled ? 'bg-gray-100 text-gray-600 border-gray-200' :
+                                      'bg-[#F7FCE8] text-[#95CD1A] border-[#ECF9CA]'
+                                    }`}>
                                       {stageLabel}
                                     </span>
                                   </div>
@@ -1435,7 +1505,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                 </div>
                               </div>
 
-                              {/* Prominent Food Item Name Display */}
                               <div className="pt-2 border-t border-gray-100 flex items-start gap-2">
                                 <span className="text-xs font-bold text-[#95CD1A] shrink-0">Items:</span>
                                 <span className="text-xs font-extrabold text-[#1F2937] line-clamp-2 leading-snug">
@@ -1443,7 +1512,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                 </span>
                               </div>
 
-                              {/* Dropdown Toggle Button */}
                               <button
                                 onClick={() => toggleAccordion(ord.id)}
                                 className="w-full pt-2 flex items-center justify-between text-xs font-extrabold text-[#95CD1A] hover:text-[#7EB30E] transition-colors cursor-pointer"
@@ -1453,23 +1521,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                               </button>
                             </div>
 
-                            {/* Accordion Expanded Tracking Details */}
                             {isExpanded && (
                               <div className="px-4 pb-4 pt-3 bg-[#FAFBF6] border-t border-gray-100 space-y-4 animate-in slide-in-from-top-2 duration-200">
-                                
-                                {rawStatus === 'pending' ? (
-                                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs space-y-3 text-left">
+                                {isPending ? (
+                                  <div className="p-3.5 bg-[#F7FCE8] rounded-xl border border-[#ECF9CA] text-xs space-y-3 text-left">
                                     <div className="flex items-start gap-2.5">
-                                      <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                                      <div className="space-y-0.5">
-                                        <h4 className="font-extrabold text-amber-900">Payment Pending</h4>
-                                        <p className="text-amber-700 font-semibold leading-relaxed">
-                                          Your payment attempt was not completed. Stock remains reserved for you. Please complete payment before the reservation expires.
-                                        </p>
-                                        <div className="pt-1.5 flex items-center gap-1.5 font-extrabold text-amber-950 font-numeric">
-                                          <Timer className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-                                          <span>Expires in: {getRemainingTimeLabel(ord.dateCreated)}</span>
+                                      <Clock className="w-5 h-5 text-[#95CD1A] shrink-0 mt-0.5 animate-pulse" />
+                                      <div className="space-y-1">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <h4 className="font-extrabold text-[#2D5A1E]">Payment Pending</h4>
+                                          {expTime && renderReservationTimer(expTime)}
                                         </div>
+                                        <p className="text-[#4A7C34] font-medium leading-relaxed">
+                                          Stock remains reserved for you. Complete payment before the reservation timer expires to guarantee availability.
+                                        </p>
                                       </div>
                                     </div>
 
@@ -1480,12 +1545,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                         className="flex-1 py-2 px-3 bg-[#95CD1A] hover:bg-[#7EB30E] disabled:bg-gray-400 text-white font-extrabold text-xs rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                                       >
                                         <CreditCard className="w-3.5 h-3.5" />
-                                        <span>{isProcessing ? 'Processing...' : 'Complete Payment'}</span>
+                                        <span>{isProcessing ? 'Opening Payment...' : 'Retry Payment'}</span>
                                       </button>
                                       <button
                                         onClick={() => handleCancelOrder(typeof ord.id === 'string' ? parseInt(ord.id, 10) : ord.id)}
                                         disabled={isProcessing}
-                                        className="py-2 px-3 bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 text-gray-600 hover:text-gray-800 font-extrabold text-xs rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                        className="py-2 px-3 bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 text-gray-600 font-extrabold text-xs rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
                                       >
                                         <span>Cancel Order</span>
                                       </button>
@@ -1498,7 +1563,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                     </span>
 
                                     <div className="grid grid-cols-4 gap-1 relative text-center pt-2">
-                                      {/* Progress Line */}
                                       <div className="absolute top-5 left-[12%] right-[12%] h-1 bg-gray-200 -z-0">
                                         <div
                                           className="h-full bg-[#95CD1A] transition-all duration-500"
@@ -1506,7 +1570,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                         />
                                       </div>
 
-                                      {/* Step 1: Confirmed */}
                                       <div className="flex flex-col items-center gap-1 relative z-10">
                                         <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
                                           stage >= 1 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
@@ -1516,7 +1579,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                         <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Confirmed</span>
                                       </div>
 
-                                      {/* Step 2: Kitchen */}
                                       <div className="flex flex-col items-center gap-1 relative z-10">
                                         <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
                                           stage >= 2 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
@@ -1526,7 +1588,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                         <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Kitchen</span>
                                       </div>
 
-                                      {/* Step 3: Dispatched */}
                                       <div className="flex flex-col items-center gap-1 relative z-10">
                                         <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
                                           stage >= 3 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
@@ -1536,7 +1597,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                         <span className="text-[9px] font-extrabold text-gray-700 leading-tight">Dispatched</span>
                                       </div>
 
-                                      {/* Step 4: Delivered */}
                                       <div className="flex flex-col items-center gap-1 relative z-10">
                                         <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
                                           stage >= 4 ? 'bg-[#95CD1A] text-white shadow-md' : 'bg-gray-200 text-gray-500'
@@ -1549,7 +1609,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                   </div>
                                 )}
 
-                                {/* Items Breakdown List */}
                                 {ord.items && ord.items.length > 0 && (
                                   <div className="space-y-1.5 pt-2 border-t border-gray-200/60">
                                     <span className="text-[11px] font-extrabold text-gray-500 uppercase tracking-wider block">
@@ -1566,7 +1625,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                   </div>
                                 )}
 
-                                {/* Shipping Address */}
                                 {ord.shippingAddress && (
                                   <div className="pt-2 border-t border-gray-200/60 text-xs">
                                     <span className="font-extrabold text-gray-500 uppercase tracking-wider block text-[10px] mb-0.5">
@@ -1575,12 +1633,57 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                     <span className="font-medium text-gray-700 block">{ord.shippingAddress}</span>
                                   </div>
                                 )}
-
                               </div>
                             )}
                           </div>
                         );
-                      });
+                      };
+
+                      return (
+                        <div className="space-y-5">
+                          {/* Active & Pending Orders Section */}
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between text-xs font-extrabold text-[#2D5A1E] uppercase tracking-wider">
+                              <span className="flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-[#95CD1A]" />
+                                Active & Pending Orders ({activeOrders.length})
+                              </span>
+                            </div>
+
+                            {activeOrders.length === 0 ? (
+                              <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-100 text-xs text-gray-400 font-medium text-center">
+                                No active or pending orders right now.
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                {activeOrders.map(renderCard)}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Completed & Past Orders Section */}
+                          {pastOrders.length > 0 && (
+                            <div className="space-y-2.5 pt-2 border-t border-gray-200/60">
+                              <button
+                                onClick={() => setShowPastOrders((prev) => !prev)}
+                                className="w-full flex items-center justify-between text-xs font-extrabold text-gray-500 hover:text-gray-700 uppercase tracking-wider cursor-pointer"
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <PackageCheck className="w-3.5 h-3.5 text-gray-400" />
+                                  Completed & Past Orders ({pastOrders.length})
+                                </span>
+                                {showPastOrders ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                              </button>
+
+                              {showPastOrders && (
+                                <div className="space-y-3 animate-in fade-in duration-200">
+                                  {pastOrders.map(renderCard)}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
                     })()}
                   </div>
                 )}
@@ -1698,22 +1801,61 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
               </div>
 
-              {activeReservationOrderId && timeLeft > 0 && checkoutStep === 'shipping' && (
-                <div className="bg-[#FAFBF6] border border-[#ECF9CA] rounded-xl p-2.5 flex items-center justify-between animate-in fade-in duration-300">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-[#95CD1A] animate-pulse" />
-                    <span className="text-[10px] font-extrabold text-gray-700">
-                      Stock temporarily reserved for checkout
-                    </span>
+              {/* Active Checkout Session & Stock Reservation Banner */}
+              {activeCheckoutSession && activeCheckoutSession.reservationExpiresAt > now && (
+                <div className="bg-[#F7FCE8] border border-[#ECF9CA] rounded-2xl p-3.5 space-y-2.5 animate-in fade-in duration-300 text-left shadow-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Clock className={`w-4 h-4 ${
+                        Math.floor((activeCheckoutSession.reservationExpiresAt - now) / 1000) <= 120 ? 'text-amber-500 animate-pulse' : 'text-[#95CD1A]'
+                      }`} />
+                      <span className="text-xs font-black text-[#1F2937]">
+                        Items reserved for Order #{activeCheckoutSession.orderRefCode}
+                      </span>
+                    </div>
+                    {renderReservationTimer(activeCheckoutSession.reservationExpiresAt)}
                   </div>
-                  <span className="text-xs font-black text-[#95CD1A] font-mono bg-white border border-[#95CD1A]/20 px-2 py-0.5 rounded-md">
-                    {Math.floor(timeLeft / 60)}:{((timeLeft % 60) < 10 ? '0' : '') + (timeLeft % 60)}
-                  </span>
+
+                  <p className="text-xs text-[#4A7C34] font-medium leading-snug">
+                    Complete payment before the timer expires to guarantee stock availability of these items.
+                  </p>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleRetryPayment(activeCheckoutSession)}
+                      disabled={isProcessing}
+                      className="flex-1 py-2 px-3 bg-[#95CD1A] hover:bg-[#7EB30E] disabled:bg-gray-400 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      <span>{isProcessing ? 'Opening Payment...' : 'Resume Payment Now'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleCancelOrder(activeCheckoutSession.wcOrderId)}
+                      disabled={isProcessing}
+                      className="py-2 px-3 bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 text-gray-600 font-extrabold text-xs rounded-xl transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Neutral Payment Status / Info Notice Banner */}
+              {checkoutInfoMsg && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-start gap-2.5 text-xs text-emerald-800 font-medium animate-in fade-in duration-200 text-left">
+                  <CheckCircle2 className="w-4 h-4 text-[#95CD1A] shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <p className="font-extrabold text-[#2D5A1E]">Payment Status Notice</p>
+                    <p className="leading-relaxed text-[#4A7C34]">{checkoutInfoMsg}</p>
+                  </div>
                 </div>
               )}
 
               {checkoutError && (
-                <p className="text-xs text-red-500 font-extrabold text-center">{checkoutError}</p>
+                <div className="p-3 bg-red-50 rounded-xl border border-red-200 text-xs font-extrabold text-red-600 text-center animate-in fade-in duration-200">
+                  {checkoutError}
+                </div>
               )}
 
               {/* Action Buttons based on checkoutStep */}

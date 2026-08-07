@@ -221,6 +221,35 @@ export async function cancelInventoryReservation(wcOrderId: number): Promise<boo
   }
 }
 
+export async function fetchRetryPaymentDetails(wcOrderId: number) {
+  try {
+    const res = await fetchApi<{
+      success: boolean;
+      wcOrderId: number;
+      orderRefCode: string;
+      razorpayOrderId: string;
+      amountInPaise: number;
+      currency: string;
+      keyId: string;
+      expiresAt: number;
+      customerEmail?: string;
+      customerName?: string;
+      phone?: string;
+      shippingAddress?: string;
+      items?: any[];
+    }>('/checkout/retry-payment', {
+      method: 'POST',
+      body: JSON.stringify({ wcOrderId }),
+    });
+    if (res && res.success) {
+      return res;
+    }
+  } catch (err: any) {
+    console.warn('Failed to fetch retry payment details from server:', err.message);
+  }
+  return null;
+}
+
 export async function retryRazorpayPayment(
   order: {
     wcOrderId: number;

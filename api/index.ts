@@ -3011,6 +3011,9 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
           : null;
         const refCode = refMeta?.value || `HF-${order.id}`;
 
+        const rzpOrderIdMeta = Array.isArray(order.meta_data) ? order.meta_data.find((m: any) => m.key === '_razorpay_order_id') : null;
+        const expTimeMeta = Array.isArray(order.meta_data) ? order.meta_data.find((m: any) => m.key === '_reservation_expires_at') : null;
+
         return {
           id: order.id,
           orderRefCode: refCode,
@@ -3022,6 +3025,12 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
           dateCreated: order.date_created,
           items: order.line_items?.map((item: any) => ({ name: item.name, quantity: item.quantity })),
           shippingAddress: `${order.shipping?.address_1 || order.billing?.address_1 || ''}, ${order.shipping?.city || order.billing?.city || ''}`,
+          ...(order.status === 'pending' ? {
+            razorpayOrderId: rzpOrderIdMeta?.value || `order_mock_${order.id}`,
+            amountInPaise: Math.round((parseFloat(order.total) || 0) * 100),
+            keyId: (process.env.RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E').trim(),
+            expiresAt: expTimeMeta?.value ? parseInt(expTimeMeta.value, 10) : new Date(order.date_created).getTime() + 10 * 60 * 1000,
+          } : {}),
         };
       });
 
@@ -3122,17 +3131,29 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
         if (lockFetch.ok && lockFetch.data) {
           const metaList = Array.isArray(lockFetch.data.meta_data) ? lockFetch.data.meta_data : [];
 
-          // Monotonic Cart Revision Validation
+          // Smart Cart Revision Validation: compare actual item content if revision differs
           const serverCartRevision = parseInt(metaList.find((m: any) => m.key === 'hf_cart_revision')?.value || '0', 10);
           const clientRevInt = cartRevision !== undefined ? parseInt(cartRevision, 10) : undefined;
           if (clientRevInt !== undefined && clientRevInt < serverCartRevision) {
-            console.warn(`[Checkout Sync Guard] Mismatch: Client Rev ${clientRevInt} < Server Rev ${serverCartRevision} for Customer #${existingCustomerId}. Rejecting checkout.`);
-            return res.status(409).json({
-              success: false,
-              code: 'CART_OUT_OF_SYNC',
-              message: 'Your shopping cart has been modified on another device. We have refreshed it before checkout.',
-              serverRevision: serverCartRevision
+            const cartMeta = metaList.find((m: any) => m.key === 'hf_saved_cart');
+            const serverItems = cartMeta && cartMeta.value ? JSON.parse(cartMeta.value) : [];
+
+            const itemsMatch = Array.isArray(items) && Array.isArray(serverItems) && items.length === serverItems.length && items.every((ci: any) => {
+              const si = serverItems.find((s: any) => s.id === ci.id || s.productId === ci.productId);
+              return si && parseInt(si.quantity, 10) === parseInt(ci.quantity, 10);
             });
+
+            if (itemsMatch || serverItems.length === 0) {
+              console.log(`[Checkout Sync Guard] Client Rev ${clientRevInt} < Server Rev ${serverCartRevision}, but item contents match. Aligning revision silently.`);
+            } else {
+              console.warn(`[Checkout Sync Guard] Mismatch: Client Rev ${clientRevInt} < Server Rev ${serverCartRevision} for Customer #${existingCustomerId}. Rejecting checkout.`);
+              return res.status(409).json({
+                success: false,
+                code: 'CART_OUT_OF_SYNC',
+                message: 'Your shopping cart has been modified on another device. We have refreshed it before checkout.',
+                serverRevision: serverCartRevision
+              });
+            }
           }
 
           // Active Lock Verification
@@ -3147,6 +3168,67 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
         }
       } catch (err: any) {
         console.warn('[Checkout Guard] Failed to read lock or revisions:', err.message);
+      }
+
+      // Pending Order Deduplication: Check if an active unexpired pending order exists
+      try {
+        const activeOrdersRes = await wcFetch('orders', { params: { customer: existingCustomerId, status: 'pending', per_page: 5 } });
+        if (activeOrdersRes.ok && Array.isArray(activeOrdersRes.data) && activeOrdersRes.data.length > 0) {
+          const existingPending = activeOrdersRes.data[0];
+          const metaList = Array.isArray(existingPending.meta_data) ? existingPending.meta_data : [];
+          const refMeta = metaList.find((m: any) => m.key === '_order_ref_code' || m.key === 'order_ref_code');
+          const rzpMeta = metaList.find((m: any) => m.key === '_razorpay_order_id');
+          const expMeta = metaList.find((m: any) => m.key === '_reservation_expires_at');
+
+          const expTime = expMeta?.value ? parseInt(expMeta.value, 10) : new Date(existingPending.date_created).getTime() + 10 * 60 * 1000;
+          if (expTime > Date.now()) {
+            console.log(`[Checkout Deduplication] Reusing unexpired pending order #${existingPending.id} for Customer #${existingCustomerId}`);
+            const totalPaise = Math.round((parseFloat(existingPending.total) || 0) * 100);
+            const displayRefCode = refMeta?.value || `HF-${existingPending.id}`;
+
+            let razorpayOrderId = rzpMeta?.value || `order_mock_${existingPending.id}`;
+            if (!razorpayOrderId || razorpayOrderId.startsWith('order_mock_')) {
+              try {
+                const razorpay = getRazorpayClient();
+                if (razorpay && totalPaise > 0) {
+                  const rzpOrder = await razorpay.orders.create({
+                    amount: totalPaise,
+                    currency: 'INR',
+                    receipt: `rcpt_${existingPending.id}_${Date.now().toString().slice(-4)}`,
+                  });
+                  if (rzpOrder && rzpOrder.id) {
+                    razorpayOrderId = rzpOrder.id;
+                    await wcFetch(`orders/${existingPending.id}`, {
+                      method: 'PUT',
+                      body: {
+                        meta_data: [
+                          { key: '_razorpay_order_id', value: razorpayOrderId },
+                          { key: '_reservation_expires_at', value: expTime.toString() },
+                        ]
+                      }
+                    }).catch(() => {});
+                  }
+                }
+              } catch (e: any) {
+                console.warn('[Deduplication Razorpay Warning]:', e.message);
+              }
+            }
+
+            return res.json({
+              success: true,
+              wcOrderId: existingPending.id,
+              orderRefCode: displayRefCode,
+              razorpayOrderId,
+              amountInPaise: totalPaise,
+              currency: 'INR',
+              keyId: (process.env.RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E').trim(),
+              expiresAt: expTime,
+              isReused: true,
+            });
+          }
+        }
+      } catch (err: any) {
+        console.warn('[Checkout Deduplication Guard] Error checking existing pending orders:', err.message);
       }
 
       try {
@@ -3459,6 +3541,100 @@ app.post(['/api/v1/checkout/cancel-order', '/api/checkout/cancel-order', '/v1/ch
     return res.json({ success: true, message: 'Reservation cancelled and stock released.' });
   } catch (error: any) {
     console.error('[Inventory Reservation Cleanup] Error cancelling order:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/v1/checkout/retry-payment (Reuse existing WooCommerce order for payment retry)
+app.post(['/api/v1/checkout/retry-payment', '/api/checkout/retry-payment', '/v1/checkout/retry-payment', '/checkout/retry-payment'], async (req, res) => {
+  try {
+    const { wcOrderId } = req.body;
+    if (!wcOrderId) {
+      return res.status(400).json({ success: false, message: 'wcOrderId parameter is required' });
+    }
+
+    const orderRes = await wcFetch(`orders/${wcOrderId}`);
+    if (!orderRes.ok || !orderRes.data) {
+      return res.status(404).json({ success: false, message: `Order #${wcOrderId} not found` });
+    }
+
+    const order = orderRes.data;
+    if (order.status !== 'pending') {
+      return res.status(400).json({ success: false, message: `Order #${wcOrderId} is not in pending payment status (Current: ${order.status})` });
+    }
+
+    const totalAmount = parseFloat(order.total) || 0;
+    const amountInPaise = Math.round(totalAmount * 100);
+
+    // Stock verification
+    if (Array.isArray(order.line_items)) {
+      for (const item of order.line_items) {
+        if (item.product_id) {
+          const p = await getProductFromWooCommerceOrCache(item.product_id);
+          if (p && p.stockQuantity !== undefined && p.stockQuantity !== null) {
+            if (p.stockQuantity < item.quantity) {
+              return res.status(400).json({
+                success: false,
+                code: 'OUT_OF_STOCK',
+                message: `Sorry, "${item.name}" only has ${p.stockQuantity} items in stock. Cannot complete payment.`
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const metaList = Array.isArray(order.meta_data) ? order.meta_data : [];
+    const refMeta = metaList.find((m: any) => m.key === '_order_ref_code' || m.key === 'order_ref_code');
+    const displayRefCode = refMeta?.value || `HF-${order.id}`;
+
+    const razorpay = getRazorpayClient();
+    let razorpayOrderId = `order_mock_${wcOrderId}`;
+    if (razorpay && amountInPaise > 0) {
+      try {
+        const rzpOrder = await razorpay.orders.create({
+          amount: amountInPaise,
+          currency: 'INR',
+          receipt: `retry_${wcOrderId}_${Date.now().toString().slice(-4)}`,
+        });
+        if (rzpOrder && rzpOrder.id) {
+          razorpayOrderId = rzpOrder.id;
+        }
+      } catch (err: any) {
+        console.warn('[Retry Payment] Razorpay creation warning:', err.message);
+      }
+    }
+
+    const newExpiresAt = Date.now() + 10 * 60 * 1000;
+
+    await wcFetch(`orders/${wcOrderId}`, {
+      method: 'PUT',
+      body: {
+        meta_data: [
+          { key: '_razorpay_order_id', value: razorpayOrderId },
+          { key: '_razorpay_amount_paise', value: amountInPaise.toString() },
+          { key: '_reservation_expires_at', value: newExpiresAt.toString() }
+        ]
+      }
+    }).catch(() => {});
+
+    return res.json({
+      success: true,
+      wcOrderId: order.id,
+      orderRefCode: displayRefCode,
+      razorpayOrderId,
+      amountInPaise,
+      currency: 'INR',
+      keyId: (process.env.RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E').trim(),
+      expiresAt: newExpiresAt,
+      customerEmail: order.billing?.email || '',
+      customerName: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Valued Customer',
+      phone: order.billing?.phone || '',
+      shippingAddress: `${order.shipping?.address_1 || ''}, ${order.shipping?.city || ''}`,
+      items: order.line_items?.map((it: any) => ({ name: it.name, quantity: it.quantity, pricePerUnit: parseFloat(it.price) || 0 })) || [],
+    });
+  } catch (error: any) {
+    console.error('[Retry Payment Error]:', error.message);
     return res.status(500).json({ success: false, message: error.message });
   }
 });

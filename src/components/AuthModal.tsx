@@ -131,7 +131,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <ShieldCheck className="w-6 h-6" />
           </div>
           <h3 className="font-serif-headline text-2xl font-extrabold text-[#1F2937]">
-            {viewMode === 'enter_email' ? 'Passwordless Sign In' : 'Verify Email Address'}
+            {viewMode === 'enter_email' ? 'Sign Up / Sign In' : 'Verify Email Address'}
           </h3>
           <p className="text-xs text-gray-500 mt-1.5 leading-relaxed max-w-xs mx-auto">
             {viewMode === 'enter_email'
