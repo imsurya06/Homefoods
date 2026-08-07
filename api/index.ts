@@ -1353,11 +1353,20 @@ app.post(['/api/v1/auth/send-otp', '/api/auth/send-otp', '/v1/auth/send-otp', '/
       return res.status(400).json({ success: false, message: dbRes.message || 'Failed to send verification code. Please try again.' });
     }
 
-    // Send email using custom SMTP notifier
-    await sendEmailOtp(cleanEmail, otp, cleanPurpose as any);
+    // Check if user already exists in WooCommerce database
+    let isExistingUser = false;
+    try {
+      const searchRes = await wcFetch('customers', { params: { email: cleanEmail } });
+      if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+        isExistingUser = true;
+      }
+    } catch (e: any) {
+      console.warn(`[Send OTP] Customer search warning for ${cleanEmail}:`, e.message);
+    }
 
     return res.json({
       success: true,
+      isExistingUser,
       message: 'Verification code sent successfully to your email address.',
       testOtp: process.env.NODE_ENV !== 'production' ? otp : undefined
     });

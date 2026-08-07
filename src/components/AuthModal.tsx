@@ -16,7 +16,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [viewMode, setViewMode] = useState<'enter_email' | 'enter_otp'>('enter_email');
   const [email, setEmail] = useState('');
   const [otpCode, setOtpCode] = useState('');
-  const [name, setName] = useState(''); // Optional name for registration
+  const [name, setName] = useState('');
+  const [isExistingUser, setIsExistingUser] = useState<boolean>(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +29,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setEmail('');
       setOtpCode('');
       setName('');
+      setIsExistingUser(false);
       setError(null);
       setSuccessMessage(null);
       setViewMode('enter_email');
@@ -65,6 +67,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const res = await sendEmailOtp(cleanEmail, 'login');
       if (res.success) {
+        setIsExistingUser(!!res.isExistingUser);
         setSuccessMessage(res.message || 'A 6-digit verification code has been sent to your email.');
         setViewMode('enter_otp');
         setResendTimer(60); // 60 seconds cooldown
@@ -199,16 +202,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* View Mode 2: Enter Verification Code OTP */}
         {viewMode === 'enter_otp' && (
           <form onSubmit={handleVerifyOtp} className="space-y-4 text-xs">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1.5">Full Name (Optional for new users)</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="E.g. Surya Dev"
-                className="w-full px-3.5 py-3 bg-gray-50 rounded-2xl border border-gray-200 focus:border-[#95CD1A] focus:bg-white focus:outline-none font-medium transition-all text-sm mb-1"
-              />
-            </div>
+            {!isExistingUser && (
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">Full Name</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Enter your full name"
+                  className="w-full px-3.5 py-3 bg-gray-50 rounded-2xl border border-gray-200 focus:border-[#95CD1A] focus:bg-white focus:outline-none font-medium transition-all text-sm mb-1"
+                />
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1.5">Enter 6-Digit Code</label>

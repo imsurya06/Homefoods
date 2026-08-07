@@ -210,8 +210,8 @@ export async function logoutAllDevices() {
 export async function sendEmailOtp(
   email: string,
   purpose: 'login' | 'checkout' | 'email_change'
-): Promise<{ success: boolean; message: string; testOtp?: string }> {
-  return fetchApi<{ success: boolean; message: string; testOtp?: string }>('/auth/send-otp', {
+): Promise<{ success: boolean; message: string; isExistingUser?: boolean; testOtp?: string }> {
+  return fetchApi<{ success: boolean; message: string; isExistingUser?: boolean; testOtp?: string }>('/auth/send-otp', {
     method: 'POST',
     body: JSON.stringify({ email: email.trim().toLowerCase(), purpose })
   });
