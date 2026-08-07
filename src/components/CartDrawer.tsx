@@ -863,7 +863,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               >
                 <Package className="w-4 h-4" />
                 <span>Your Orders</span>
-                {orders.length > 0 && (
+                {Array.isArray(orders) && orders.length > 0 && (
                   <span className="bg-[#1F2937] text-white text-[10px] font-black px-1.5 py-0.2 rounded-full min-w-4.5 text-center">
                     {orders.length}
                   </span>
@@ -1359,15 +1359,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               {/* Orders List Container */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs font-extrabold text-gray-400 uppercase tracking-wider">
-                  <span>Your Order History ({orders.length})</span>
+                  <span>Your Order History ({Array.isArray(orders) ? orders.length : 0})</span>
                 </div>
 
-                {loadingOrders && orders.length === 0 ? (
+                {loadingOrders && (!Array.isArray(orders) || orders.length === 0) ? (
                   <div className="py-12 text-center space-y-2">
                     <div className="w-6 h-6 border-2 border-[#95CD1A] border-t-transparent rounded-full animate-spin mx-auto" />
                     <p className="text-xs text-gray-400 font-bold">Loading your orders...</p>
                   </div>
-                ) : orders.length === 0 && !guestSearchResult ? (
+                ) : (!Array.isArray(orders) || orders.length === 0) && !guestSearchResult ? (
                   <div className="py-10 text-center space-y-3 bg-gray-50 rounded-2xl border border-gray-100 p-4">
                     <Package className="w-10 h-10 text-gray-300 mx-auto" />
                     <div>
@@ -1380,7 +1380,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 ) : (
                   <div className="space-y-4">
                     {(() => {
-                      const displayList = [...orders];
+                      const displayList = Array.isArray(orders) ? [...orders] : [];
 
                       if (activeCheckoutSession && activeCheckoutSession.reservationExpiresAt > now) {
                         const sessionOrder = {

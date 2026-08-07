@@ -114,15 +114,16 @@ export async function checkRevisions() {
 
 export async function replayOfflineQueue() {
   const state = useSyncStore.getState();
-  if (!state.isOnline || isReplaying || state.offlineQueue.length === 0) return;
+  const queue = Array.isArray(state.offlineQueue) ? state.offlineQueue : [];
+  if (!state.isOnline || isReplaying || queue.length === 0) return;
 
   isReplaying = true;
   state.setSyncingStatus(true);
-  console.log(`[SyncManager] Replaying offline queue (${state.offlineQueue.length} operations)...`);
+  console.log(`[SyncManager] Replaying offline queue (${queue.length} operations)...`);
 
-  const queue = [...state.offlineQueue];
+  const queueItems = [...queue];
 
-  for (const op of queue) {
+  for (const op of queueItems) {
     let success = false;
     try {
       if (op.type === 'ADD_CART' || op.type === 'REMOVE_CART' || op.type === 'CLEAR_CART' || op.type === 'UPDATE_CART') {

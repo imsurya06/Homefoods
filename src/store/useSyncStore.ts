@@ -121,7 +121,10 @@ const getInitialActiveSession = (): ActiveCheckoutSession | null => {
 const getInitialCart = () => {
   try {
     const saved = localStorage.getItem('hf_user_cart') || sessionStorage.getItem('hf_guest_cart');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch {}
   return [];
 };
@@ -129,7 +132,10 @@ const getInitialCart = () => {
 const getInitialWishlist = () => {
   try {
     const saved = localStorage.getItem('hf_wishlist');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch {}
   return [];
 };
@@ -137,7 +143,10 @@ const getInitialWishlist = () => {
 const getInitialQueue = () => {
   try {
     const saved = localStorage.getItem('hf_offline_queue');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch {}
   return [];
 };
@@ -239,6 +248,7 @@ export const useSyncStore = create<SyncState>((set) => ({
 
   setWishlist: (items, revision) => {
     set((state) => {
+      const safeItems = Array.isArray(items) ? items : [];
       if (revision !== undefined) {
         if (revision < state.wishlistRevision) {
           console.warn(`[Sync Store] Discarding stale server wishlist revision ${revision} (local: ${state.wishlistRevision})`);
@@ -252,16 +262,17 @@ export const useSyncStore = create<SyncState>((set) => ({
       }
 
       const nextRev = revision !== undefined ? revision : state.wishlistRevision + 1;
-      localStorage.setItem('hf_wishlist', JSON.stringify(items));
+      localStorage.setItem('hf_wishlist', JSON.stringify(safeItems));
       if (revision === undefined && state.isLoggedIn) {
-        syncBus.emit('wishlist.changed', items);
+        syncBus.emit('wishlist.changed', safeItems);
       }
-      return { wishlistItems: items, wishlistRevision: nextRev };
+      return { wishlistItems: safeItems, wishlistRevision: nextRev };
     });
   },
 
   setAddresses: (addresses, revision) => {
     set((state) => {
+      const safeAddresses = Array.isArray(addresses) ? addresses : [];
       if (revision !== undefined) {
         if (revision < state.addressRevision) {
           console.warn(`[Sync Store] Discarding stale server address revision ${revision} (local: ${state.addressRevision})`);
@@ -276,9 +287,9 @@ export const useSyncStore = create<SyncState>((set) => ({
 
       const nextRev = revision !== undefined ? revision : state.addressRevision + 1;
       if (revision === undefined && state.isLoggedIn) {
-        syncBus.emit('address.changed', addresses);
+        syncBus.emit('address.changed', safeAddresses);
       }
-      return { addresses, addressRevision: nextRev };
+      return { addresses: safeAddresses, addressRevision: nextRev };
     });
   },
 
