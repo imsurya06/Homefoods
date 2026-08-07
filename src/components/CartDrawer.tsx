@@ -263,7 +263,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       setOrdersRefreshTrigger((prev) => prev + 1);
     }
   }, [now, activeCheckoutSession, isOpen]);
-
+  // Automatically clear activeCheckoutSession if user modifies cart items
+  useEffect(() => {
+    if (activeCheckoutSession && Array.isArray(activeCheckoutSession.cartSnapshot) && activeCheckoutSession.cartSnapshot.length > 0) {
+      const sessionItemKeys = activeCheckoutSession.cartSnapshot.map((i: any) => `${i.productId || i.id}_${i.weight}_${i.quantity}`).sort().join('|');
+      const currentItemKeys = items.map((i: any) => `${i.productId || i.id}_${i.weight}_${i.quantity}`).sort().join('|');
+      if (sessionItemKeys !== currentItemKeys) {
+        console.log('[Checkout Session] Cart items modified. Clearing previous session reservation...');
+        setActiveCheckoutSession(null);
+        localStorage.removeItem('hf_checkout_idempotency_key');
+      }
+    }
+  }, [items, activeCheckoutSession]);
   const renderReservationTimer = (expTime: number) => {
     const secondsLeft = Math.max(0, Math.floor((expTime - now) / 1000));
     if (secondsLeft <= 0) return <span className="text-xs font-bold text-gray-400">Expired</span>;

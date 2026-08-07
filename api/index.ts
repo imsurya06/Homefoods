@@ -3594,7 +3594,23 @@ app.post(['/api/v1/checkout/cancel-order', '/api/checkout/cancel-order', '/v1/ch
       return res.status(400).json({ success: false, message: 'wcOrderId parameter is required' });
     }
 
-    console.log(`[Inventory Reservation Cleanup] Cancelling pending order #${wcOrderId} to release stock...`);
+    const orderRes = await wcFetch(`orders/${wcOrderId}`);
+    if (!orderRes.ok || !orderRes.data) {
+      return res.status(404).json({ success: false, message: `Order #${wcOrderId} not found` });
+    }
+
+    const order = orderRes.data;
+    const currentStatus = (order.status || '').toLowerCase().trim();
+
+    if (!['pending', 'pending-payment'].includes(currentStatus)) {
+      console.warn(`[Inventory Reservation Cleanup] Rejected cancel request for Order #${wcOrderId}: Status is '${currentStatus}'`);
+      return res.status(400).json({
+        success: false,
+        message: `Order #${wcOrderId} cannot be cancelled because its current status is '${currentStatus}'. Only unpaid pending orders can be cancelled.`
+      });
+    }
+
+    console.log(`[Inventory Reservation Cleanup] Cancelling unpaid pending order #${wcOrderId} to release stock...`);
     const cancelRes = await wcFetch(`orders/${wcOrderId}`, {
       method: 'PUT',
       body: {
