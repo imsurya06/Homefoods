@@ -3453,6 +3453,13 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
           total: shipping.shippingCharge.toFixed(2),
         },
       ],
+      fee_lines: gst > 0 ? [
+        {
+          name: 'GST (5%)',
+          total: gst.toFixed(2),
+          tax_status: 'none',
+        }
+      ] : [],
       coupon_lines: couponCode ? [
         {
           code: couponCode.trim().toLowerCase(),
