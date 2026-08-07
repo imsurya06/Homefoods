@@ -714,12 +714,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         setCheckoutStep('cart');
         setOrderSuccess(response);
         setOrdersRefreshTrigger((prev) => prev + 1);
+        useSyncStore.getState().clearCart(response?.cartRevision);
+        onClearCart();
         if (response && response.cartRevision !== undefined) {
           setLastCheckoutRevision(response.cartRevision);
-          useSyncStore.setState({ offlineQueue: [] });
-          useSyncStore.getState().setCart([], response.cartRevision);
-        } else {
-          onClearCart();
         }
         setCouponCode('');
         setCouponStatus(null);
@@ -1457,14 +1455,24 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         }
                       }
 
-                      const activeOrders = displayList.filter((o) => {
+                      const isCancelledOrInactive = (o: any) => {
                         const rawStatus = (o.status || '').toLowerCase().trim();
-                        return ['pending', 'processing', 'kitchen', 'dispatched', 'shipped', 'in_transit', 'on_hold', 'pending_payment'].includes(rawStatus);
+                        const rawLabel = (o.statusLabel || '').toLowerCase().trim();
+                        return rawStatus === 'cancelled' || rawStatus === 'failed' || rawStatus === 'refunded' || rawStatus === 'expired' ||
+                               rawLabel.includes('cancelled') || rawLabel.includes('failed') || rawLabel.includes('refunded') ||
+                               (o.id === 'HF-PENDING' && (rawStatus.includes('cancel') || rawLabel.includes('cancel')));
+                      };
+
+                      const activeOrders = displayList.filter((o) => {
+                        if (isCancelledOrInactive(o)) return false;
+                        const rawStatus = (o.status || '').toLowerCase().trim();
+                        return ['pending', 'processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'in_transit', 'on_hold', 'pending_payment'].includes(rawStatus);
                       });
 
                       const pastOrders = displayList.filter((o) => {
+                        if (isCancelledOrInactive(o)) return true;
                         const rawStatus = (o.status || '').toLowerCase().trim();
-                        return !['pending', 'processing', 'kitchen', 'dispatched', 'shipped', 'in_transit', 'on_hold', 'pending_payment'].includes(rawStatus);
+                        return !['pending', 'processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'in_transit', 'on_hold', 'pending_payment'].includes(rawStatus);
                       });
 
                       const renderCard = (ord: any) => {

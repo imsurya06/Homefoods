@@ -77,6 +77,7 @@ interface SyncState {
   login: (user: UserProfile, accessToken: string, refreshToken: string) => void;
   logout: () => void;
   setCart: (items: CartItem[], revision?: number) => void;
+  clearCart: (revision?: number) => void;
   setActiveCheckoutSession: (session: ActiveCheckoutSession | null) => void;
   setCheckoutInProgress: (inProgress: boolean) => void;
   setLastCheckoutRevision: (rev: number | null) => void;
@@ -243,6 +244,22 @@ export const useSyncStore = create<SyncState>((set) => ({
         syncBus.emit('cart.changed', safeItems);
       }
       return { cartItems: safeItems, cartRevision: nextRev };
+    });
+  },
+
+  clearCart: (revision) => {
+    set((state) => {
+      const nextRev = revision !== undefined ? Math.max(revision, state.cartRevision + 1) : state.cartRevision + 1;
+      try {
+        localStorage.removeItem('hf_cart');
+        localStorage.removeItem('hf_user_cart');
+        sessionStorage.removeItem('hf_guest_cart');
+        localStorage.removeItem('hf_checkout_session');
+        localStorage.removeItem('hf_pending_order');
+      } catch (e) {
+        console.warn('Error clearing cart storage:', e);
+      }
+      return { cartItems: [], cartRevision: nextRev, offlineQueue: [] };
     });
   },
 
