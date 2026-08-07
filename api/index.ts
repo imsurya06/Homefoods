@@ -505,6 +505,10 @@ async function validateCouponCode(couponCode: string, cartSubtotal: number): Pro
       }
 
       const amount = parseFloat(coupon.amount || '0');
+      if (amount <= 0) {
+        return { isValid: false, discountAmount: 0, message: 'Coupon discount amount is set to 0. Please update Coupon Amount in WooCommerce.' };
+      }
+
       let discountAmount = 0;
       if (coupon.discount_type === 'percent') {
         discountAmount = Math.round(cartSubtotal * (amount / 100));
