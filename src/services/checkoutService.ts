@@ -284,8 +284,13 @@ export async function retryRazorpayPayment(
 ) {
   try {
     if (!window.Razorpay) {
-      onError('Razorpay SDK failed to load. Please refresh the page and try again.');
-      return;
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Razorpay SDK script. Please check your network connection.'));
+        document.body.appendChild(script);
+      });
     }
 
     const displayOrderCode = order.orderRefCode || `HF-${order.wcOrderId}`;
