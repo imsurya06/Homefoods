@@ -631,10 +631,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   };
 
   const handleOrderNow = async () => {
+    setIsProcessing(true);
     setCheckoutError(null);
     setFieldErrors({});
 
     if (items.length === 0) {
+      setIsProcessing(false);
       setCheckoutError('Your cart is empty');
       return;
     }
@@ -660,22 +662,26 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
 
     if (Object.keys(errors).length > 0) {
+      setIsProcessing(false);
       setFieldErrors(errors);
       return;
     }
 
-    // Check pincode delivery availability before creating order
     if (calcSummary && calcSummary.delivery && !calcSummary.delivery.deliveryAvailable) {
+      setIsProcessing(false);
       setCheckoutError(`We cannot deliver to pincode ${pincode}: ${calcSummary.delivery.message || 'Location unserviceable.'}`);
       return;
     }
 
-    // Determine if Email Verification is required
     const targetEmail = email.trim().toLowerCase();
     const needsVerification = !isLoggedIn || !user || user.email.toLowerCase() !== targetEmail;
 
     if (needsVerification && checkoutEmailVerified !== targetEmail) {
-      await triggerCheckoutOtp();
+      try {
+        await triggerCheckoutOtp();
+      } finally {
+        setIsProcessing(false);
+      }
       return;
     }
 
@@ -713,6 +719,38 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         removeLocalPendingOrder(response.wcOrderId);
         setCheckoutStep('cart');
         setOrderSuccess(response);
+
+        // Prepend optimistic confirmed order directly to state
+        const displayCode = response.orderRefCode || `HF-${response.wcOrderId}`;
+        const totalVal = calcSummary ? calcSummary.grandTotal.toString() : '0';
+        const optimisticConfirmedOrder: any = {
+          id: response.wcOrderId,
+          orderRefCode: displayCode,
+          status: 'processing',
+          statusLabel: 'Order Confirmed & Kitchen Preparation',
+          stage: 2,
+          total: totalVal,
+          currency: '₹',
+          dateCreated: new Date().toISOString(),
+          items: items.map((i) => ({ name: i.name, quantity: i.quantity })),
+          shippingAddress: `${shippingAddress.trim()}, ${city.trim()}`,
+        };
+
+        setOrders((prevOrders) => {
+          const filtered = prevOrders.filter((o) => {
+            const matchesId = o.id === response.wcOrderId || o.id.toString() === response.wcOrderId.toString() || o.id === 'HF-PENDING';
+            return !matchesId;
+          });
+          return [optimisticConfirmedOrder, ...filtered];
+        });
+
+        // Switch active tab to 'orders' tab automatically
+        setActiveTab('orders');
+        setOrdersSubTab('active');
+        if (response && response.wcOrderId) {
+          setExpandedOrderId(response.wcOrderId);
+        }
+
         setOrdersRefreshTrigger((prev) => prev + 1);
         useSyncStore.getState().clearCart(response?.cartRevision);
         onClearCart();
@@ -733,10 +771,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           } catch (e) {
             console.error('Error logging in guest account after auto-registration:', e);
           }
-        }
-
-        if (response && response.wcOrderId) {
-          setExpandedOrderId(response.wcOrderId);
         }
       },
       async (errorMsg, isOutOfSync) => {
@@ -2022,7 +2056,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             <form onSubmit={handleVerifyCheckoutOtp} className="space-y-4">
               <div>
                 <input
-                  type="text"
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="one-time-code"
                   required
                   maxLength={6}
                   value={otpCode}
