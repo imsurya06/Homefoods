@@ -3700,18 +3700,34 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
     }
 
     try {
-      const wcUpdateRes = await wcFetch(`orders/${wcOrderId}`, {
+      let wcUpdateRes = await wcFetch(`orders/${wcOrderId}`, {
         method: 'PUT',
         body: {
           set_paid: true,
-          status: 'processing',
+          status: 'kitchen',
           transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
           meta_data: [
             { key: '_reservation_expires_at', value: '0' }
           ]
         },
       });
-      console.log(`[Verify Payment] WooCommerce Order #${wcOrderId} set to paid/processing:`, wcUpdateRes.ok);
+
+      if (!wcUpdateRes.ok) {
+        console.warn(`[Verify Payment] WooCommerce rejected status 'kitchen' for Order #${wcOrderId}. Falling back to 'processing'.`);
+        wcUpdateRes = await wcFetch(`orders/${wcOrderId}`, {
+          method: 'PUT',
+          body: {
+            set_paid: true,
+            status: 'processing',
+            transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
+            meta_data: [
+              { key: '_reservation_expires_at', value: '0' }
+            ]
+          },
+        });
+      }
+
+      console.log(`[Verify Payment] WooCommerce Order #${wcOrderId} status updated:`, wcUpdateRes.ok);
     } catch (err: any) {
       console.error(`[Verify Payment] Failed to update WooCommerce order #${wcOrderId}:`, err.message);
     }
