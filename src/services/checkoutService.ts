@@ -52,7 +52,11 @@ export async function processRazorpayCheckout(
 
     let orderRes: any;
     try {
-      const idKey = generateUUID();
+      let idKey = localStorage.getItem('hf_checkout_idempotency_key');
+      if (!idKey) {
+        idKey = generateUUID();
+        localStorage.setItem('hf_checkout_idempotency_key', idKey);
+      }
       orderRes = await fetchApi<{
         success: boolean;
         wcOrderId: number;
@@ -137,6 +141,7 @@ export async function processRazorpayCheckout(
           });
 
           if (verifyRes.success) {
+            localStorage.removeItem('hf_checkout_idempotency_key');
             try {
               const displayCode = orderRes.orderRefCode || `HF-${orderRes.wcOrderId}`;
               const newOrder = {

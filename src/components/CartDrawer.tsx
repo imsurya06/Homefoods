@@ -202,19 +202,23 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const removeLocalPendingOrder = (wcOrderId?: number | string) => {
     setActiveCheckoutSession(null);
     setCheckoutInProgress(false);
+    setCouponCode('');
+    setCouponStatus(null);
+    setCalcSummary(null);
     try {
       const savedLocal = localStorage.getItem('hf_local_orders');
       if (savedLocal) {
         const parsed = JSON.parse(savedLocal);
         const filtered = parsed.filter((o: any) => {
           const matchesId = wcOrderId && (o.id === wcOrderId || o.wcOrderId === wcOrderId || o.id === `HF-${wcOrderId}` || o.orderRefCode === `HF-${wcOrderId}`);
-          const isPending = o.status === 'pending' || o.status === 'pending_payment' || o.id === 'HF-PENDING';
+          const isPending = o.status === 'pending' || o.status === 'pending_payment';
           return !matchesId && !isPending;
         });
         localStorage.setItem('hf_local_orders', JSON.stringify(filtered));
       }
       sessionStorage.removeItem('hf_guest_orders');
       localStorage.removeItem('hf_pending_order');
+      localStorage.removeItem('hf_checkout_idempotency_key');
     } catch (e) {
       console.warn('Error clearing local pending orders:', e);
     }
@@ -1463,7 +1467,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           keyId: activeCheckoutSession.keyId,
                           expiresAt: activeCheckoutSession.reservationExpiresAt,
                         };
-                        if (!displayList.some((o) => o.id.toString() === sessionOrder.id.toString())) {
+                        const sessWcId = activeCheckoutSession.wcOrderId?.toString();
+                        const sessRefCode = activeCheckoutSession.orderRefCode;
+
+                        const alreadyExists = displayList.some((o: any) => {
+                          const oIdStr = o.id?.toString();
+                          const oWcIdStr = o.wcOrderId?.toString();
+                          const oRefStr = o.orderRefCode?.toString();
+                          return (
+                            (sessWcId && (oIdStr === sessWcId || oWcIdStr === sessWcId)) ||
+                            (sessRefCode && (oRefStr === sessRefCode || oIdStr === sessRefCode))
+                          );
+                        });
+
+                        if (!alreadyExists) {
                           displayList.unshift(sessionOrder);
                         }
                       }
@@ -1476,8 +1493,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           statusLabel: guestSearchResult.statusLabel,
                           stage: guestSearchResult.stage,
                           total: guestSearchResult.total,
-                          currency: guestSearchResult.currency || '₹',
-                          dateCreated: guestSearchResult.dateCreated,
+                          currency: '₹',
+                          dateCreated: guestSearchResult.dateCreated || new Date().toISOString(),
                           items: guestSearchResult.items || [],
                           shippingAddress: guestSearchResult.shippingAddress || '',
                           razorpayOrderId: guestSearchResult.razorpayOrderId,
@@ -1493,8 +1510,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         const rawStatus = (o.status || '').toLowerCase().trim();
                         const rawLabel = (o.statusLabel || '').toLowerCase().trim();
                         return rawStatus === 'cancelled' || rawStatus === 'failed' || rawStatus === 'refunded' || rawStatus === 'expired' ||
-                               rawLabel.includes('cancelled') || rawLabel.includes('failed') || rawLabel.includes('refunded') ||
-                               (o.id === 'HF-PENDING' && (rawStatus.includes('cancel') || rawLabel.includes('cancel')));
+                               rawLabel.includes('cancelled') || rawLabel.includes('failed') || rawLabel.includes('refunded');
                       };
 
                       const activeOrders = displayList.filter((o) => {
