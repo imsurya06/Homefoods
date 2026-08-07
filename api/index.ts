@@ -780,7 +780,7 @@ function getOrderStatusDetails(status: string): { stage: number; label: string }
   if (s === 'completed' || s === 'delivered') {
     return { stage: 4, label: 'Successfully Delivered' };
   }
-  if (s === 'dispatched' || s === 'shipped' || s === 'out_for_delivery' || s === 'out-for-delivery' || s.includes('dispatch') || s.includes('ship')) {
+  if (s === 'dispatched' || s === 'shipped' || s === 'out_for_delivery' || s === 'out-for-delivery' || s === 'failed' || s.includes('dispatch') || s.includes('ship')) {
     return { stage: 3, label: 'Dispatched & Out for Delivery' };
   }
   if (s === 'kitchen' || s === 'on-hold' || s === 'on_hold' || s.includes('kitchen')) {
@@ -789,9 +789,8 @@ function getOrderStatusDetails(status: string): { stage: number; label: string }
   if (s === 'confirmed' || s === 'processing' || s === 'auto-draft' || s.includes('process')) {
     return { stage: 1, label: 'Order Confirmed' };
   }
-  if (s === 'pending' || s === 'pending-payment' || s === 'cancelled' || s === 'refunded' || s === 'failed') {
+  if (s === 'pending' || s === 'pending-payment' || s === 'cancelled' || s === 'refunded') {
     let label = 'Payment Pending';
-    if (s === 'failed') label = 'Payment Failed';
     if (s === 'cancelled') label = 'Order Cancelled';
     if (s === 'refunded') label = 'Order Refunded';
     return { stage: 0, label };
