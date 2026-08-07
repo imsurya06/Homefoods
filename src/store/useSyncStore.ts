@@ -173,7 +173,14 @@ export const useSyncStore = create<SyncState>((set) => ({
     localStorage.setItem('hf_auth_token', accessToken);
     localStorage.setItem('hf_refresh_token', refreshToken);
     localStorage.setItem('hf_user_profile', JSON.stringify(user));
-    set({ user, accessToken, isLoggedIn: true });
+    localStorage.removeItem('hf_active_checkout_session');
+    localStorage.removeItem('hf_checkout_idempotency_key');
+    localStorage.removeItem('hf_pending_order');
+    localStorage.removeItem('hf_local_orders');
+    localStorage.removeItem('hf_applied_coupon');
+    localStorage.removeItem('hf_coupon_discount');
+    sessionStorage.removeItem('hf_guest_orders');
+    set({ user, accessToken, isLoggedIn: true, activeCheckoutSession: null, isCheckoutInProgress: false });
   },
 
   logout: () => {
@@ -184,7 +191,13 @@ export const useSyncStore = create<SyncState>((set) => ({
     localStorage.removeItem('hf_wishlist');
     localStorage.removeItem('hf_offline_queue');
     localStorage.removeItem('hf_active_checkout_session');
+    localStorage.removeItem('hf_checkout_idempotency_key');
+    localStorage.removeItem('hf_pending_order');
+    localStorage.removeItem('hf_local_orders');
+    localStorage.removeItem('hf_applied_coupon');
+    localStorage.removeItem('hf_coupon_discount');
     sessionStorage.removeItem('hf_guest_cart');
+    sessionStorage.removeItem('hf_guest_orders');
     set({
       user: null,
       accessToken: null,

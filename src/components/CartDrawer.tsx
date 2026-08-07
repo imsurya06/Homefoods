@@ -250,14 +250,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     if (remaining <= 0) {
       console.log('[Inventory Reservation] Reservation expired. Releasing stock...');
       const orderIdToCancel = activeCheckoutSession.wcOrderId;
+      const isActivelyOpen = isOpen;
       setActiveCheckoutSession(null);
-      setCheckoutInfoMsg('Your 10-minute stock reservation expired. We have restored your cart items for easy re-ordering.');
-      cancelInventoryReservation(orderIdToCancel).catch((err) => {
-        console.warn('Failed to release expired reservation:', err);
-      });
+      if (isActivelyOpen) {
+        setCheckoutInfoMsg('Your 10-minute stock reservation expired. We have restored your cart items for easy re-ordering.');
+      }
+      if (typeof orderIdToCancel === 'number') {
+        cancelInventoryReservation(orderIdToCancel).catch((err) => {
+          console.warn('Failed to release expired reservation:', err);
+        });
+      }
       setOrdersRefreshTrigger((prev) => prev + 1);
     }
-  }, [now, activeCheckoutSession]);
+  }, [now, activeCheckoutSession, isOpen]);
 
   const renderReservationTimer = (expTime: number) => {
     const secondsLeft = Math.max(0, Math.floor((expTime - now) / 1000));
