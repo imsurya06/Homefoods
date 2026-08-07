@@ -48,8 +48,7 @@ export function App() {
 
     const handleAccountDeleted = () => {
       useSyncStore.getState().logout();
-      alert('Your account has been deleted by an administrator. You have been logged out.');
-      window.location.reload();
+      showToast('Your session has ended. Please sign in to continue.');
     };
 
     window.addEventListener('hf_auth_expired', handleAuthExpired);

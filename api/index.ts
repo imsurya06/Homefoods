@@ -205,12 +205,18 @@ async function verifyUserExists(customerId: number): Promise<boolean> {
       userExistenceCache.set(customerId, { exists: true, lastChecked: now });
       return true;
     }
+    // Explicit 404 check: Only mark user as deleted if WooCommerce explicitly returns 404 Not Found!
+    if (res.status === 404) {
+      console.warn(`[User Existence Guard] Customer #${customerId} returned 404 from WooCommerce. User was deleted.`);
+      userExistenceCache.set(customerId, { exists: false, lastChecked: now });
+      return false;
+    }
   } catch (err: any) {
-    console.error(`[User Existence check] failed for customer #${customerId}:`, err.message);
+    console.warn(`[User Existence Guard] WooCommerce API check errored for customer #${customerId} (${err.message}). Failing open to protect user session.`);
   }
 
-  userExistenceCache.set(customerId, { exists: false, lastChecked: now });
-  return false;
+  // On network glitch, server 500/503 error, or timeout: fail-open! Assume user exists.
+  return true;
 }
 
 async function verifyEmailDomain(email: string): Promise<boolean> {
@@ -1815,8 +1821,11 @@ app.post(['/api/v1/auth/refresh', '/api/auth/refresh', '/v1/auth/refresh', '/aut
     const { customerId } = decoded;
     const custRes = await wcFetch(`customers/${customerId}`);
     if (!custRes.ok || !custRes.data) {
-      userExistenceCache.set(customerId, { exists: false, lastChecked: Date.now() });
-      return res.status(401).json({ success: false, code: 'ACCOUNT_DELETED', message: 'Customer account not found' });
+      if (custRes.status === 404) {
+        userExistenceCache.set(customerId, { exists: false, lastChecked: Date.now() });
+        return res.status(401).json({ success: false, code: 'ACCOUNT_DELETED', message: 'Customer account not found' });
+      }
+      return res.status(503).json({ success: false, code: 'SERVICE_UNAVAILABLE', message: 'WooCommerce temporarily unreachable' });
     }
 
     const customerUser = custRes.data;
@@ -1893,6 +1902,33 @@ app.post(['/api/v1/auth/logout', '/api/auth/logout', '/v1/auth/logout', '/auth/l
     return res.json({ success: true, message: 'Logged out successfully' });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/v1/auth/account-status (2-Step Deletion Verification Endpoint)
+app.get(['/api/v1/auth/account-status', '/api/auth/account-status', '/v1/auth/account-status', '/auth/account-status'], async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.json({ exists: true, status: 'unverified' });
+    }
+    const token = authHeader.split(' ')[1];
+    let decoded: any = null;
+    try {
+      decoded = jwt.decode(token);
+    } catch {}
+
+    if (!decoded || !decoded.customerId) {
+      return res.json({ exists: true, status: 'unverified' });
+    }
+
+    const custRes = await wcFetch(`customers/${decoded.customerId}`);
+    if (custRes.status === 404) {
+      return res.json({ exists: false, status: 'confirmed_deleted' });
+    }
+    return res.json({ exists: true, status: 'active' });
+  } catch {
+    return res.json({ exists: true, status: 'network_fallback' });
   }
 });
 
