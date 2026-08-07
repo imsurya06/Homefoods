@@ -85,18 +85,24 @@ export async function fetchApi<T = any>(
         throw apiErr;
       }
 
-      if (response.status === 401 && data.isExpired) {
-        if (endpoint.includes('/auth/refresh') || endpoint.includes('/auth/login') || endpoint.includes('/auth/login-signup')) {
-          localStorage.removeItem('hf_auth_token');
+      if (response.status === 401) {
+        if (endpoint.includes('/auth/refresh') || endpoint.includes('/auth/login') || endpoint.includes('/auth/login-signup') || endpoint.includes('/auth/send-otp') || endpoint.includes('/auth/verify-otp')) {
           throw new Error(data.message || 'Authentication failed');
+        }
+
+        const storedRefreshToken = localStorage.getItem('hf_refresh_token');
+        if (!storedRefreshToken) {
+          localStorage.removeItem('hf_auth_token');
+          localStorage.removeItem('hf_user_profile');
+          const apiErr = new Error(data.message || 'Session expired') as any;
+          apiErr.status = 401;
+          throw apiErr;
         }
 
         if (!isRefreshing) {
           isRefreshing = true;
           try {
-            const storedRefreshToken = localStorage.getItem('hf_refresh_token');
             const devId = localStorage.getItem('hf_device_id') || '';
-            
             const refreshRes = await fetch(`${API_BASE_URL}/auth/refresh`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -115,7 +121,14 @@ export async function fetchApi<T = any>(
                 apiErr.code = 'ACCOUNT_DELETED';
                 throw apiErr;
               }
-              throw new Error('Refresh failed');
+              if (refreshRes.status === 401) {
+                localStorage.removeItem('hf_auth_token');
+                localStorage.removeItem('hf_refresh_token');
+                localStorage.removeItem('hf_user_profile');
+                window.dispatchEvent(new CustomEvent('hf_auth_expired'));
+                throw new Error('Your session has expired after 30 days. Please sign in again.');
+              }
+              throw new Error('Connecting to server... Please try again.');
             }
 
             const refreshData = await refreshRes.json();
@@ -131,17 +144,17 @@ export async function fetchApi<T = any>(
             }
           } catch (refreshErr: any) {
             isRefreshing = false;
-            localStorage.removeItem('hf_auth_token');
-            localStorage.removeItem('hf_refresh_token');
-            localStorage.removeItem('hf_user_profile');
-            
             if (refreshErr.code === 'ACCOUNT_DELETED') {
+              localStorage.removeItem('hf_auth_token');
+              localStorage.removeItem('hf_refresh_token');
+              localStorage.removeItem('hf_user_profile');
               window.dispatchEvent(new CustomEvent('hf_account_deleted'));
               throw refreshErr;
             }
-            
-            window.dispatchEvent(new CustomEvent('hf_auth_expired'));
-            throw new Error('Your session has expired. Please log in again.');
+            if (refreshErr.message && refreshErr.message.includes('30 days')) {
+              throw refreshErr;
+            }
+            throw new Error('Temporary connection issue while renewing session. Retrying...');
           }
         }
 

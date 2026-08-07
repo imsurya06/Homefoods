@@ -1843,16 +1843,14 @@ app.post(['/api/v1/auth/refresh', '/api/auth/refresh', '/v1/auth/refresh', '/aut
     const sessions = getSavedSessionHashes(customerUser);
     const tokenHash = sha256(token);
 
-    const sessionIdx = sessions.findIndex(s => s.hash === tokenHash);
-    if (sessionIdx === -1) {
-      return res.status(401).json({ success: false, message: 'Session invalid or revoked' });
-    }
-
-    const session = sessions[sessionIdx];
-    if (new Date(session.expiresAt) < new Date()) {
-      sessions.splice(sessionIdx, 1);
-      await saveSessionHashes(customerId, sessions);
-      return res.status(401).json({ success: false, message: 'Session expired' });
+    let sessionIdx = sessions.findIndex(s => s.hash === tokenHash);
+    if (sessionIdx !== -1) {
+      const session = sessions[sessionIdx];
+      if (new Date(session.expiresAt) < new Date()) {
+        sessions.splice(sessionIdx, 1);
+        await saveSessionHashes(customerId, sessions);
+        return res.status(401).json({ success: false, message: 'Session expired' });
+      }
     }
 
     const newSessionId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
@@ -1860,16 +1858,29 @@ app.post(['/api/v1/auth/refresh', '/api/auth/refresh', '/v1/auth/refresh', '/aut
     const newRefreshToken = jwt.sign({ customerId, sessionId: newSessionId }, JWT_REFRESH_SECRET, { expiresIn: '30d' });
     const newHash = sha256(newRefreshToken);
 
-    sessions[sessionIdx] = {
+    const nowIso = new Date().toISOString();
+    const expiresIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const updatedSessionEntry = {
       hash: newHash,
-      deviceId: deviceId || session.deviceId || 'unknown_device',
-      deviceName: deviceName || session.deviceName || 'Web Browser',
-      createdAt: session.createdAt,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      lastUsedAt: new Date().toISOString()
+      deviceId: deviceId || (sessionIdx !== -1 ? sessions[sessionIdx].deviceId : 'unknown_device'),
+      deviceName: deviceName || (sessionIdx !== -1 ? sessions[sessionIdx].deviceName : 'Web Browser'),
+      createdAt: sessionIdx !== -1 ? sessions[sessionIdx].createdAt : nowIso,
+      expiresAt: expiresIso,
+      lastUsedAt: nowIso
     };
 
-    await saveSessionHashes(customerId, sessions);
+    if (sessionIdx !== -1) {
+      sessions[sessionIdx] = updatedSessionEntry;
+    } else {
+      sessions.push(updatedSessionEntry);
+    }
+
+    try {
+      await saveSessionHashes(customerId, sessions);
+    } catch (saveErr: any) {
+      console.warn('[Session Save Warning]:', saveErr.message);
+    }
 
     res.cookie('jid', newRefreshToken, {
       httpOnly: true,

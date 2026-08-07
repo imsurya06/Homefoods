@@ -139,7 +139,9 @@ export function getSavedUserProfile(): UserProfile | null {
 
 export async function fetchCurrentUser(): Promise<UserProfile | null> {
   const token = getSavedToken();
-  if (!token) return null;
+  const refreshToken = localStorage.getItem('hf_refresh_token');
+
+  if (!token && !refreshToken) return null;
 
   try {
     const res = await fetchApi<{ success: boolean; user: UserProfile; accountDeleted?: boolean }>('/auth/me');
@@ -148,7 +150,7 @@ export async function fetchCurrentUser(): Promise<UserProfile | null> {
       return res.user;
     }
   } catch (err: any) {
-    if (err && (err.accountDeleted || err.status === 401 || (err.message && err.message.toLowerCase().includes('deleted')))) {
+    if (err && (err.code === 'ACCOUNT_DELETED' || err.accountDeleted || (err.message && err.message.toLowerCase().includes('deleted')))) {
       console.log('Account deleted from database. Wiping session...');
       logoutCustomer();
       alert('Your account has been deleted by admin. Please create a new account to continue.');
