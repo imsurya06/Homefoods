@@ -339,12 +339,12 @@ export function App() {
               setIsCartOpen(true);
             }
           }}
-          className={`fixed ${cartItems.length > 0 && !isCartOpen ? 'bottom-24 sm:bottom-28' : 'bottom-8'} left-1/2 -translate-x-1/2 z-[60] bg-[#1F2937] text-white px-4.5 py-3 rounded-2xl shadow-2xl border border-gray-700/80 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 transition-all`}
+          className={`fixed ${cartItems.length > 0 && !isCartOpen ? 'bottom-24 sm:bottom-28' : 'bottom-8'} left-1/2 -translate-x-1/2 z-[60] bg-[#1F2937] text-white px-4 py-3 rounded-2xl shadow-2xl border border-gray-700/80 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 transition-all max-w-[92vw] sm:max-w-lg w-auto`}
         >
           <div className="w-6 h-6 rounded-full bg-[#95CD1A] text-white flex items-center justify-center shrink-0 shadow-md">
             <CheckCircle className="w-4 h-4 text-white" />
           </div>
-          <span className="text-xs sm:text-sm font-extrabold tracking-wide whitespace-nowrap">
+          <span className="text-xs sm:text-sm font-extrabold tracking-wide break-words line-clamp-2">
             {activeNotification}
           </span>
         </div>

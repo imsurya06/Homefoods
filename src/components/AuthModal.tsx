@@ -219,7 +219,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <label className="block text-xs font-bold text-gray-700 mb-1.5">Enter 6-Digit Code</label>
               <div className="relative">
                 <input
-                  type="text"
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="one-time-code"
                   required
                   maxLength={6}
                   value={otpCode}
