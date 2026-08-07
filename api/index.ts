@@ -1353,6 +1353,9 @@ app.post(['/api/v1/auth/send-otp', '/api/auth/send-otp', '/v1/auth/send-otp', '/
       return res.status(400).json({ success: false, message: dbRes.message || 'Failed to send verification code. Please try again.' });
     }
 
+    // Send email using SMTP / Brevo / WP Mail notifier
+    await sendEmailOtp(cleanEmail, otp, cleanPurpose as any);
+
     // Check if user already exists in WooCommerce database
     let isExistingUser = false;
     try {
