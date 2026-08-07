@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { CuratedProcessSection } from './components/CuratedProcessSection';
@@ -10,7 +10,7 @@ import { LogoutConfirmModal } from './components/LogoutConfirmModal';
 import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
 import { type CartItem } from './data/bestsellers';
-import { type UserProfile } from './services/authService';
+import { fetchCustomerOrders, type UserProfile } from './services/authService';
 import { useSyncStore } from './store/useSyncStore';
 import { initSyncManager, bootstrapSync, replayOfflineQueue, updatePollingInterval } from './services/syncManager';
 
@@ -84,6 +84,70 @@ export function App() {
   useEffect(() => {
     updatePollingInterval(isCartOpen ? 'cart' : 'general');
   }, [isCartOpen]);
+
+  // Request browser notification permission if available
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
+
+  // Background Order Status Polling & Real-time Push Notifications
+  const prevOrderStatusMapRef = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    let intervalId: any = null;
+
+    const checkOrderStatusChanges = async () => {
+      if (!isLoggedIn) return;
+      try {
+        const remoteOrders = await fetchCustomerOrders();
+        if (Array.isArray(remoteOrders) && remoteOrders.length > 0) {
+          const prevMap = prevOrderStatusMapRef.current;
+          let hasChanged = false;
+
+          remoteOrders.forEach((ord) => {
+            const ordKey = ord.id.toString();
+            const currentStatus = (ord.status || '').toLowerCase().trim();
+            const prevStatus = prevMap.get(ordKey);
+
+            if (prevStatus && prevStatus !== currentStatus) {
+              hasChanged = true;
+              const refCode = ord.orderRefCode || `HF-${ord.id}`;
+              const label = ord.statusLabel || ord.status;
+              showToast(`🔔 Order #${refCode} status updated: ${label}`);
+
+              if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+                try {
+                  new Notification(`Homemade Foods Order #${refCode}`, {
+                    body: `Status updated: ${label}`,
+                    icon: '/favicon.ico',
+                  });
+                } catch {}
+              }
+            }
+
+            prevMap.set(ordKey, currentStatus);
+          });
+
+          if (hasChanged) {
+            window.dispatchEvent(new Event('hf_orders_updated'));
+          }
+        }
+      } catch (err) {
+        console.warn('Background order status poll warning:', err);
+      }
+    };
+
+    if (isLoggedIn) {
+      checkOrderStatusChanges();
+      intervalId = setInterval(checkOrderStatusChanges, 10000);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isLoggedIn]);
 
   const showToast = (message: string) => {
     setActiveNotification(message);

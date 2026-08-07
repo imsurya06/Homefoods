@@ -507,10 +507,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
     const handleFocus = () => syncData(false);
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('hf_orders_updated', handleFocus);
 
     return () => {
       clearInterval(pollInterval);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('hf_orders_updated', handleFocus);
     };
   }, [isOpen, activeTab, user, ordersRefreshTrigger]);
 
