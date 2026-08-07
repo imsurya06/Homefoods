@@ -259,8 +259,9 @@ export function App() {
   };
 
   const SHIPPING_FEE = 40;
-  const totalCartItemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-  const cartSubtotal = cartItems.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
+  const safeCartItems = Array.isArray(cartItems) ? cartItems : [];
+  const totalCartItemCount = safeCartItems.reduce((sum, item) => sum + (item?.quantity || 1), 0);
+  const cartSubtotal = safeCartItems.reduce((sum, item) => sum + (item?.pricePerUnit || 0) * (item?.quantity || 1), 0);
   const cartGrandTotal = cartSubtotal > 0 ? cartSubtotal + SHIPPING_FEE : 0;
 
   return (

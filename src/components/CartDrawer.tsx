@@ -517,8 +517,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   if (!isOpen) return null;
 
   const SHIPPING_FEE = 40;
-  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
-  const subtotal = items.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
+  const safeItems = Array.isArray(items) ? items : [];
+  const totalQuantity = safeItems.reduce((sum, item) => sum + (item?.quantity || 1), 0);
+  const subtotal = safeItems.reduce((sum, item) => sum + (item?.pricePerUnit || 0) * (item?.quantity || 1), 0);
   const grandTotal = subtotal > 0 ? subtotal + SHIPPING_FEE : 0;
 
   const handleApplyCoupon = async () => {

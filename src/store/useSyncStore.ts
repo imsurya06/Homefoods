@@ -208,6 +208,7 @@ export const useSyncStore = create<SyncState>((set) => ({
 
   setCart: (items, revision) => {
     set((state) => {
+      const safeItems = Array.isArray(items) ? items : [];
       if (revision !== undefined) {
         if (revision < state.cartRevision) {
           console.warn(`[Sync Store] Discarding stale server cart revision ${revision} (local: ${state.cartRevision})`);
@@ -225,14 +226,14 @@ export const useSyncStore = create<SyncState>((set) => ({
       const nextRev = revision !== undefined ? revision : state.cartRevision + 1;
       const key = state.isLoggedIn ? 'hf_user_cart' : 'hf_guest_cart';
       if (state.isLoggedIn) {
-        localStorage.setItem(key, JSON.stringify(items));
+        localStorage.setItem(key, JSON.stringify(safeItems));
       } else {
-        sessionStorage.setItem(key, JSON.stringify(items));
+        sessionStorage.setItem(key, JSON.stringify(safeItems));
       }
       if (revision === undefined && state.isLoggedIn) {
-        syncBus.emit('cart.changed', items);
+        syncBus.emit('cart.changed', safeItems);
       }
-      return { cartItems: items, cartRevision: nextRev };
+      return { cartItems: safeItems, cartRevision: nextRev };
     });
   },
 

@@ -77,7 +77,8 @@ export async function processRazorpayCheckout(
       if (err.status === 409 || err.code === 'CART_OUT_OF_SYNC') {
         throw err;
       }
-      const subtotal = payload.items.reduce((s, i) => s + i.pricePerUnit * i.quantity, 0);
+      const safeItems = Array.isArray(payload.items) ? payload.items : [];
+      const subtotal = safeItems.reduce((s, i) => s + (i?.pricePerUnit || 0) * (i?.quantity || 1), 0);
       const totalAmount = subtotal > 0 ? subtotal + 40 : 0;
       orderRes = {
         success: true,

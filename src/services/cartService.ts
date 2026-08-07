@@ -29,7 +29,8 @@ export async function validateCart(
     console.warn('Backend cart validation failed, computing client-side fallback:', error);
   }
 
-  const subtotal = items.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
+  const safeItems = Array.isArray(items) ? items : [];
+  const subtotal = safeItems.reduce((sum, item) => sum + (item?.pricePerUnit || 0) * (item?.quantity || 1), 0);
   const gst = Math.round(subtotal * 0.05);
   const shippingCharge = subtotal >= 499 ? 0 : 40;
   const grandTotal = subtotal + gst + shippingCharge;
