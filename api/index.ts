@@ -3628,8 +3628,16 @@ app.post(['/api/v1/checkout/retry-payment', '/api/checkout/retry-payment', '/v1/
     }
 
     const order = orderRes.data;
-    if (order.status !== 'pending') {
-      return res.status(400).json({ success: false, message: `Order #${wcOrderId} is not in pending payment status (Current: ${order.status})` });
+    const isPaid = ['processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'completed', 'delivered'].includes(order.status);
+
+    if (order.status !== 'pending' && order.status !== 'pending-payment') {
+      return res.status(400).json({
+        success: false,
+        isAlreadyPaid: isPaid,
+        message: isPaid
+          ? 'This order has already been paid and confirmed.'
+          : `Order #${wcOrderId} cannot be paid (Current status: ${order.status})`
+      });
     }
 
     const totalAmount = parseFloat(order.total) || 0;

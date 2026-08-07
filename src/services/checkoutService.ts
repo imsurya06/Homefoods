@@ -226,6 +226,8 @@ export async function fetchRetryPaymentDetails(wcOrderId: number) {
   try {
     const res = await fetchApi<{
       success: boolean;
+      isAlreadyPaid?: boolean;
+      message?: string;
       wcOrderId: number;
       orderRefCode: string;
       razorpayOrderId: string;
@@ -242,7 +244,7 @@ export async function fetchRetryPaymentDetails(wcOrderId: number) {
       method: 'POST',
       body: JSON.stringify({ wcOrderId }),
     });
-    if (res && res.success) {
+    if (res) {
       return res;
     }
   } catch (err: any) {

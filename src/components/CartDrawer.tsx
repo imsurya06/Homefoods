@@ -197,7 +197,28 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [orders, setOrders] = useState<CustomerOrderHistoryItem[]>([]);
   const [loadingOrders, setLoadingOrders] = useState<boolean>(false);
   const [expandedOrderId, setExpandedOrderId] = useState<string | number | null>(null);
-  const [showPastOrders, setShowPastOrders] = useState<boolean>(true);
+  const [ordersSubTab, setOrdersSubTab] = useState<'active' | 'history'>('active');
+
+  const removeLocalPendingOrder = (wcOrderId?: number | string) => {
+    setActiveCheckoutSession(null);
+    setCheckoutInProgress(false);
+    try {
+      const savedLocal = localStorage.getItem('hf_local_orders');
+      if (savedLocal) {
+        const parsed = JSON.parse(savedLocal);
+        const filtered = parsed.filter((o: any) => {
+          const matchesId = wcOrderId && (o.id === wcOrderId || o.wcOrderId === wcOrderId || o.id === `HF-${wcOrderId}` || o.orderRefCode === `HF-${wcOrderId}`);
+          const isPending = o.status === 'pending' || o.status === 'pending_payment' || o.id === 'HF-PENDING';
+          return !matchesId && !isPending;
+        });
+        localStorage.setItem('hf_local_orders', JSON.stringify(filtered));
+      }
+      sessionStorage.removeItem('hf_guest_orders');
+      localStorage.removeItem('hf_pending_order');
+    } catch (e) {
+      console.warn('Error clearing local pending orders:', e);
+    }
+  };
 
   // Guest Order Tracking Search State
   const [guestSearchInput, setGuestSearchInput] = useState<string>('');
@@ -262,6 +283,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
     // Fetch fresh retry payment parameters from server
     const retryDetails = await fetchRetryPaymentDetails(wcOrderId);
+
+    if (retryDetails && (retryDetails as any).isAlreadyPaid) {
+      setIsProcessing(false);
+      removeLocalPendingOrder(wcOrderId);
+      setCheckoutSuccessMsg(`Order #${wcOrderId} has already been paid and confirmed!`);
+      setOrdersRefreshTrigger((prev) => prev + 1);
+      return;
+    }
 
     const targetOrder = {
       wcOrderId,
@@ -681,9 +710,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       (response) => {
         setCheckoutInProgress(false);
         setIsProcessing(false);
-        setActiveCheckoutSession(null);
+        removeLocalPendingOrder(response.wcOrderId);
         setCheckoutStep('cart');
         setOrderSuccess(response);
+        setOrdersRefreshTrigger((prev) => prev + 1);
         if (response && response.cartRevision !== undefined) {
           setLastCheckoutRevision(response.cartRevision);
           useSyncStore.setState({ offlineQueue: [] });
@@ -1643,45 +1673,69 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       };
 
                       return (
-                        <div className="space-y-5">
-                          {/* Active & Pending Orders Section */}
-                          <div className="space-y-2.5">
-                            <div className="flex items-center justify-between text-xs font-extrabold text-[#2D5A1E] uppercase tracking-wider">
-                              <span className="flex items-center gap-1.5">
-                                <Clock className="w-3.5 h-3.5 text-[#95CD1A]" />
-                                Active & Pending Orders ({activeOrders.length})
+                        <div className="space-y-4">
+                          {/* Segmented Sub-tab bar: Active vs History */}
+                          <div className="flex border border-gray-200 bg-gray-100/90 p-1 rounded-xl gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setOrdersSubTab('active')}
+                              className={`flex-1 py-2 px-3 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                                ordersSubTab === 'active'
+                                  ? 'bg-white text-[#95CD1A] shadow-xs border border-gray-100'
+                                  : 'text-gray-600 hover:text-gray-900'
+                              }`}
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>Active Orders</span>
+                              <span className="bg-[#95CD1A] text-white text-[10px] font-black px-1.5 py-0.2 rounded-full min-w-4.5 text-center">
+                                {activeOrders.length}
                               </span>
-                            </div>
+                            </button>
 
-                            {activeOrders.length === 0 ? (
-                              <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-100 text-xs text-gray-400 font-medium text-center">
-                                No active or pending orders right now.
-                              </div>
-                            ) : (
-                              <div className="space-y-3">
-                                {activeOrders.map(renderCard)}
-                              </div>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => setOrdersSubTab('history')}
+                              className={`flex-1 py-2 px-3 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                                ordersSubTab === 'history'
+                                  ? 'bg-white text-[#1F2937] shadow-xs border border-gray-100'
+                                  : 'text-gray-600 hover:text-gray-900'
+                              }`}
+                            >
+                              <PackageCheck className="w-3.5 h-3.5" />
+                              <span>History</span>
+                              <span className="bg-gray-200 text-gray-700 text-[10px] font-black px-1.5 py-0.2 rounded-full min-w-4.5 text-center">
+                                {pastOrders.length}
+                              </span>
+                            </button>
                           </div>
 
-                          {/* Completed & Past Orders Section */}
-                          {pastOrders.length > 0 && (
-                            <div className="space-y-2.5 pt-2 border-t border-gray-200/60">
-                              <button
-                                onClick={() => setShowPastOrders((prev) => !prev)}
-                                className="w-full flex items-center justify-between text-xs font-extrabold text-gray-500 hover:text-gray-700 uppercase tracking-wider cursor-pointer"
-                              >
-                                <span className="flex items-center gap-1.5">
-                                  <PackageCheck className="w-3.5 h-3.5 text-gray-400" />
-                                  Completed & Past Orders ({pastOrders.length})
-                                </span>
-                                {showPastOrders ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                              </button>
-
-                              {showPastOrders && (
-                                <div className="space-y-3 animate-in fade-in duration-200">
-                                  {pastOrders.map(renderCard)}
+                          {/* Sub-tab Content Panel */}
+                          {ordersSubTab === 'active' ? (
+                            <div className="space-y-3">
+                              {activeOrders.length === 0 ? (
+                                <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 text-center space-y-2">
+                                  <Clock className="w-8 h-8 text-gray-300 mx-auto" />
+                                  <h5 className="text-xs font-extrabold text-gray-700">No Active Orders</h5>
+                                  <p className="text-[11px] text-gray-400 font-medium max-w-xs mx-auto">
+                                    All your recent orders have been fulfilled or delivered. Click the History tab to view past orders.
+                                  </p>
                                 </div>
+                              ) : (
+                                activeOrders.map(renderCard)
+                              )}
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {pastOrders.length === 0 ? (
+                                <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 text-center space-y-2">
+                                  <PackageCheck className="w-8 h-8 text-gray-300 mx-auto" />
+                                  <h5 className="text-xs font-extrabold text-gray-700">No Past Orders Found</h5>
+                                  <p className="text-[11px] text-gray-400 font-medium max-w-xs mx-auto">
+                                    Your delivered or completed order history will appear here.
+                                  </p>
+                                </div>
+                              ) : (
+                                pastOrders.map(renderCard)
                               )}
                             </div>
                           )}
