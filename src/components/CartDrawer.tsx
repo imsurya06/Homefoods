@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { type CartItem } from '../data/bestsellers';
 import { processRazorpayCheckout, type CheckoutPayload, trackSingleOrder, cancelInventoryReservation, retryRazorpayPayment, fetchRetryPaymentDetails } from '../services/checkoutService';
-import { fetchCustomerOrders, sendEmailOtp, verifyEmailOtp, type CustomerOrderHistoryItem, type UserProfile } from '../services/authService';
+import { fetchCustomerOrders, getCachedCustomerOrders, sendEmailOtp, verifyEmailOtp, type CustomerOrderHistoryItem, type UserProfile } from '../services/authService';
 import { getCachedProductsSync } from '../services/productService';
 import { validateCart } from '../services/cartService';
 import { bootstrapSync } from '../services/syncManager';
@@ -524,8 +524,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           return;
         }
 
-        // Only show spinner once on initial load if orders have never been fetched yet
-        if (isInitial && !hasFetchedOrdersOnce.current && orders.length === 0) {
+        // Instantly render cached orders on drawer open (< 50ms)
+        const cached = getCachedCustomerOrders();
+        if (cached && cached.length > 0 && orders.length === 0) {
+          setOrders(cached);
+          setLoadingOrders(false);
+        } else if (isInitial && !hasFetchedOrdersOnce.current && orders.length === 0) {
           setLoadingOrders(true);
         }
 
@@ -1451,9 +1455,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
 
                 {loadingOrders && (!Array.isArray(orders) || orders.length === 0) ? (
-                  <div className="py-12 text-center space-y-2">
-                    <div className="w-6 h-6 border-2 border-[#95CD1A] border-t-transparent rounded-full animate-spin mx-auto" />
-                    <p className="text-xs text-gray-400 font-bold">Loading your orders...</p>
+                  <div className="space-y-3 py-2">
+                    {[1, 2].map((idx) => (
+                      <div key={idx} className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3 animate-pulse shadow-xs text-left">
+                        <div className="flex items-center justify-between">
+                          <div className="h-4 bg-gray-200 rounded-md w-28" />
+                          <div className="h-4 bg-gray-100 rounded-md w-16" />
+                        </div>
+                        <div className="h-3 bg-gray-100 rounded-md w-44" />
+                        <div className="h-8 bg-gray-50 rounded-xl w-full" />
+                      </div>
+                    ))}
                   </div>
                 ) : (!Array.isArray(orders) || orders.length === 0) && !guestSearchResult ? (
                   <div className="py-10 text-center space-y-3 bg-gray-50 rounded-2xl border border-gray-100 p-4">

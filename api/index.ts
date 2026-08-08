@@ -3065,14 +3065,30 @@ app.get(['/api/v1/auth/me', '/api/auth/me', '/v1/auth/me', '/auth/me'], authenti
   }
 });
 
-// GET /api/v1/auth/my-orders
-app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', '/auth/my-orders'], authenticateToken, async (req, res) => {
+const customerOrdersServerCache = new Map<string, { orders: any[]; lastChecked: number }>();
+
+// GET /api/v1/orders/me & /api/v1/auth/my-orders (Consolidated Orders Endpoint with 30s Server Cache)
+app.get([
+  '/api/v1/orders/me', '/api/orders/me', '/v1/orders/me', '/orders/me',
+  '/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', '/auth/my-orders'
+], authenticateToken, async (req, res) => {
   try {
     const { customerId, email } = res.locals.user;
-    
+    const cacheKey = `cust_orders_${customerId}_${email}`;
+    const now = Date.now();
+    const cached = customerOrdersServerCache.get(cacheKey);
+
+    if (cached && (now - cached.lastChecked < 30000)) {
+      return res.json({ success: true, data: cached.orders, cached: true });
+    }
+
     linkGuestOrdersToCustomer(email, customerId.toString()).catch(() => {});
 
-    const ordersRes = await wcFetch('orders', { params: { customer: customerId, per_page: 50 } });
+    let ordersRes = await wcFetch('orders', { params: { customer: customerId, per_page: 50 } });
+    if (!ordersRes.ok || !Array.isArray(ordersRes.data) || ordersRes.data.length === 0) {
+      ordersRes = await wcFetch('orders', { params: { search: email, per_page: 50 } });
+    }
+
     if (!ordersRes.ok || !Array.isArray(ordersRes.data)) {
       return res.json({ success: true, data: [] });
     }
@@ -3098,7 +3114,7 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
           total: order.total,
           currency: '₹',
           dateCreated: order.date_created,
-          items: order.line_items?.map((item: any) => ({ name: item.name, quantity: item.quantity })),
+          items: order.line_items?.map((item: any) => ({ name: item.name, quantity: item.quantity, pricePerUnit: parseFloat(item.price) || 0 })),
           shippingAddress: `${order.shipping?.address_1 || order.billing?.address_1 || ''}, ${order.shipping?.city || order.billing?.city || ''}`,
           ...(order.status === 'pending' ? {
             razorpayOrderId: rzpOrderIdMeta?.value || `order_mock_${order.id}`,
@@ -3109,6 +3125,7 @@ app.get(['/api/v1/auth/my-orders', '/api/auth/my-orders', '/v1/auth/my-orders', 
         };
       });
 
+    customerOrdersServerCache.set(cacheKey, { orders: formattedOrders, lastChecked: now });
     return res.json({ success: true, data: formattedOrders });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });

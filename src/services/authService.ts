@@ -161,17 +161,30 @@ export async function fetchCurrentUser(): Promise<UserProfile | null> {
   return getSavedUserProfile();
 }
 
+export function getCachedCustomerOrders(): CustomerOrderHistoryItem[] {
+  try {
+    const saved = localStorage.getItem('hf_cached_customer_orders');
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return [];
+}
+
 export async function fetchCustomerOrders(): Promise<CustomerOrderHistoryItem[]> {
   const token = getSavedToken();
   if (!token) return [];
 
   try {
-    const res = await fetchApi<{ success: boolean; data: CustomerOrderHistoryItem[] }>('/auth/my-orders');
-    return res && res.success && Array.isArray(res.data) ? res.data : [];
+    const res = await fetchApi<{ success: boolean; data: CustomerOrderHistoryItem[] }>('/orders/me');
+    if (res && res.success && Array.isArray(res.data)) {
+      try {
+        localStorage.setItem('hf_cached_customer_orders', JSON.stringify(res.data));
+      } catch {}
+      return res.data;
+    }
   } catch (err: any) {
     console.warn('Fetch customer orders warning:', err);
-    return [];
   }
+  return getCachedCustomerOrders();
 }
 
 export function logoutCustomer() {
