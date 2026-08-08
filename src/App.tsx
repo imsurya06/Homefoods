@@ -10,7 +10,7 @@ import { LogoutConfirmModal } from './components/LogoutConfirmModal';
 import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
 import { type CartItem } from './data/bestsellers';
-import { fetchCustomerOrders, type UserProfile } from './services/authService';
+import { fetchCustomerOrders, fetchCurrentUser, type UserProfile } from './services/authService';
 import { useSyncStore } from './store/useSyncStore';
 import { initSyncManager, bootstrapSync, replayOfflineQueue, updatePollingInterval } from './services/syncManager';
 
@@ -32,10 +32,20 @@ export function App() {
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [cartDrawerInitialTab, setCartDrawerInitialTab] = useState<'cart' | 'orders'>('cart');
 
-  // Initialize Sync Manager and Adaptive Polling
+  // Initialize Sync Manager, Eager Session Validation, and Adaptive Polling
   useEffect(() => {
     initSyncManager();
     updatePollingInterval('general');
+
+    if (isLoggedIn) {
+      fetchCurrentUser().catch((err: any) => {
+        if (err?.status === 401 || err?.code === 'ACCOUNT_DELETED' || err?.code === 'ACCOUNT_NOT_FOUND') {
+          useSyncStore.getState().logout();
+          showToast('Your account no longer exists. Please sign in or create a new account.');
+          setIsAuthModalOpen(true);
+        }
+      });
+    }
   }, []);
 
   // Listen for session expiry and administrative account deletion events

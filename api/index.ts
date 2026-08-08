@@ -192,10 +192,10 @@ const syncLimiter = rateLimit({
 
 const userExistenceCache = new Map<number, { exists: boolean; lastChecked: number }>();
 
-async function verifyUserExists(customerId: number): Promise<boolean> {
+async function verifyUserExists(customerId: number, bypassCache: boolean = false): Promise<boolean> {
   const now = Date.now();
   const cached = userExistenceCache.get(customerId);
-  if (cached && (now - cached.lastChecked < 60000)) { // 1-minute cache TTL
+  if (!bypassCache && cached && (now - cached.lastChecked < 3000)) {
     return cached.exists;
   }
 
@@ -205,7 +205,6 @@ async function verifyUserExists(customerId: number): Promise<boolean> {
       userExistenceCache.set(customerId, { exists: true, lastChecked: now });
       return true;
     }
-    // Explicit 404 check: Only mark user as deleted if WooCommerce explicitly returns 404 Not Found!
     if (res.status === 404) {
       console.warn(`[User Existence Guard] Customer #${customerId} returned 404 from WooCommerce. User was deleted.`);
       userExistenceCache.set(customerId, { exists: false, lastChecked: now });
@@ -215,7 +214,6 @@ async function verifyUserExists(customerId: number): Promise<boolean> {
     console.warn(`[User Existence Guard] WooCommerce API check errored for customer #${customerId} (${err.message}). Failing open to protect user session.`);
   }
 
-  // On network glitch, server 500/503 error, or timeout: fail-open! Assume user exists.
   return true;
 }
 
