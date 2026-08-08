@@ -217,19 +217,32 @@ async function verifyUserExists(customerId: number, bypassCache: boolean = false
   return true;
 }
 
+const KNOWN_VALID_DOMAINS = new Set([
+  'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com',
+  'rediffmail.com', 'live.com', 'proton.me', 'protonmail.com', 'zoho.com',
+  'ymail.com', 'gmx.com', 'mail.com', 'yahoo.co.in'
+]);
+
+const domainMxCache = new Map<string, boolean>();
+
 async function verifyEmailDomain(email: string): Promise<boolean> {
-  const domain = email.split('@')[1];
+  const domain = (email.split('@')[1] || '').toLowerCase().trim();
   if (!domain) return false;
+  if (KNOWN_VALID_DOMAINS.has(domain)) return true;
+
+  if (domainMxCache.has(domain)) {
+    return domainMxCache.get(domain)!;
+  }
 
   return new Promise((resolve) => {
     let resolved = false;
     const timer = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        console.warn(`[Email Validation Guard] DNS lookup timed out for domain: ${domain}. Falling back to pass.`);
-        resolve(true); // Fail-open on timeout
+        domainMxCache.set(domain, true);
+        resolve(true);
       }
-    }, 1500);
+    }, 800);
 
     dns.resolveMx(domain, (err, addresses) => {
       if (resolved) return;
@@ -239,14 +252,16 @@ async function verifyEmailDomain(email: string): Promise<boolean> {
       if (err) {
         const errCode = (err as any).code;
         if (errCode === 'ENOTFOUND' || errCode === 'ENODATA') {
-          console.warn(`[Email Validation Guard] DNS check failed: domain ${domain} has no mail server records (code: ${errCode}).`);
-          resolve(false); // Definitely invalid domain
+          domainMxCache.set(domain, false);
+          resolve(false);
         } else {
-          console.warn(`[Email Validation Guard] DNS query errored for ${domain} (${err.message}). Falling back to pass.`);
-          resolve(true); // Fail-open on network/DNS server errors
+          domainMxCache.set(domain, true);
+          resolve(true);
         }
       } else {
-        resolve(addresses && addresses.length > 0);
+        const isValid = Array.isArray(addresses) && addresses.length > 0;
+        domainMxCache.set(domain, isValid);
+        resolve(isValid);
       }
     });
   });
