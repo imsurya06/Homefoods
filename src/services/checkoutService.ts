@@ -1,5 +1,6 @@
 import { fetchApi } from './apiClient';
 import type { CartItem } from '../data/bestsellers';
+import { useSyncStore } from '../store/useSyncStore';
 
 declare global {
   interface Window {
@@ -122,8 +123,36 @@ export async function processRazorpayCheckout(
       },
       handler: async function (response: any) {
         try {
-          // 4. Verify Signature on Server
-          const verifyRes = await fetchApi<{ success: boolean; paymentId: string; orderRefCode?: string; trackingLink?: string }>('/checkout/verify-payment', {
+          localStorage.removeItem('hf_checkout_idempotency_key');
+          try {
+            const displayCode = orderRes.orderRefCode || `HF-${orderRes.wcOrderId}`;
+            const newOrder = {
+              id: displayCode,
+              wcOrderId: orderRes.wcOrderId,
+              orderRefCode: displayCode,
+              status: 'processing',
+              statusLabel: 'Order Confirmed & Kitchen Preparation',
+              stage: 2,
+              total: orderRes.amountInPaise ? (orderRes.amountInPaise / 100).toString() : '0',
+              currency: '₹',
+              dateCreated: new Date().toISOString(),
+              items: payload.items.map((it: any) => ({ name: it.name, quantity: it.quantity, pricePerUnit: it.pricePerUnit, weight: it.weight, total: (it.pricePerUnit * it.quantity).toString() })),
+              shippingAddress: `${payload.shippingAddress.address}, ${payload.shippingAddress.city}`,
+            };
+            const saved = sessionStorage.getItem('hf_guest_orders');
+            const existingOrders = saved ? JSON.parse(saved) : [];
+            sessionStorage.setItem('hf_guest_orders', JSON.stringify([newOrder, ...existingOrders]));
+          } catch (e) {}
+
+          // 1. Instantly trigger onSuccess UI transition (< 100ms)
+          onSuccess({
+            wcOrderId: orderRes.wcOrderId,
+            paymentId: response.razorpay_payment_id,
+            orderRefCode: orderRes.orderRefCode,
+          });
+
+          // 2. Perform background WooCommerce order verification & status update silently
+          fetchApi<{ success: boolean; paymentId: string; orderRefCode?: string }>('/checkout/verify-payment', {
             method: 'POST',
             body: JSON.stringify({
               razorpay_order_id: response.razorpay_order_id,
@@ -138,44 +167,18 @@ export async function processRazorpayCheckout(
               shippingAddress: `${payload.shippingAddress.address}, ${payload.shippingAddress.city} - ${payload.shippingAddress.pincode}`,
               phone: payload.customerDetails.phone,
             }),
+          }).then((verifyRes: any) => {
+            if (verifyRes && verifyRes.success) {
+              if (verifyRes.accessToken && verifyRes.refreshToken && verifyRes.user) {
+                useSyncStore.getState().login(verifyRes.user, verifyRes.accessToken, verifyRes.refreshToken);
+              }
+              window.dispatchEvent(new Event('hf_orders_updated'));
+            }
+          }).catch((err) => {
+            console.warn('[Background Verification Notice]:', err);
           });
-
-          if (verifyRes.success) {
-            localStorage.removeItem('hf_checkout_idempotency_key');
-            try {
-              const displayCode = orderRes.orderRefCode || `HF-${orderRes.wcOrderId}`;
-              const newOrder = {
-                id: displayCode,
-                wcOrderId: orderRes.wcOrderId,
-                orderRefCode: displayCode,
-                status: 'processing',
-                statusLabel: 'Order Confirmed & Kitchen Preparation',
-                stage: 2,
-                total: orderRes.amountInPaise ? (orderRes.amountInPaise / 100).toString() : '0',
-                currency: '₹',
-                dateCreated: new Date().toISOString(),
-                items: payload.items.map((it: any) => ({ name: it.name, quantity: it.quantity, pricePerUnit: it.pricePerUnit, weight: it.weight, total: (it.pricePerUnit * it.quantity).toString() })),
-                shippingAddress: `${payload.shippingAddress.address}, ${payload.shippingAddress.city}`,
-              };
-              const saved = sessionStorage.getItem('hf_guest_orders');
-              const existingOrders = saved ? JSON.parse(saved) : [];
-              sessionStorage.setItem('hf_guest_orders', JSON.stringify([newOrder, ...existingOrders]));
-            } catch (e) {}
-
-            onSuccess({
-              wcOrderId: orderRes.wcOrderId,
-              paymentId: response.razorpay_payment_id,
-              orderRefCode: verifyRes.orderRefCode || orderRes.orderRefCode,
-              accessToken: (verifyRes as any).accessToken,
-              refreshToken: (verifyRes as any).refreshToken,
-              user: (verifyRes as any).user,
-              cartRevision: (verifyRes as any).cartRevision,
-            });
-          } else {
-            onError('Payment signature verification failed.');
-          }
         } catch (err: any) {
-          onError(err.message || 'Error verifying payment signature.');
+          console.warn('[Payment Handler Notice]:', err);
         }
       },
       modal: {
@@ -304,14 +307,15 @@ export async function retryRazorpayPayment(
       image: 'https://www.homemadefoodsmadurai.com/favicon.png',
       handler: async function (response: any) {
         try {
-          const verifyRes = await fetchApi<{
-            success: boolean;
-            orderRefCode?: string;
-            accessToken?: string;
-            refreshToken?: string;
-            user?: any;
-            cartRevision?: number;
-          }>('/checkout/verify-payment', {
+          // 1. Instantly trigger onSuccess UI transition (< 100ms)
+          onSuccess({
+            wcOrderId: order.wcOrderId,
+            paymentId: response.razorpay_payment_id,
+            orderRefCode: displayOrderCode,
+          });
+
+          // 2. Perform background verification & WooCommerce order update silently
+          fetchApi<{ success: boolean; orderRefCode?: string }>('/checkout/verify-payment', {
             method: 'POST',
             body: JSON.stringify({
               razorpay_order_id: order.razorpayOrderId,
@@ -326,23 +330,18 @@ export async function retryRazorpayPayment(
               shippingAddress: order.shippingAddress || '',
               phone: order.phone || '',
             }),
+          }).then((verifyRes) => {
+            if (verifyRes && verifyRes.success) {
+              if ((verifyRes as any).accessToken && (verifyRes as any).refreshToken && (verifyRes as any).user) {
+                useSyncStore.getState().login((verifyRes as any).user, (verifyRes as any).accessToken, (verifyRes as any).refreshToken);
+              }
+              window.dispatchEvent(new Event('hf_orders_updated'));
+            }
+          }).catch((err) => {
+            console.warn('[Background Retry Verification Notice]:', err);
           });
-
-          if (verifyRes.success) {
-            onSuccess({
-              wcOrderId: order.wcOrderId,
-              paymentId: response.razorpay_payment_id,
-              orderRefCode: verifyRes.orderRefCode || displayOrderCode,
-              accessToken: (verifyRes as any).accessToken,
-              refreshToken: (verifyRes as any).refreshToken,
-              user: (verifyRes as any).user,
-              cartRevision: (verifyRes as any).cartRevision,
-            });
-          } else {
-            onError('Payment signature verification failed.');
-          }
         } catch (err: any) {
-          onError(err.message || 'Error verifying payment signature.');
+          console.warn('[Retry Payment Handler Notice]:', err);
         }
       },
       modal: {
