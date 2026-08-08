@@ -1525,20 +1525,31 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       const isCancelledOrInactive = (o: any) => {
                         const rawStatus = (o.status || '').toLowerCase().trim();
                         const rawLabel = (o.statusLabel || '').toLowerCase().trim();
-                        return rawStatus === 'cancelled' || rawStatus === 'failed' || rawStatus === 'refunded' || rawStatus === 'expired' ||
-                               rawLabel.includes('cancelled') || rawLabel.includes('failed') || rawLabel.includes('refunded');
+
+                        if (rawLabel.includes('dispatched') || rawLabel.includes('kitchen') || rawLabel.includes('confirmed') || rawLabel.includes('delivered') || rawLabel.includes('preparation') || rawLabel.includes('out for delivery')) {
+                          if (rawStatus !== 'cancelled' && rawStatus !== 'refunded' && !rawLabel.includes('cancelled')) {
+                            return false;
+                          }
+                        }
+
+                        return rawStatus === 'cancelled' || rawStatus === 'refunded' || rawStatus === 'expired' ||
+                               rawLabel.includes('cancelled') || rawLabel.includes('refunded');
                       };
 
                       const activeOrders = displayList.filter((o) => {
                         if (isCancelledOrInactive(o)) return false;
                         const rawStatus = (o.status || '').toLowerCase().trim();
-                        return ['pending', 'processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'in_transit', 'on_hold', 'pending_payment'].includes(rawStatus);
+                        const rawLabel = (o.statusLabel || '').toLowerCase().trim();
+                        return ['pending', 'processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'in_transit', 'on_hold', 'pending_payment', 'failed'].includes(rawStatus) ||
+                               rawLabel.includes('dispatched') || rawLabel.includes('kitchen') || rawLabel.includes('confirmed') || rawLabel.includes('out for delivery');
                       });
 
                       const pastOrders = displayList.filter((o) => {
                         if (isCancelledOrInactive(o)) return true;
                         const rawStatus = (o.status || '').toLowerCase().trim();
-                        return !['pending', 'processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'in_transit', 'on_hold', 'pending_payment'].includes(rawStatus);
+                        const rawLabel = (o.statusLabel || '').toLowerCase().trim();
+                        const isActiveLabel = rawLabel.includes('dispatched') || rawLabel.includes('kitchen') || rawLabel.includes('confirmed') || rawLabel.includes('out for delivery');
+                        return !isActiveLabel && !['pending', 'processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'in_transit', 'on_hold', 'pending_payment', 'failed'].includes(rawStatus);
                       });
 
                       const renderCard = (ord: any) => {
