@@ -382,7 +382,35 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         if (activeCheckoutSession?.wcOrderId === orderId) {
           setActiveCheckoutSession(null);
         }
-        setCheckoutInfoMsg('Order cancelled successfully. Stock reservation released.');
+
+        // Restore reserved items back to active shopping cart
+        const savedRes = localStorage.getItem(`hf_pending_reservation_${orderId}`);
+        let restoredCount = 0;
+        if (savedRes) {
+          try {
+            const parsed = JSON.parse(savedRes);
+            if (Array.isArray(parsed.items) && parsed.items.length > 0) {
+              const currentCart = useSyncStore.getState().cartItems;
+              const merged = [...currentCart];
+              parsed.items.forEach((item: CartItem) => {
+                const existingIndex = merged.findIndex((i) => i.id === item.id);
+                if (existingIndex > -1) {
+                  merged[existingIndex].quantity += item.quantity;
+                } else {
+                  merged.push(item);
+                }
+              });
+              useSyncStore.getState().setCart(merged);
+              restoredCount = parsed.items.length;
+            }
+          } catch {}
+          localStorage.removeItem(`hf_pending_reservation_${orderId}`);
+        }
+
+        const msg = restoredCount > 0
+          ? 'We restored your cart items for easy re-ordering. Stock reservation released.'
+          : 'Order cancelled successfully. Stock reservation released.';
+        setCheckoutInfoMsg(msg);
         setOrdersRefreshTrigger((prev) => prev + 1);
       } else {
         setCheckoutError('Failed to cancel order.');
@@ -813,7 +841,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           setCheckoutError(errorMsg);
         }
       },
-      (wcOrderId, expiresAt) => {
+      (wcOrderId, reservedItems, expiresAt) => {
+        try {
+          const reservationData = {
+            wcOrderId,
+            items: reservedItems || items,
+            expiresAt,
+          };
+          localStorage.setItem(`hf_pending_reservation_${wcOrderId}`, JSON.stringify(reservationData));
+        } catch (e) {}
+
         setActiveCheckoutSession({
           wcOrderId,
           orderRefCode: `HF-${wcOrderId}`,
@@ -822,12 +859,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           razorpayOrderId: '',
           amountInPaise: (calcSummary ? calcSummary.grandTotal : grandTotal) * 100,
           keyId: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E',
-          cartSnapshot: [...items],
-          customerEmail: email.trim(),
-          customerName: customerName.trim(),
-          phone: normalizeMobile(mobileNumber),
-          shippingAddress: `${shippingAddress.trim()}, ${city.trim()}`,
+          cartSnapshot: [...(reservedItems || items)],
         });
+
+        // Enforce Single Source of Truth: Empty active cart immediately when pending reservation is created
+        useSyncStore.getState().clearCart();
+        if (typeof onClearCart === 'function') onClearCart();
+        setCouponCode('');
+        setCouponStatus(null);
       }
     );
   };
