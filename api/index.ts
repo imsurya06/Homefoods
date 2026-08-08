@@ -3780,34 +3780,47 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
     }
 
     try {
-      let wcUpdateRes = await wcFetch(`orders/${wcOrderId}`, {
-        method: 'PUT',
-        body: {
-          set_paid: true,
-          status: 'kitchen',
-          transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
-          meta_data: [
-            { key: '_reservation_expires_at', value: '0' }
-          ]
-        },
-      });
+      const existingOrderRes = await wcFetch(`orders/${wcOrderId}`);
+      if (existingOrderRes.ok && existingOrderRes.data) {
+        const orderData = existingOrderRes.data;
+        const currentStatus = (orderData.status || '').toLowerCase().trim();
+        const metaList = Array.isArray(orderData.meta_data) ? orderData.meta_data : [];
+        const alreadyVerified = metaList.some((m: any) => m.key === '_payment_verified' && m.value === 'true');
 
-      if (!wcUpdateRes.ok) {
-        console.warn(`[Verify Payment] WooCommerce rejected status 'kitchen' for Order #${wcOrderId}. Falling back to 'processing'.`);
-        wcUpdateRes = await wcFetch(`orders/${wcOrderId}`, {
-          method: 'PUT',
-          body: {
-            set_paid: true,
-            status: 'processing',
-            transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
-            meta_data: [
-              { key: '_reservation_expires_at', value: '0' }
-            ]
-          },
-        });
+        if (alreadyVerified || ['processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'completed', 'delivered'].includes(currentStatus)) {
+          console.log(`[Verify Payment] Order #${wcOrderId} is already paid & verified (Status: ${currentStatus}). Bypassing duplicate status update.`);
+        } else {
+          let wcUpdateRes = await wcFetch(`orders/${wcOrderId}`, {
+            method: 'PUT',
+            body: {
+              set_paid: true,
+              status: 'kitchen',
+              transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
+              meta_data: [
+                { key: '_reservation_expires_at', value: '0' },
+                { key: '_payment_verified', value: 'true' }
+              ]
+            },
+          });
+
+          if (!wcUpdateRes.ok) {
+            console.warn(`[Verify Payment] WooCommerce rejected status 'kitchen' for Order #${wcOrderId}. Falling back to 'processing'.`);
+            await wcFetch(`orders/${wcOrderId}`, {
+              method: 'PUT',
+              body: {
+                set_paid: true,
+                status: 'processing',
+                transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
+                meta_data: [
+                  { key: '_reservation_expires_at', value: '0' },
+                  { key: '_payment_verified', value: 'true' }
+                ]
+              },
+            });
+          }
+          console.log(`[Verify Payment] WooCommerce Order #${wcOrderId} status updated to paid.`);
+        }
       }
-
-      console.log(`[Verify Payment] WooCommerce Order #${wcOrderId} status updated:`, wcUpdateRes.ok);
     } catch (err: any) {
       console.error(`[Verify Payment] Failed to update WooCommerce order #${wcOrderId}:`, err.message);
     }
