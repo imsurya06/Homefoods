@@ -1,3 +1,5 @@
+import { useSyncStore } from '../store/useSyncStore';
+
 // Centralized API Client for React Frontend with Automatic Cold-Start Retry Logic & JWT Refresh Interception
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
@@ -176,6 +178,10 @@ export async function fetchApi<T = any>(
       }
 
       if (!response.ok) {
+        if (response.status === 401 && (data?.code === 'ACCOUNT_DELETED' || data?.code === 'ACCOUNT_NOT_FOUND')) {
+          useSyncStore.getState().logout();
+          window.dispatchEvent(new CustomEvent('hf_account_deleted'));
+        }
         const apiErr = new Error(data.message || 'API request failed') as any;
         apiErr.status = response.status;
         apiErr.code = data.code;

@@ -3160,12 +3160,23 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
         const token = authHeader.split(' ')[1];
         const decoded = jwt.verify(token, JWT_SECRET) as { customerId: number; email: string };
         if (decoded && decoded.customerId) {
+          const userExists = await verifyUserExists(decoded.customerId);
+          if (!userExists) {
+            console.warn(`[Checkout Guard] Rejecting checkout request for deleted customer #${decoded.customerId}`);
+            return res.status(401).json({
+              success: false,
+              code: 'ACCOUNT_DELETED',
+              message: 'Your account no longer exists in our system. Please sign in or create a new account to continue.'
+            });
+          }
           authCustomerId = decoded.customerId;
         }
         if (decoded && decoded.email) {
           authUserEmail = decoded.email.trim().toLowerCase();
         }
-      } catch {}
+      } catch (tokenErr: any) {
+        console.warn('[Checkout Guard] Invalid JWT token during checkout:', tokenErr.message);
+      }
     }
 
     const rawEmail = (customerDetails?.email || billingAddress?.email || authUserEmail || '').trim();

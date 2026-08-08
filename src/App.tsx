@@ -48,7 +48,8 @@ export function App() {
 
     const handleAccountDeleted = () => {
       useSyncStore.getState().logout();
-      showToast('Your session has ended. Please sign in to continue.');
+      showToast('Your account no longer exists. Please sign in or create a new account.');
+      setIsAuthModalOpen(true);
     };
 
     window.addEventListener('hf_auth_expired', handleAuthExpired);
