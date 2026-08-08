@@ -3399,8 +3399,24 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       existingRecentOrder = recentCreatedOrdersMap.get(idempotencyKey);
     }
 
+    if (existingRecentOrder && existingRecentOrder.wcOrderId) {
+      try {
+        const checkRes = await wcFetch(`orders/${existingRecentOrder.wcOrderId}`);
+        if (checkRes.ok && checkRes.data) {
+          const currentStatus = (checkRes.data.status || '').toLowerCase().trim();
+          if (currentStatus === 'cancelled' || currentStatus === 'trash' || currentStatus === 'completed' || currentStatus === 'processing' || currentStatus === 'confirmed') {
+            console.log(`[Idempotency] Order #${existingRecentOrder.wcOrderId} has status '${currentStatus}'. Will NOT reuse. Creating fresh order...`);
+            existingRecentOrder = null;
+            recentCreatedOrdersMap.delete(idempotencyKey);
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[Idempotency] Could not verify Order #${existingRecentOrder.wcOrderId} status:`, err.message);
+      }
+    }
+
     if (existingRecentOrder) {
-      console.log(`⚡ Idempotency match: Reusing recently created Order #${existingRecentOrder.wcOrderId} for ${customerEmail}`);
+      console.log(`⚡ Idempotency match: Reusing active pending Order #${existingRecentOrder.wcOrderId} for ${customerEmail}`);
       await releaseLock();
       return res.json({
         success: true,

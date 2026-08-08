@@ -186,6 +186,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const setActiveCheckoutSession = useSyncStore((state) => state.setActiveCheckoutSession);
   const setCheckoutInProgress = useSyncStore((state) => state.setCheckoutInProgress);
   const setLastCheckoutRevision = useSyncStore((state) => state.setLastCheckoutRevision);
+  const clearStoreCart = useSyncStore((state) => state.clearCart);
 
   // Coupon and Real-time Pricing Validation States
   const [couponCode, setCouponCode] = useState<string>('');
@@ -737,6 +738,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         setCheckoutInProgress(false);
         setIsProcessing(false);
         removeLocalPendingOrder(response.wcOrderId);
+        clearStoreCart(response.cartRevision);
+        if (typeof onClearCart === 'function') onClearCart();
+        localStorage.removeItem('hf_checkout_idempotency_key');
         setCheckoutStep('cart');
         setOrderSuccess(response);
 
