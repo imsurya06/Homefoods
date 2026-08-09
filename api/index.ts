@@ -192,27 +192,45 @@ app.use(
   })
 );
 
+const getClientIp = (req: any) => {
+  try {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string') {
+      return forwarded.split(',')[0].trim();
+    }
+    return req.ip || req.socket?.remoteAddress || '127.0.0.1';
+  } catch {
+    return '127.0.0.1';
+  }
+};
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 40,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Too many login or signup attempts. Please try again in 15 minutes.' }
+  validate: false,
+  keyGenerator: getClientIp,
+  message: { success: false, message: 'Too many login or signup attempts. Please try again in a moment.' }
 });
 
 const checkoutLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 10,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Too many checkout attempts. Please try again in 1 hour.' }
+  validate: false,
+  keyGenerator: getClientIp,
+  message: { success: false, message: 'Too many checkout attempts. Please try again in an hour.' }
 });
 
 const syncLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
-  max: 150,
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
+  keyGenerator: getClientIp,
   message: { success: false, message: 'Too many synchronization requests. Please try again in a moment.' }
 });
 
