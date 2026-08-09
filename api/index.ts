@@ -495,6 +495,9 @@ async function cleanupExpiredPendingOrders() {
   }
 }
 
+const couponServerCache = new Map<string, { coupon: any; timestamp: number }>();
+const COUPON_CACHE_TTL = 30 * 1000; // 30 seconds
+
 async function validateCouponCode(couponCode: string, cartSubtotal: number): Promise<{
   isValid: boolean;
   discountAmount: number;
@@ -502,33 +505,50 @@ async function validateCouponCode(couponCode: string, cartSubtotal: number): Pro
 } | null> {
   if (!couponCode) return null;
   const cleanCode = couponCode.trim().toLowerCase();
-  try {
-    // 3-Tier Failsafe Coupon Lookup
-    let res = await wcFetch('coupons', { params: { code: cleanCode } });
-    if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) {
-      res = await wcFetch('coupons', { params: { search: cleanCode } });
-    }
-    if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) {
-      res = await wcFetch('coupons', { params: { per_page: 100 } });
-    }
+  
+  let coupon: any = null;
+  const cached = couponServerCache.get(cleanCode);
+  if (cached && (Date.now() - cached.timestamp < COUPON_CACHE_TTL)) {
+    coupon = cached.coupon;
+  }
 
-    if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
-      const coupon = res.data.find((c: any) => (c.code || '').toLowerCase() === cleanCode) || res.data[0];
-      
-      if ((coupon.code || '').toLowerCase() !== cleanCode) {
-        return { isValid: false, discountAmount: 0, message: 'Invalid, expired, or inapplicable coupon code.' };
+  if (!coupon) {
+    try {
+      let res = await wcFetch('coupons', { params: { code: cleanCode } });
+      if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) {
+        res = await wcFetch('coupons', { params: { search: cleanCode } });
+      }
+      if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) {
+        res = await wcFetch('coupons', { params: { per_page: 100 } });
       }
 
-      if (coupon.date_expires) {
-        const expiry = new Date(coupon.date_expires);
-        if (expiry < new Date()) {
-          return { isValid: false, discountAmount: 0, message: 'Coupon code has expired' };
+      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        coupon = res.data.find((c: any) => (c.code || '').toLowerCase() === cleanCode) || res.data[0];
+        if ((coupon.code || '').toLowerCase() === cleanCode) {
+          couponServerCache.set(cleanCode, { coupon, timestamp: Date.now() });
+        } else {
+          coupon = null;
         }
       }
+    } catch (err: any) {
+      console.error('Coupon lookup failed:', err.message);
+    }
+  }
 
-      if (coupon.usage_limit && coupon.usage_count >= coupon.usage_limit) {
-        return { isValid: false, discountAmount: 0, message: 'Coupon usage limit reached' };
-      }
+  if (!coupon) {
+    return { isValid: false, discountAmount: 0, message: 'Invalid, expired, or inapplicable coupon code.' };
+  }
+
+  if (coupon.date_expires) {
+    const expiry = new Date(coupon.date_expires);
+    if (expiry < new Date()) {
+      return { isValid: false, discountAmount: 0, message: 'Coupon code has expired' };
+    }
+  }
+
+  if (coupon.usage_limit && coupon.usage_count >= coupon.usage_limit) {
+    return { isValid: false, discountAmount: 0, message: 'Coupon usage limit reached' };
+  }
 
       const minSpend = parseFloat(coupon.minimum_amount || '0');
       if (minSpend > 0 && cartSubtotal < minSpend) {
@@ -3438,35 +3458,9 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       } catch (err: any) {
         console.warn('[Checkout Deduplication Guard] Error checking existing pending orders:', err.message);
       }
-
-      try {
-        await wcFetch(`customers/${existingCustomerId}`, {
-          method: 'PUT',
-          body: {
-            meta_data: [
-              { key: 'hf_checkout_lock', value: new Date().toISOString() }
-            ]
-          }
-        });
-      } catch (err: any) {
-        console.warn('[Checkout Lock] Failed to set lock:', err.message);
-      }
     }
 
-    const releaseLock = async () => {
-      if (existingCustomerId) {
-        try {
-          await wcFetch(`customers/${existingCustomerId}`, {
-            method: 'PUT',
-            body: {
-              meta_data: [
-                { key: 'hf_checkout_lock', value: '' }
-              ]
-            }
-          });
-        } catch {}
-      }
-    };
+    const releaseLock = async () => {};
 
     const reservedQuantities = await getReservedQuantities();
 

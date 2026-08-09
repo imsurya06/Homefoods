@@ -447,29 +447,26 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     };
   }, [resendTimer]);
 
-  // Run server-side validation dynamically when items, pincode, or coupon changes
+  // Run cart validation instantly on item/pincode changes
   useEffect(() => {
     if (items.length === 0) {
       setCalcSummary(null);
       return;
     }
 
-    const runValidation = async () => {
-      setIsValidating(true);
-      try {
-        const activePincode = pincode.trim().length === 6 ? pincode.trim() : '625001';
-        const activeCoupon = couponStatus?.success ? couponCode.trim() : undefined;
-        const summary = await validateCart(items, activePincode, activeCoupon);
-        setCalcSummary(summary);
-      } catch (err) {
-        console.warn('Failed to validate cart on server:', err);
-      } finally {
-        setIsValidating(false);
-      }
-    };
+    let isMounted = true;
+    const activePincode = pincode.trim().length === 6 ? pincode.trim() : '625001';
+    const activeCoupon = couponStatus?.success ? couponCode.trim() : undefined;
 
-    const timer = setTimeout(runValidation, 500);
-    return () => clearTimeout(timer);
+    validateCart(items, activePincode, activeCoupon).then((summary) => {
+      if (isMounted) {
+        setCalcSummary(summary);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, [items, pincode, couponStatus]);
 
   // Auto-search guest order if token/id parameter is present in URL hash
