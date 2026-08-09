@@ -37,6 +37,13 @@ const ENCRYPTION_KEY = requireEnv('ENCRYPTION_KEY');
 const sharedSecret = 'homefoods_secure_transient_secret_token_2026';
 
 async function setOtpInDatabase(email: string, otp: string): Promise<{ success: boolean; message?: string }> {
+  // Always store in Node.js in-memory cache as Primary Failsafe
+  otpCache.set(email.toLowerCase().trim(), {
+    otp: otp.trim(),
+    expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+    attempts: 0
+  });
+
   try {
     const storeUrl = (process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com').replace(/\/$/, '');
     
@@ -49,16 +56,37 @@ async function setOtpInDatabase(email: string, otp: string): Promise<{ success: 
       body: JSON.stringify({ email, otp })
     });
     
-    const data: any = await res.json();
-    if (res.ok && data.success) return { success: true };
-    return { success: false, message: data.message || 'Failed to send OTP.' };
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      const data: any = await res.json().catch(() => ({}));
+      if (data.success) return { success: true };
+    }
   } catch (err: any) {
-    console.error('[WordPress OTP Set Error]:', err.message);
-    return { success: false, message: err.message };
+    console.warn('[WordPress OTP Set Warning]:', err.message);
   }
+
+  // Node.js in-memory OTP storage succeeded
+  return { success: true };
 }
 
 async function verifyOtpInDatabase(email: string, otp: string): Promise<{ success: boolean; code?: string; message?: string; attempts_remaining?: number }> {
+  const cleanEmail = email.toLowerCase().trim();
+  const cleanOtp = otp.trim();
+
+  // 1. Check Node.js in-memory OTP cache first
+  const memorySession = otpCache.get(cleanEmail);
+  if (memorySession) {
+    if (Date.now() > memorySession.expiresAt) {
+      otpCache.delete(cleanEmail);
+      return { success: false, code: 'EXPIRED', message: 'Verification code has expired. Please request a new code.' };
+    }
+    if (memorySession.otp === cleanOtp) {
+      otpCache.delete(cleanEmail);
+      return { success: true };
+    }
+  }
+
+  // 2. Fallback check against WordPress transients database
   try {
     const storeUrl = (process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com').replace(/\/$/, '');
     
@@ -68,21 +96,19 @@ async function verifyOtpInDatabase(email: string, otp: string): Promise<{ succes
         'Content-Type': 'application/json',
         'X-Homefoods-Secret': sharedSecret
       },
-      body: JSON.stringify({ email, otp })
+      body: JSON.stringify({ email: cleanEmail, otp: cleanOtp })
     });
     
-    const data: any = await res.json();
-    if (res.ok && data.success) return { success: true };
-    return { 
-      success: false, 
-      code: data.code || 'FAILED', 
-      message: data.message || 'Verification failed.',
-      attempts_remaining: data.attempts_remaining 
-    };
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      const data: any = await res.json().catch(() => ({}));
+      if (data.success) return { success: true };
+    }
   } catch (err: any) {
-    console.error('[WordPress OTP Verify Error]:', err.message);
-    return { success: false, message: err.message };
+    console.warn('[WordPress OTP Verify Warning]:', err.message);
   }
+
+  return { success: false, code: 'INVALID', message: 'Invalid 6-digit verification code.' };
 }
 
 async function setIdempotencyInDatabase(key: string, payload: any): Promise<boolean> {
