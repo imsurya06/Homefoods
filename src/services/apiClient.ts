@@ -57,32 +57,12 @@ export async function fetchApi<T = any>(
 
       const data = await response.json();
 
-      if (response.status === 401 && (data.code === 'ACCOUNT_DELETED' || data.message?.includes('Customer account not found'))) {
-        // 2-Step Deletion Verification Guard: Double check against WooCommerce database before destroying session
-        try {
-          const verifyRes = await fetch(`${API_BASE_URL}/auth/account-status`, {
-            headers: { 'Authorization': token ? `Bearer ${token}` : '' }
-          });
-          const verifyData = await verifyRes.json().catch(() => ({ exists: true }));
-          if (verifyData && verifyData.exists !== false) {
-            console.warn('[Account Deletion Guard] Double-check confirmed customer record STILL EXISTS in WooCommerce database. Blocking false-positive logout.');
-            throw new Error('Temporary verification retry');
-          }
-        } catch (err: any) {
-          if (err.message === 'Temporary verification retry') {
-            throw err;
-          }
-          // On network check failure or timeout, do NOT log user out!
-          throw new Error('Server connection retry');
-        }
-
-        localStorage.removeItem('hf_auth_token');
-        localStorage.removeItem('hf_refresh_token');
-        localStorage.removeItem('hf_user_profile');
+      if (response.status === 401 && (data.code === 'ACCOUNT_DELETED' || data.code === 'USER_DELETED' || data.message?.includes('Customer account not found'))) {
+        useSyncStore.getState().logout();
         window.dispatchEvent(new CustomEvent('hf_account_deleted'));
         const apiErr = new Error(data.message || 'Your session has ended. Please sign in to continue.') as any;
         apiErr.status = 401;
-        apiErr.code = 'ACCOUNT_DELETED';
+        apiErr.code = data.code || 'ACCOUNT_DELETED';
         apiErr.data = data;
         throw apiErr;
       }

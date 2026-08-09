@@ -501,16 +501,33 @@ async function validateCouponCode(couponCode: string, cartSubtotal: number): Pro
   message: string;
 } | null> {
   if (!couponCode) return null;
+  const cleanCode = couponCode.trim().toLowerCase();
   try {
-    const res = await wcFetch('coupons', { params: { code: couponCode.trim().toUpperCase() } });
+    // 3-Tier Failsafe Coupon Lookup
+    let res = await wcFetch('coupons', { params: { code: cleanCode } });
+    if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) {
+      res = await wcFetch('coupons', { params: { search: cleanCode } });
+    }
+    if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) {
+      res = await wcFetch('coupons', { params: { per_page: 100 } });
+    }
+
     if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
-      const coupon = res.data[0];
+      const coupon = res.data.find((c: any) => (c.code || '').toLowerCase() === cleanCode) || res.data[0];
       
+      if ((coupon.code || '').toLowerCase() !== cleanCode) {
+        return { isValid: false, discountAmount: 0, message: 'Invalid, expired, or inapplicable coupon code.' };
+      }
+
       if (coupon.date_expires) {
         const expiry = new Date(coupon.date_expires);
         if (expiry < new Date()) {
-          return { isValid: false, discountAmount: 0, message: 'Coupon has expired' };
+          return { isValid: false, discountAmount: 0, message: 'Coupon code has expired' };
         }
+      }
+
+      if (coupon.usage_limit && coupon.usage_count >= coupon.usage_limit) {
+        return { isValid: false, discountAmount: 0, message: 'Coupon usage limit reached' };
       }
 
       const minSpend = parseFloat(coupon.minimum_amount || '0');
@@ -525,11 +542,11 @@ async function validateCouponCode(couponCode: string, cartSubtotal: number): Pro
 
       const amount = parseFloat(coupon.amount || '0');
       if (amount <= 0) {
-        return { isValid: false, discountAmount: 0, message: 'Coupon discount amount is set to 0. Please update Coupon Amount in WooCommerce.' };
+        return { isValid: false, discountAmount: 0, message: 'Coupon discount amount is set to 0 in WooCommerce.' };
       }
 
       let discountAmount = 0;
-      if (coupon.discount_type === 'percent') {
+      if (coupon.discount_type === 'percent' || coupon.discount_type === 'percentage') {
         discountAmount = Math.round(cartSubtotal * (amount / 100));
       } else {
         discountAmount = Math.round(amount);
@@ -538,10 +555,10 @@ async function validateCouponCode(couponCode: string, cartSubtotal: number): Pro
       return {
         isValid: true,
         discountAmount: Math.min(discountAmount, cartSubtotal),
-        message: 'Coupon applied successfully'
+        message: `Coupon '${coupon.code.toUpperCase()}' applied successfully!`
       };
     } else {
-      return { isValid: false, discountAmount: 0, message: 'Invalid coupon code' };
+      return { isValid: false, discountAmount: 0, message: 'Invalid, expired, or inapplicable coupon code.' };
     }
   } catch (err: any) {
     console.error('Coupon validation failed:', err.message);
