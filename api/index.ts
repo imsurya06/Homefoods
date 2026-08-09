@@ -15,6 +15,15 @@ import dns from 'dns';
 
 dotenv.config();
 
+// Prevent unhandled promise rejections or background crashes from terminating Vercel Lambdas
+process.on('unhandledRejection', (reason, promise) => {
+  console.warn('[Vercel Process Guard] Unhandled Rejection captured at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err, origin) => {
+  console.warn('[Vercel Process Guard] Uncaught Exception captured:', err, 'origin:', origin);
+});
+
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (value && value.trim()) return value.trim();
@@ -41,24 +50,26 @@ const otpCache = new Map<string, OtpSession>();
 const otpSendLimits = new Map<string, { count: number; resetAt: number }>();
 
 async function setOtpInDatabase(email: string, otp: string): Promise<{ success: boolean; message?: string }> {
-  // Always store in Node.js in-memory cache as Primary Failsafe
   otpCache.set(email.toLowerCase().trim(), {
     otp: otp.trim(),
-    expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+    expiresAt: Date.now() + 10 * 60 * 1000,
     attempts: 0
   });
 
   try {
     const storeUrl = (process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com').replace(/\/$/, '');
-    
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+
     const res = await fetch(`${storeUrl}/wp-json/homefoods/v1/otp/set`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Homefoods-Secret': sharedSecret
       },
-      body: JSON.stringify({ email, otp })
-    });
+      body: JSON.stringify({ email, otp }),
+      signal: controller.signal
+    }).finally(() => clearTimeout(timer));
     
     const contentType = res.headers.get('content-type') || '';
     if (res.ok && contentType.includes('application/json')) {
@@ -69,7 +80,6 @@ async function setOtpInDatabase(email: string, otp: string): Promise<{ success: 
     console.warn('[WordPress OTP Set Warning]:', err.message);
   }
 
-  // Node.js in-memory OTP storage succeeded
   return { success: true };
 }
 
@@ -77,7 +87,6 @@ async function verifyOtpInDatabase(email: string, otp: string): Promise<{ succes
   const cleanEmail = email.toLowerCase().trim();
   const cleanOtp = otp.trim();
 
-  // 1. Check Node.js in-memory OTP cache first
   const memorySession = otpCache.get(cleanEmail);
   if (memorySession) {
     if (Date.now() > memorySession.expiresAt) {
@@ -90,18 +99,20 @@ async function verifyOtpInDatabase(email: string, otp: string): Promise<{ succes
     }
   }
 
-  // 2. Fallback check against WordPress transients database
   try {
     const storeUrl = (process.env.WC_STORE_URL || 'https://admin.homemadefoodsmadurai.com').replace(/\/$/, '');
-    
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+
     const res = await fetch(`${storeUrl}/wp-json/homefoods/v1/otp/verify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Homefoods-Secret': sharedSecret
       },
-      body: JSON.stringify({ email: cleanEmail, otp: cleanOtp })
-    });
+      body: JSON.stringify({ email: cleanEmail, otp: cleanOtp }),
+      signal: controller.signal
+    }).finally(() => clearTimeout(timer));
     
     const contentType = res.headers.get('content-type') || '';
     if (res.ok && contentType.includes('application/json')) {
@@ -1278,6 +1289,9 @@ async function sendEmailOtp(email: string, otp: string, purpose: 'login' | 'chec
       port: smtpPort,
       secure: secure,
       auth: { user: smtpUser, pass: smtpPass },
+      connectionTimeout: 4000,
+      greetingTimeout: 4000,
+      socketTimeout: 4000,
       tls: { rejectUnauthorized: false },
     });
 
