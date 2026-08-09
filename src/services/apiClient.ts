@@ -39,6 +39,7 @@ export async function fetchApi<T = any>(
     });
   };
 
+  const startTime = performance.now();
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       let token = localStorage.getItem('hf_auth_token');
@@ -47,12 +48,17 @@ export async function fetchApi<T = any>(
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         const rawText = await response.text();
-        console.warn(`Attempt ${attempt + 1}/${retries + 1}: Non-JSON response received. Waking up backend...`, rawText);
+        console.warn(`Attempt ${attempt + 1}/${retries + 1}: Non-JSON response received for ${endpoint}.`, rawText);
         if (attempt < retries) {
           await new Promise((res) => setTimeout(res, delayMs * (attempt + 1)));
           continue;
         }
-        throw new Error('Connecting to backend server... Please try again in a moment.');
+        throw new Error(rawText && rawText.length < 150 ? rawText : 'Server temporary error. Please try again.');
+      }
+
+      const duration = Math.round(performance.now() - startTime);
+      if (duration > 600) {
+        console.warn(`[API Latency Warning] ${endpoint} took ${duration} ms`);
       }
 
       const data = await response.json();
@@ -181,5 +187,5 @@ export async function fetchApi<T = any>(
     }
   }
 
-  throw new Error('Connecting to backend server... Please try again in a moment.');
+  throw new Error('Unable to reach server. Please check your network connection and try again.');
 }

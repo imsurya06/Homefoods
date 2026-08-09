@@ -75,7 +75,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setError(res.message || 'Failed to send verification code. Please try again.');
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred. Please try again.');
+      const msg = err?.message || '';
+      if (msg.includes('Too many') || msg.includes('429')) {
+        setError('Too many verification attempts. Please try again in a few minutes.');
+      } else {
+        setError(msg || 'Failed to send verification code. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
