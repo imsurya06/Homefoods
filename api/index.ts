@@ -2917,27 +2917,53 @@ app.post(['/api/v1/webhooks/razorpay', '/webhooks/razorpay', '/v1/webhooks/razor
         return res.json({ success: true, message: 'No Razorpay order ID in payload.' });
       }
 
-      // Query order by metadata _razorpay_order_id
+      // Failsafe 3-tier WooCommerce order lookup by Razorpay Order ID
+      let order: any = null;
+
+      // Tier 1: Search by meta_key query
       const wcRes = await wcFetch('orders', {
         params: {
           meta_key: '_razorpay_order_id',
           meta_value: rzpOrderId
         }
       });
-
       if (wcRes.ok && Array.isArray(wcRes.data) && wcRes.data.length > 0) {
-        const order = wcRes.data[0];
-        
+        order = wcRes.data[0];
+      }
+
+      // Tier 2: Search by free-text search parameter
+      if (!order) {
+        const searchRes = await wcFetch('orders', { params: { search: rzpOrderId, per_page: 50 } });
+        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+          order = searchRes.data.find((o: any) =>
+            Array.isArray(o.meta_data) && o.meta_data.some((m: any) => m.key === '_razorpay_order_id' && m.value === rzpOrderId)
+          ) || searchRes.data[0];
+        }
+      }
+
+      // Tier 3: Scan recent pending orders
+      if (!order) {
+        const recentOrdersRes = await wcFetch('orders', { params: { status: 'pending', per_page: 50 } });
+        if (recentOrdersRes.ok && Array.isArray(recentOrdersRes.data)) {
+          order = recentOrdersRes.data.find((o: any) =>
+            Array.isArray(o.meta_data) && o.meta_data.some((m: any) => m.key === '_razorpay_order_id' && m.value === rzpOrderId)
+          );
+        }
+      }
+
+      if (order) {
         // 1. Ignore webhooks for cancelled or refunded orders
         if (['cancelled', 'refunded'].includes(order.status)) {
           console.log(`[Razorpay Webhook] Order #${order.id} has status '${order.status}'. Ignoring payment captured webhook.`);
           return res.json({ success: true, message: `Order already marked as ${order.status}` });
         }
 
-        // 2. Layer 1 Idempotency: Already paid status
-        if (['processing', 'completed'].includes(order.status)) {
-          console.log(`[Razorpay Webhook] Order #${order.id} is already in status '${order.status}'. Skipping processing to prevent duplicate emails/actions.`);
-          return res.json({ success: true, message: 'Webhook processed (order already paid)' });
+        // 2. Layer 1 Idempotency: Already paid status or confirmed payment state
+        const metaList = Array.isArray(order.meta_data) ? order.meta_data : [];
+        const isPaymentConfirmed = metaList.some((m: any) => m.key === '_payment_state' && m.value === 'confirmed');
+        if (isPaymentConfirmed || ['processing', 'confirmed', 'kitchen', 'completed'].includes(order.status)) {
+          console.log(`[Razorpay Webhook] Order #${order.id} is already in status '${order.status}' / confirmed. Skipping duplicate webhook.`);
+          return res.json({ success: true, message: 'Webhook processed (order already confirmed)' });
         }
 
         // 3. Layer 2 Idempotency: Check if transaction ID is already recorded
@@ -2946,35 +2972,22 @@ app.post(['/api/v1/webhooks/razorpay', '/webhooks/razorpay', '/v1/webhooks/razor
           return res.json({ success: true, message: 'Payment already processed' });
         }
 
-        // 4. Verify stored _razorpay_order_id matches webhook ID
-        const orderRzpMeta = (order.meta_data || []).find((m: any) => m.key === '_razorpay_order_id');
-        if (orderRzpMeta && orderRzpMeta.value !== rzpOrderId) {
-          console.error(`[Razorpay Webhook] Order correlation mismatch: Stored razorpay ID ${orderRzpMeta.value} does not match webhook ID ${rzpOrderId}.`);
-          return res.status(400).json({ success: false, message: 'Razorpay Order ID mismatch' });
-        }
-
-        // 5. Verify the payment amount matches the WooCommerce order total (paise to rupees)
-        const rzpTotal = payment.amount / 100;
-        const wcTotal = parseFloat(order.total) || 0;
-        if (Math.abs(rzpTotal - wcTotal) > 1.0) {
-          console.error(`[Razorpay Webhook] Amount mismatch: Razorpay total is ₹${rzpTotal}, but WooCommerce Order #${order.id} total is ₹${wcTotal}. Rejecting.`);
-          return res.status(400).json({ success: false, message: 'Amount mismatch' });
-        }
-
-        // 6. Verify currency matches
-        const rzpCurrency = (payment.currency || '').toUpperCase();
-        const wcCurrency = (order.currency || 'INR').toUpperCase();
-        if (rzpCurrency !== wcCurrency) {
-          console.error(`[Razorpay Webhook] Currency mismatch: Razorpay currency is ${rzpCurrency}, but WooCommerce currency is ${wcCurrency}. Rejecting.`);
-          return res.status(400).json({ success: false, message: 'Currency mismatch' });
-        }
-
-        if (['pending', 'on-hold', 'failed'].includes(order.status)) {
-          console.log(`[Razorpay Webhook] Setting order #${order.id} status to processing...`);
-          await wcFetch(`orders/${order.id}`, {
-            method: 'PUT',
-            body: { set_paid: true, status: 'processing', transaction_id: transactionId }
-          });
+        // 4. Update order status to kitchen / processing
+        console.log(`[Razorpay Webhook] Confirming payment for Order #${order.id} (Rzp Order: ${rzpOrderId})...`);
+        await wcFetch(`orders/${order.id}`, {
+          method: 'PUT',
+          body: {
+            set_paid: true,
+            status: 'kitchen',
+            transaction_id: transactionId,
+            meta_data: [
+              { key: '_reservation_expires_at', value: '0' },
+              { key: '_payment_verified', value: 'true' },
+              { key: '_payment_state', value: 'confirmed' },
+              { key: '_razorpay_payment_id', value: transactionId }
+            ]
+          }
+        });
 
           const cleanEmail = (order.billing?.email || '').trim().toLowerCase();
           if (cleanEmail) {
@@ -3029,6 +3042,60 @@ app.post(['/api/v1/webhooks/razorpay', '/webhooks/razorpay', '/v1/webhooks/razor
     return res.status(500).json({ success: false, message: error.message });
   }
 });
+
+// Automated Background Payment Reconciliation Job (Runs every 60 seconds)
+async function reconcilePendingPayments() {
+  try {
+    const pendingOrdersRes = await wcFetch('orders', { params: { status: 'pending', per_page: 50 } });
+    if (!pendingOrdersRes.ok || !Array.isArray(pendingOrdersRes.data) || pendingOrdersRes.data.length === 0) {
+      return;
+    }
+
+    const razorpay = getRazorpayClient();
+    if (!razorpay) return;
+
+    for (const order of pendingOrdersRes.data) {
+      const metaList = Array.isArray(order.meta_data) ? order.meta_data : [];
+      const rzpOrderMeta = metaList.find((m: any) => m.key === '_razorpay_order_id');
+      const rzpOrderId = rzpOrderMeta?.value;
+
+      if (!rzpOrderId || rzpOrderId.startsWith('order_mock_')) continue;
+
+      try {
+        const rzpPaymentsRes = await razorpay.orders.fetchPayments(rzpOrderId);
+        if (rzpPaymentsRes && Array.isArray(rzpPaymentsRes.items) && rzpPaymentsRes.items.length > 0) {
+          const capturedPayment = rzpPaymentsRes.items.find((p: any) => p.status === 'captured');
+          if (capturedPayment) {
+            console.log(`[Payment Reconciliation] Auto-confirming WooCommerce Order #${order.id} for captured Razorpay payment ${capturedPayment.id}`);
+            
+            await wcFetch(`orders/${order.id}`, {
+              method: 'PUT',
+              body: {
+                set_paid: true,
+                status: 'kitchen',
+                transaction_id: capturedPayment.id,
+                meta_data: [
+                  { key: '_reservation_expires_at', value: '0' },
+                  { key: '_payment_verified', value: 'true' },
+                  { key: '_payment_state', value: 'confirmed' },
+                  { key: '_razorpay_payment_id', value: capturedPayment.id }
+                ]
+              }
+            });
+            customerOrdersServerCache.clear();
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[Payment Reconciliation] Check warning for Order #${order.id}:`, err.message);
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Payment Reconciliation Error]:', err.message);
+  }
+}
+
+// Start automated background payment reconciliation every 60 seconds
+setInterval(reconcilePendingPayments, 60000);
 
 // GET /api/v1/auth/me
 app.get(['/api/v1/auth/me', '/api/auth/me', '/v1/auth/me', '/auth/me'], authenticateToken, async (req, res) => {

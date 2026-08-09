@@ -773,6 +773,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         clearStoreCart(response.cartRevision);
         if (typeof onClearCart === 'function') onClearCart();
         localStorage.removeItem('hf_checkout_idempotency_key');
+        localStorage.removeItem('hf_active_checkout_session');
+        localStorage.removeItem('hf_pending_order');
+        useSyncStore.getState().setActiveCheckoutSession(null);
         setCheckoutStep('cart');
         setOrderSuccess(response);
 
@@ -1545,10 +1548,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           const oIdStr = o.id?.toString();
                           const oWcIdStr = o.wcOrderId?.toString();
                           const oRefStr = o.orderRefCode?.toString();
-                          return (
+                          const isMatch = (
                             (sessWcId && (oIdStr === sessWcId || oWcIdStr === sessWcId)) ||
                             (sessRefCode && (oRefStr === sessRefCode || oIdStr === sessRefCode))
                           );
+                          const isPaidStatus = ['processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'completed', 'delivered'].includes((o.status || '').toLowerCase());
+                          if (isMatch && isPaidStatus) {
+                            setTimeout(() => {
+                              useSyncStore.getState().setActiveCheckoutSession(null);
+                              localStorage.removeItem('hf_active_checkout_session');
+                            }, 0);
+                          }
+                          return isMatch;
                         });
 
                         if (!alreadyExists) {
