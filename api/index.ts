@@ -1426,6 +1426,10 @@ app.post(['/api/v1/auth/send-otp', '/api/auth/send-otp', '/v1/auth/send-otp', '/
     return res.status(500).json({ success: false, message: error?.message || 'Send OTP failed' });
   }
 });
+
+// POST /api/v1/auth/verify-otp
+app.post(['/api/v1/auth/verify-otp', '/api/auth/verify-otp', '/v1/auth/verify-otp', '/auth/verify-otp'], authLimiter, async (req, res) => {
+  try {
     const { email, otp, purpose, name, phone, deviceId, deviceName } = req.body;
     const cleanEmail = (email || '').trim().toLowerCase();
     const cleanOtp = (otp || '').trim();
