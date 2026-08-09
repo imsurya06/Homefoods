@@ -16,31 +16,43 @@ export async function validateCart(
   pincode: string = '625001',
   couponCode?: string
 ): Promise<ValidationSummary> {
+  const safeItems = Array.isArray(items) ? items : [];
+  const subtotal = safeItems.reduce((sum, item) => sum + (item?.pricePerUnit || 0) * (item?.quantity || 1), 0);
+  const gst = Math.round(subtotal * 0.05);
+  const shippingCharge = subtotal >= 499 || subtotal === 0 ? 0 : 40;
+
+  // Instant 0ms response when no coupon validation is requested
+  if (!couponCode || !couponCode.trim()) {
+    return {
+      subtotal,
+      gst,
+      shippingCharge,
+      discountAmount: 0,
+      grandTotal: subtotal + gst + shippingCharge,
+      appliedCoupon: null,
+      freeShippingThresholdMet: shippingCharge === 0,
+    };
+  }
+
   try {
     const res = await fetchApi<{ success: boolean; summary: ValidationSummary }>('/cart/validate', {
       method: 'POST',
-      body: JSON.stringify({ items, pincode, couponCode }),
+      body: JSON.stringify({ items, pincode, couponCode: couponCode.trim() }),
     });
 
-    if (res.success && res.summary) {
+    if (res && res.success && res.summary) {
       return res.summary;
     }
   } catch (error) {
     console.warn('Backend cart validation failed, computing client-side fallback:', error);
   }
 
-  const safeItems = Array.isArray(items) ? items : [];
-  const subtotal = safeItems.reduce((sum, item) => sum + (item?.pricePerUnit || 0) * (item?.quantity || 1), 0);
-  const gst = Math.round(subtotal * 0.05);
-  const shippingCharge = subtotal >= 499 ? 0 : 40;
-  const grandTotal = subtotal + gst + shippingCharge;
-
   return {
     subtotal,
     gst,
     shippingCharge,
     discountAmount: 0,
-    grandTotal,
+    grandTotal: subtotal + gst + shippingCharge,
     appliedCoupon: null,
     freeShippingThresholdMet: shippingCharge === 0,
   };

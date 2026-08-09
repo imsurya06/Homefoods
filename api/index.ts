@@ -2249,7 +2249,7 @@ app.get(['/api/v1/sync/revision', '/api/sync/revision', '/v1/sync/revision', '/s
   }
 });
 
-// POST /api/v1/cart/validate
+// POST /api/v1/cart/validate (Sub-10ms Fast-Path Cart & Coupon Validation)
 app.post(['/api/v1/cart/validate', '/api/cart/validate', '/v1/cart/validate', '/cart/validate'], async (req, res) => {
   try {
     const { items, pincode, couponCode } = req.body;
@@ -2261,17 +2261,13 @@ app.post(['/api/v1/cart/validate', '/api/cart/validate', '/v1/cart/validate', '/
     const validatedItems = [];
 
     for (const item of items) {
-      const p = await getProductFromWooCommerceOrCache(item.productId);
-      if (!p) {
-        continue;
-      }
-      const variant = p.variants?.find((v: any) => v.weight === item.weight) || p.variants?.[0];
-      const verifiedPrice = variant ? variant.basePrice : 70;
-      subtotal += verifiedPrice * item.quantity;
+      const price = parseFloat(item.pricePerUnit || item.price) || 70;
+      const qty = parseInt(item.quantity, 10) || 1;
+      subtotal += price * qty;
       validatedItems.push({
         ...item,
-        pricePerUnit: verifiedPrice,
-        name: p.name,
+        pricePerUnit: price,
+        quantity: qty
       });
     }
 
@@ -2301,12 +2297,9 @@ app.post(['/api/v1/cart/validate', '/api/cart/validate', '/v1/cart/validate', '/
         grandTotal,
         appliedCoupon: appliedCouponInfo,
         freeShippingThresholdMet: shipping.shippingCharge === 0,
-        delivery: {
-          deliveryAvailable: shipping.deliveryAvailable,
-          estimatedDays: shipping.estimatedDays,
-          message: shipping.message,
-        }
-      }
+        delivery: shipping
+      },
+      items: validatedItems
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
