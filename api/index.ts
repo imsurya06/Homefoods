@@ -586,25 +586,18 @@ async function validateCouponCode(couponCode: string, cartSubtotal: number): Pro
         return { isValid: false, discountAmount: 0, message: 'Coupon discount amount is set to 0 in WooCommerce.' };
       }
 
-      let discountAmount = 0;
-      if (coupon.discount_type === 'percent' || coupon.discount_type === 'percentage') {
-        discountAmount = Math.round(cartSubtotal * (amount / 100));
-      } else {
-        discountAmount = Math.round(amount);
-      }
-
-      return {
-        isValid: true,
-        discountAmount: Math.min(discountAmount, cartSubtotal),
-        message: `Coupon '${coupon.code.toUpperCase()}' applied successfully!`
-      };
-    } else {
-      return { isValid: false, discountAmount: 0, message: 'Invalid, expired, or inapplicable coupon code.' };
-    }
-  } catch (err: any) {
-    console.error('Coupon validation failed:', err.message);
-    return { isValid: false, discountAmount: 0, message: 'Error validating coupon code' };
+  let discountAmount = 0;
+  if (coupon.discount_type === 'percent' || coupon.discount_type === 'percentage') {
+    discountAmount = Math.round(cartSubtotal * (amount / 100));
+  } else {
+    discountAmount = Math.round(amount);
   }
+
+  return {
+    isValid: true,
+    discountAmount: Math.min(discountAmount, cartSubtotal),
+    message: `Coupon '${coupon.code.toUpperCase()}' applied successfully!`
+  };
 }
 
 function validatePincodeAndShipping(pincode: string, subtotal: number): {
@@ -3081,7 +3074,6 @@ app.post(['/api/v1/webhooks/razorpay', '/webhooks/razorpay', '/v1/webhooks/razor
           }
         }
       }
-    }
 
     return res.json({ success: true, message: 'Webhook processed' });
   } catch (error: any) {
