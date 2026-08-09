@@ -3103,15 +3103,34 @@ async function reconcilePendingPayments() {
 // Start automated background payment reconciliation every 60 seconds
 setInterval(reconcilePendingPayments, 60000);
 
-// GET /api/v1/auth/me
-app.get(['/api/v1/auth/me', '/api/auth/me', '/v1/auth/me', '/auth/me'], authenticateToken, async (req, res) => {
+// GET /api/v1/auth/session & /api/v1/auth/me (Real-Time Session Validation)
+app.get([
+  '/api/v1/auth/session', '/api/auth/session', '/v1/auth/session', '/auth/session',
+  '/api/v1/auth/me', '/api/auth/me', '/v1/auth/me', '/auth/me'
+], authenticateToken, async (req, res) => {
   try {
     const { customerId } = res.locals.user;
+    
+    // Bypass cache (bypassCache = true) for 100% real-time WooCommerce database verification
+    const exists = await verifyUserExists(customerId, true);
+    if (!exists) {
+      console.warn(`[Session Guard] Customer #${customerId} deleted from WooCommerce database. Rejecting session validation.`);
+      return res.status(401).json({
+        valid: false,
+        success: false,
+        accountDeleted: true,
+        code: 'USER_DELETED',
+        message: 'Your account no longer exists in our database. Session revoked.',
+      });
+    }
+
     const custRes = await wcFetch(`customers/${customerId}`);
     if (!custRes.ok || !custRes.data) {
       return res.status(401).json({
+        valid: false,
         success: false,
         accountDeleted: true,
+        code: 'USER_DELETED',
         message: 'Account not found or deleted from database.',
       });
     }
@@ -3119,22 +3138,25 @@ app.get(['/api/v1/auth/me', '/api/auth/me', '/v1/auth/me', '/auth/me'], authenti
     const customerUser = custRes.data;
     const fn = customerUser.first_name || '';
     const ln = customerUser.last_name || '';
+    const userObj = {
+      id: customerUser.id,
+      email: customerUser.email,
+      firstName: fn,
+      lastName: ln,
+      displayName: `${fn} ${ln}`.trim() || customerUser.username,
+      phone: customerUser.billing?.phone || '',
+      billing: customerUser.billing,
+      shipping: customerUser.shipping
+    };
 
     return res.json({
+      valid: true,
       success: true,
-      user: {
-        id: customerUser.id,
-        email: customerUser.email,
-        firstName: fn,
-        lastName: ln,
-        displayName: `${fn} ${ln}`.trim() || customerUser.username,
-        phone: customerUser.billing?.phone || '',
-        billing: customerUser.billing,
-        shipping: customerUser.shipping
-      }
+      user: userObj,
+      customer: userObj
     });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ valid: false, success: false, message: error.message });
   }
 });
 

@@ -46,6 +46,7 @@ interface SyncState {
   user: UserProfile | null;
   accessToken: string | null;
   isLoggedIn: boolean;
+  isAuthValidating: boolean;
 
   // Business state
   cartItems: CartItem[];
@@ -95,13 +96,13 @@ interface SyncState {
 
 const getInitialAuth = () => {
   try {
-    const token = localStorage.getItem('hf_auth_token');
+    const token = localStorage.getItem('hf_auth_token') || localStorage.getItem('hf_refresh_token');
     const profile = localStorage.getItem('hf_user_profile');
     if (token && profile) {
-      return { user: JSON.parse(profile), accessToken: token, isLoggedIn: true };
+      return { user: JSON.parse(profile), accessToken: token, isLoggedIn: true, isAuthValidating: true };
     }
   } catch {}
-  return { user: null, accessToken: null, isLoggedIn: false };
+  return { user: null, accessToken: null, isLoggedIn: false, isAuthValidating: false };
 };
 
 const getInitialActiveSession = (): ActiveCheckoutSession | null => {
@@ -202,6 +203,7 @@ export const useSyncStore = create<SyncState>((set) => ({
       user: null,
       accessToken: null,
       isLoggedIn: false,
+      isAuthValidating: false,
       cartItems: [],
       cartRevision: 0,
       activeCheckoutSession: null,

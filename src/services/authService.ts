@@ -1,4 +1,5 @@
 import { fetchApi } from './apiClient';
+import { useSyncStore } from '../store/useSyncStore';
 
 export interface UserProfile {
   id: number;
@@ -137,28 +138,36 @@ export function getSavedUserProfile(): UserProfile | null {
   return null;
 }
 
-export async function fetchCurrentUser(): Promise<UserProfile | null> {
+export async function validateSession(): Promise<{ valid: boolean; user: UserProfile | null }> {
   const token = getSavedToken();
   const refreshToken = localStorage.getItem('hf_refresh_token');
 
-  if (!token && !refreshToken) return null;
+  if (!token && !refreshToken) {
+    return { valid: false, user: null };
+  }
 
   try {
-    const res = await fetchApi<{ success: boolean; user: UserProfile; accountDeleted?: boolean }>('/auth/me');
-    if (res && res.success && res.user) {
+    const res = await fetchApi<{ valid?: boolean; success: boolean; user: UserProfile }>('/auth/session');
+    if (res && (res.valid || res.success) && res.user) {
       localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
-      return res.user;
+      return { valid: true, user: res.user };
     }
   } catch (err: any) {
-    if (err && (err.code === 'ACCOUNT_DELETED' || err.accountDeleted || (err.message && err.message.toLowerCase().includes('deleted')))) {
-      console.log('Account deleted from database. Wiping session...');
+    if (err && (err.status === 401 || err.code === 'USER_DELETED' || err.code === 'ACCOUNT_DELETED' || err.accountDeleted)) {
+      console.warn('[Session Validation] Customer deleted from WooCommerce database. Executing immediate hard logout.');
       logoutCustomer();
-      alert('Your account has been deleted by admin. Please create a new account to continue.');
-      window.location.href = '/';
-      return null;
+      useSyncStore.getState().logout();
+      window.dispatchEvent(new CustomEvent('hf_account_deleted'));
+      return { valid: false, user: null };
     }
   }
-  return getSavedUserProfile();
+
+  return { valid: false, user: null };
+}
+
+export async function fetchCurrentUser(): Promise<UserProfile | null> {
+  const sessionRes = await validateSession();
+  return sessionRes.user;
 }
 
 export function getCachedCustomerOrders(): CustomerOrderHistoryItem[] {
