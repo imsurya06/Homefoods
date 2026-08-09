@@ -32,6 +32,14 @@ const ENCRYPTION_KEY = requireEnv('ENCRYPTION_KEY');
 // WordPress Transients Database Caching Helper functions
 const sharedSecret = 'homefoods_secure_transient_secret_token_2026';
 
+interface OtpSession {
+  otp: string;
+  expiresAt: number;
+  attempts: number;
+}
+const otpCache = new Map<string, OtpSession>();
+const otpSendLimits = new Map<string, { count: number; resetAt: number }>();
+
 async function setOtpInDatabase(email: string, otp: string): Promise<{ success: boolean; message?: string }> {
   // Always store in Node.js in-memory cache as Primary Failsafe
   otpCache.set(email.toLowerCase().trim(), {
@@ -1249,13 +1257,7 @@ const loginSchema = z.object({
   deviceName: z.string().optional()
 });
 
-interface OtpSession {
-  otp: string;
-  expiresAt: number;
-  attempts: number;
-}
-const otpCache = new Map<string, OtpSession>();
-const otpSendLimits = new Map<string, { count: number; resetAt: number }>();
+
 
 async function sendEmailOtp(email: string, otp: string, purpose: 'login' | 'checkout' | 'email_change' | 'forgot_password' = 'forgot_password') {
   const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
