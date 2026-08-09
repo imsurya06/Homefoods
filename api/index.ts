@@ -2962,18 +2962,19 @@ app.post(['/api/v1/webhooks/razorpay', '/webhooks/razorpay', '/v1/webhooks/razor
         const metaList = Array.isArray(order.meta_data) ? order.meta_data : [];
         const isPaymentConfirmed = metaList.some((m: any) => m.key === '_payment_state' && m.value === 'confirmed');
         if (isPaymentConfirmed || ['processing', 'confirmed', 'kitchen', 'completed'].includes(order.status)) {
-          console.log(`[Razorpay Webhook] Order #${order.id} is already in status '${order.status}' / confirmed. Skipping duplicate webhook.`);
-          return res.json({ success: true, message: 'Webhook processed (order already confirmed)' });
+          console.log(`[Razorpay Webhook] Order #${order.id} is already confirmed (_payment_state: confirmed). Returning 200 immediately.`);
+          return res.status(200).json({ success: true, message: 'Already confirmed' });
         }
 
         // 3. Layer 2 Idempotency: Check if transaction ID is already recorded
         if (order.transaction_id === transactionId) {
-          console.log(`[Razorpay Webhook] Transaction ${transactionId} already recorded on Order #${order.id}. Skipping.`);
-          return res.json({ success: true, message: 'Payment already processed' });
+          console.log(`[Razorpay Webhook] Transaction ${transactionId} already recorded on Order #${order.id}. Returning 200.`);
+          return res.status(200).json({ success: true, message: 'Payment already processed' });
         }
 
-        // 4. Update order status to kitchen / processing
-        console.log(`[Razorpay Webhook] Confirming payment for Order #${order.id} (Rzp Order: ${rzpOrderId})...`);
+        // 4. Update order status to kitchen / processing with full audit metadata
+        const confirmedAt = new Date().toISOString();
+        console.log(`[Razorpay Webhook] Confirming payment for Order #${order.id} (Rzp Order: ${rzpOrderId}, Payment: ${transactionId} at ${confirmedAt})...`);
         await wcFetch(`orders/${order.id}`, {
           method: 'PUT',
           body: {
@@ -2984,7 +2985,9 @@ app.post(['/api/v1/webhooks/razorpay', '/webhooks/razorpay', '/v1/webhooks/razor
               { key: '_reservation_expires_at', value: '0' },
               { key: '_payment_verified', value: 'true' },
               { key: '_payment_state', value: 'confirmed' },
-              { key: '_razorpay_payment_id', value: transactionId }
+              { key: '_razorpay_payment_id', value: transactionId },
+              { key: '_razorpay_order_id', value: rzpOrderId },
+              { key: '_payment_confirmed_at', value: confirmedAt }
             ]
           }
         });
@@ -3068,6 +3071,7 @@ async function reconcilePendingPayments() {
           if (capturedPayment) {
             console.log(`[Payment Reconciliation] Auto-confirming WooCommerce Order #${order.id} for captured Razorpay payment ${capturedPayment.id}`);
             
+            const confirmedAt = new Date().toISOString();
             await wcFetch(`orders/${order.id}`, {
               method: 'PUT',
               body: {
@@ -3078,7 +3082,9 @@ async function reconcilePendingPayments() {
                   { key: '_reservation_expires_at', value: '0' },
                   { key: '_payment_verified', value: 'true' },
                   { key: '_payment_state', value: 'confirmed' },
-                  { key: '_razorpay_payment_id', value: capturedPayment.id }
+                  { key: '_razorpay_payment_id', value: capturedPayment.id },
+                  { key: '_razorpay_order_id', value: rzpOrderId },
+                  { key: '_payment_confirmed_at', value: confirmedAt }
                 ]
               }
             });
@@ -3887,16 +3893,23 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
         if (alreadyVerified || ['processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'completed', 'delivered'].includes(currentStatus)) {
           console.log(`[Verify Payment] Order #${wcOrderId} is already paid & verified (Status: ${currentStatus}). Bypassing duplicate status update.`);
         } else {
+          const confirmedAt = new Date().toISOString();
+          const auditMeta = [
+            { key: '_reservation_expires_at', value: '0' },
+            { key: '_payment_verified', value: 'true' },
+            { key: '_payment_state', value: 'confirmed' },
+            { key: '_razorpay_payment_id', value: razorpay_payment_id || `tx_${Date.now()}` },
+            { key: '_razorpay_order_id', value: razorpay_order_id || '' },
+            { key: '_payment_confirmed_at', value: confirmedAt }
+          ];
+
           let wcUpdateRes = await wcFetch(`orders/${wcOrderId}`, {
             method: 'PUT',
             body: {
               set_paid: true,
               status: 'kitchen',
               transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
-              meta_data: [
-                { key: '_reservation_expires_at', value: '0' },
-                { key: '_payment_verified', value: 'true' }
-              ]
+              meta_data: auditMeta
             },
           });
 
@@ -3908,10 +3921,7 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
                 set_paid: true,
                 status: 'processing',
                 transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
-                meta_data: [
-                  { key: '_reservation_expires_at', value: '0' },
-                  { key: '_payment_verified', value: 'true' }
-                ]
+                meta_data: auditMeta
               },
             });
           }
