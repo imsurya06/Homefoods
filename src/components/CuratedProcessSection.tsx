@@ -215,25 +215,26 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
                   return (
                     <div
                       key={product.id}
-                      className="group bg-white rounded-2xl border border-gray-200 p-4 sm:p-6 shadow-xs hover:shadow-xl hover:border-[#95CD1A]/50 transition-all duration-300 flex flex-col sm:flex-row items-center sm:items-start gap-6 text-left"
+                      className="group bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-xs hover:shadow-xl hover:border-[#95CD1A]/50 transition-all duration-300 flex flex-col sm:flex-row items-stretch text-left"
                     >
-                      {/* Product Image */}
+                      {/* Product Image - Full Bleed Covering Parent Card Left */}
                       <div 
                         onClick={() => openProductLightbox(product, 0)}
-                        className="relative w-full sm:w-44 aspect-square rounded-xl overflow-hidden bg-gray-100 shrink-0 border border-gray-100 cursor-pointer"
+                        className="relative w-full sm:w-60 sm:self-stretch min-h-[220px] sm:min-h-full shrink-0 overflow-hidden bg-gray-100 cursor-pointer"
                       >
                         <img
                           src={product.imageUrl}
                           alt={product.name}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />
-                        <span className="absolute top-2 left-2 bg-[#95CD1A] text-white text-[10px] font-black px-2 py-0.5 rounded-md shadow-xs">
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                        <span className="absolute top-3 left-3 bg-[#95CD1A] text-white text-[10px] font-black px-2.5 py-1 rounded-md shadow-xs">
                           Live Product
                         </span>
                       </div>
 
                       {/* Product Info & Controls */}
-                      <div className="flex flex-col justify-between grow w-full space-y-4">
+                      <div className="flex flex-col justify-between grow w-full p-4 sm:p-6 space-y-4">
 
                         <div>
                           <div className="flex items-center justify-between gap-2">
