@@ -410,8 +410,58 @@ async function saveSessionHashes(customerId: string | number, sessions: any[]): 
   }
 }
 
-async function getProductFromWooCommerceOrCache(productId: string): Promise<any | null> {
-  if (cachedProductsResponse && Array.isArray(cachedProductsResponse)) {
+function extractProductVariants(p: any): { weight: string; basePrice: number; regularPrice?: number }[] {
+  const basePrice = parseFloat(p.price || p.regular_price || '70');
+  const regPrice = parseFloat(p.regular_price || p.price || '70');
+  const onSale = p.on_sale === true;
+
+  let options: string[] = [];
+
+  if (Array.isArray(p.attributes) && p.attributes.length > 0) {
+    let matchedAttr = p.attributes.find((a: any) => {
+      const name = (a.name || '').toLowerCase();
+      return name.includes('quantity') || name.includes('weight') || name.includes('pack') || name.includes('size') || name.includes('variant');
+    });
+
+    if (!matchedAttr) {
+      matchedAttr = p.attributes.find((a: any) => (a.variation === true || (Array.isArray(a.options) && a.options.length > 0)));
+    }
+
+    if (matchedAttr && Array.isArray(matchedAttr.options) && matchedAttr.options.length > 0) {
+      options = matchedAttr.options.map((opt: any) => decodeHtmlEntities(String(opt).trim())).filter(Boolean);
+    }
+  }
+
+  if (options.length > 0) {
+    return options.map((opt: string, idx: number) => {
+      const multiplier = idx === 0 ? 1 : idx === 1 ? 1.8 : 3.4;
+      const saleP = Math.round(basePrice * multiplier);
+      const regP = Math.round(regPrice * multiplier);
+      return {
+        weight: opt,
+        basePrice: saleP,
+        regularPrice: onSale && regP > saleP ? regP : undefined,
+      };
+    });
+  }
+
+  if (p.weight) {
+    return [{
+      weight: decodeHtmlEntities(String(p.weight).trim()),
+      basePrice,
+      regularPrice: onSale && regPrice > basePrice ? regPrice : undefined,
+    }];
+  }
+
+  return [{
+    weight: '100gms',
+    basePrice,
+    regularPrice: onSale && regPrice > basePrice ? regPrice : undefined,
+  }];
+}
+
+async function getProductFromWooCommerceOrCache(productId: string): Promise<any> {
+  if (cachedProductsResponse && cachedProductsResponse.length > 0) {
     const found = cachedProductsResponse.find(p => p.id === productId);
     if (found) return found;
   }
@@ -419,19 +469,7 @@ async function getProductFromWooCommerceOrCache(productId: string): Promise<any 
     const res = await wcFetch(`products/${productId}`);
     if (res.ok && res.data) {
       const p = res.data;
-      const basePrice = parseFloat(p.price || p.regular_price || '70');
-      const weightAttr = p.attributes?.find((a: any) => a.name?.toLowerCase() === 'weight')?.options || [];
-      let variants: { weight: string; basePrice: number }[] = [];
-      if (weightAttr.length > 0) {
-        variants = weightAttr.map((opt: string, idx: number) => ({
-          weight: decodeHtmlEntities(opt.trim()),
-          basePrice: idx === 0 ? basePrice : Math.round(basePrice * (idx === 1 ? 1.8 : 3.4)),
-        }));
-      } else if (p.weight) {
-        variants = [{ weight: decodeHtmlEntities(p.weight), basePrice }];
-      } else {
-        variants = [{ weight: '250gms', basePrice }];
-      }
+      const variants = extractProductVariants(p);
       return {
         id: p.id.toString(),
         name: decodeHtmlEntities(p.name),
@@ -1131,37 +1169,7 @@ app.get(['/api/v1/products', '/api/products', '/v1/products', '/products'], asyn
       if (wcRes.ok && Array.isArray(wcRes.data) && wcRes.data.length > 0) {
         formattedProducts = wcRes.data.map((p: any) => {
           const primaryCategory = p.categories && p.categories.length > 0 ? p.categories[0] : {};
-          const basePrice = parseFloat(p.price || p.regular_price || '70');
-          const regPrice = parseFloat(p.regular_price || p.price || '70');
-          const onSale = p.on_sale === true;
-
-          const weightAttr = p.attributes?.find((a: any) => a.name?.toLowerCase() === 'weight')?.options || [];
-          let variants: { weight: string; basePrice: number; regularPrice?: number }[] = [];
-
-          if (weightAttr.length > 0) {
-            variants = weightAttr.map((opt: string, idx: number) => {
-              const multiplier = idx === 0 ? 1 : idx === 1 ? 1.8 : 3.4;
-              const saleP = Math.round(basePrice * multiplier);
-              const regP = Math.round(regPrice * multiplier);
-              return {
-                weight: decodeHtmlEntities(opt.trim()),
-                basePrice: saleP,
-                regularPrice: onSale && regP > saleP ? regP : undefined,
-              };
-            });
-          } else if (p.weight) {
-            variants = [{
-              weight: decodeHtmlEntities(p.weight),
-              basePrice,
-              regularPrice: onSale && regPrice > basePrice ? regPrice : undefined,
-            }];
-          } else {
-            variants = [{
-              weight: '250gms',
-              basePrice,
-              regularPrice: onSale && regPrice > basePrice ? regPrice : undefined,
-            }];
-          }
+          const variants = extractProductVariants(p);
 
           return {
             id: p.id.toString(),

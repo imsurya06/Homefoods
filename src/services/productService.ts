@@ -5,7 +5,9 @@ let memoryCache: Product[] | null = null;
 
 try {
   const saved = localStorage.getItem('hf_live_products_cache');
-  if (saved) {
+  const savedTime = localStorage.getItem('hf_live_products_cache_time');
+  const isExpired = !savedTime || (Date.now() - parseInt(savedTime, 10) > 10 * 60 * 1000); // 10 mins cache
+  if (saved && !isExpired) {
     const parsed = JSON.parse(saved);
     if (Array.isArray(parsed) && parsed.length > 0) {
       memoryCache = parsed;
@@ -17,11 +19,12 @@ export function getCachedProductsSync(): Product[] {
   return memoryCache && memoryCache.length > 0 ? memoryCache : PRODUCTS;
 }
 
-export async function getLiveProducts(category?: string, search?: string): Promise<Product[]> {
+export async function getLiveProducts(category?: string, search?: string, forceRefresh?: boolean): Promise<Product[]> {
   try {
     const params = new URLSearchParams();
     if (category && category !== 'all') params.append('category', category);
     if (search) params.append('search', search);
+    if (forceRefresh) params.append('forceRefresh', 'true');
 
     const query = params.toString() ? `?${params.toString()}` : '';
     const res = await fetchApi<{ success: boolean; data: Product[] }>(`/products${query}`);
@@ -32,6 +35,7 @@ export async function getLiveProducts(category?: string, search?: string): Promi
           memoryCache = res.data;
           try {
             localStorage.setItem('hf_live_products_cache', JSON.stringify(res.data));
+            localStorage.setItem('hf_live_products_cache_time', Date.now().toString());
           } catch {}
         }
       }
