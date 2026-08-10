@@ -1,26 +1,74 @@
 @import "tailwindcss";
 
+/* Inter Professional Number Font Overrides for Digits 0-9, ₹, %, ., ,, +, -, /, x */
 @font-face {
-  font-family: 'NumbersOnlyFont';
-  src: local('Outfit'), url('https://fonts.gstatic.com/s/outfit/v11/QLDnXThqB78A388mDQjp0g.woff2') format('woff2');
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf) format('truetype');
+  unicode-range: U+0030-0039, U+20B9, U+0025, U+002E, U+002C, U+002B, U+002D, U+002F, U+0078, U+0058;
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuI6fMZg.ttf) format('truetype');
+  unicode-range: U+0030-0039, U+20B9, U+0025, U+002E, U+002C, U+002B, U+002D, U+002F, U+0078, U+0058;
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuGKYMZg.ttf) format('truetype');
+  unicode-range: U+0030-0039, U+20B9, U+0025, U+002E, U+002C, U+002B, U+002D, U+002F, U+0078, U+0058;
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf) format('truetype');
+  unicode-range: U+0030-0039, U+20B9, U+0025, U+002E, U+002C, U+002B, U+002D, U+002F, U+0078, U+0058;
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuDyYMZg.ttf) format('truetype');
+  unicode-range: U+0030-0039, U+20B9, U+0025, U+002E, U+002C, U+002B, U+002D, U+002F, U+0078, U+0058;
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuBWYMZg.ttf) format('truetype');
   unicode-range: U+0030-0039, U+20B9, U+0025, U+002E, U+002C, U+002B, U+002D, U+002F, U+0078, U+0058;
 }
 
 @theme {
-  --font-sans: 'NumbersOnlyFont', 'Raleway', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Raleway', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --color-brand: #95CD1A;
-  --color-brand-hover: #7EB30E;
   --color-[#95CD1A]: #95CD1A;
 }
 
 body {
-  font-family: 'NumbersOnlyFont', 'Raleway', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Raleway', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: #FFFFFF;
   color: #1F2937;
 }
 
 .font-serif-headline {
-  font-family: 'NumbersOnlyFont', 'Raleway', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Raleway', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .font-decorative {
