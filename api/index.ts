@@ -3069,14 +3069,14 @@ app.post(['/api/v1/webhooks/razorpay', '/webhooks/razorpay', '/v1/webhooks/razor
           return res.status(200).json({ success: true, message: 'Payment already processed' });
         }
 
-        // 4. Update order status to kitchen / processing with full audit metadata
+        // 4. Update order status to processing with full audit metadata
         const confirmedAt = new Date().toISOString();
         console.log(`[Razorpay Webhook] Confirming payment for Order #${order.id} (Rzp Order: ${rzpOrderId}, Payment: ${transactionId} at ${confirmedAt})...`);
         await wcFetch(`orders/${order.id}`, {
           method: 'PUT',
           body: {
             set_paid: true,
-            status: 'kitchen',
+            status: 'processing',
             transaction_id: transactionId,
             meta_data: [
               { key: '_reservation_expires_at', value: '0' },
@@ -3135,6 +3135,7 @@ app.post(['/api/v1/webhooks/razorpay', '/webhooks/razorpay', '/v1/webhooks/razor
         }
       }
 
+    customerOrdersServerCache.clear();
     return res.json({ success: true, message: 'Webhook processed' });
   } catch (error: any) {
     console.error('[Razorpay Webhook Error]:', error.message);
@@ -3975,51 +3976,34 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
     }
 
     try {
-      const existingOrderRes = await wcFetch(`orders/${wcOrderId}`);
-      if (existingOrderRes.ok && existingOrderRes.data) {
-        const orderData = existingOrderRes.data;
-        const currentStatus = (orderData.status || '').toLowerCase().trim();
-        const metaList = Array.isArray(orderData.meta_data) ? orderData.meta_data : [];
-        const alreadyVerified = metaList.some((m: any) => m.key === '_payment_verified' && m.value === 'true');
+      const confirmedAt = new Date().toISOString();
+      const auditMeta = [
+        { key: '_reservation_expires_at', value: '0' },
+        { key: '_payment_verified', value: 'true' },
+        { key: '_payment_state', value: 'confirmed' },
+        { key: '_razorpay_payment_id', value: razorpay_payment_id || `tx_${Date.now()}` },
+        { key: '_razorpay_order_id', value: razorpay_order_id || '' },
+        { key: '_payment_confirmed_at', value: confirmedAt }
+      ];
 
-        if (alreadyVerified || ['processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'completed', 'delivered'].includes(currentStatus)) {
-          console.log(`[Verify Payment] Order #${wcOrderId} is already paid & verified (Status: ${currentStatus}). Bypassing duplicate status update.`);
-        } else {
-          const confirmedAt = new Date().toISOString();
-          const auditMeta = [
-            { key: '_reservation_expires_at', value: '0' },
-            { key: '_payment_verified', value: 'true' },
-            { key: '_payment_state', value: 'confirmed' },
-            { key: '_razorpay_payment_id', value: razorpay_payment_id || `tx_${Date.now()}` },
-            { key: '_razorpay_order_id', value: razorpay_order_id || '' },
-            { key: '_payment_confirmed_at', value: confirmedAt }
-          ];
+      const wcUpdateRes = await wcFetch(`orders/${wcOrderId}`, {
+        method: 'PUT',
+        body: {
+          set_paid: true,
+          status: 'processing',
+          transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
+          meta_data: auditMeta
+        },
+      });
 
-          let wcUpdateRes = await wcFetch(`orders/${wcOrderId}`, {
-            method: 'PUT',
-            body: {
-              set_paid: true,
-              status: 'kitchen',
-              transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
-              meta_data: auditMeta
-            },
-          });
-
-          if (!wcUpdateRes.ok) {
-            console.warn(`[Verify Payment] WooCommerce rejected status 'kitchen' for Order #${wcOrderId}. Falling back to 'processing'.`);
-            await wcFetch(`orders/${wcOrderId}`, {
-              method: 'PUT',
-              body: {
-                set_paid: true,
-                status: 'processing',
-                transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
-                meta_data: auditMeta
-              },
-            });
-          }
-          console.log(`[Verify Payment] WooCommerce Order #${wcOrderId} status updated to paid.`);
-        }
+      if (wcUpdateRes.ok) {
+        console.log(`[Verify Payment] Successfully updated WooCommerce Order #${wcOrderId} status to 'processing' (paid).`);
+      } else {
+        console.warn(`[Verify Payment Warning] WooCommerce PUT order status returned status code error for #${wcOrderId}`);
       }
+
+      // Invalidate customer orders server cache so /my-orders returns processing status immediately
+      customerOrdersServerCache.clear();
     } catch (err: any) {
       console.error(`[Verify Payment] Failed to update WooCommerce order #${wcOrderId}:`, err.message);
     }

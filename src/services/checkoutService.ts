@@ -144,14 +144,22 @@ export async function processRazorpayCheckout(
             sessionStorage.setItem('hf_guest_orders', JSON.stringify([newOrder, ...existingOrders]));
           } catch (e) {}
 
-          // 1. Instantly trigger onSuccess UI transition (< 100ms)
+          // 1. Clear active checkout session and cart immediately upon successful payment
+          try {
+            useSyncStore.getState().setActiveCheckoutSession(null);
+            localStorage.removeItem('hf_active_checkout_session');
+            localStorage.removeItem('hf_checkout_reservation_expires_at');
+            useSyncStore.getState().clearCart();
+          } catch (e) {}
+
+          // 2. Instantly trigger onSuccess UI transition (< 100ms)
           onSuccess({
             wcOrderId: orderRes.wcOrderId,
             paymentId: response.razorpay_payment_id,
             orderRefCode: orderRes.orderRefCode,
           });
 
-          // 2. Perform background WooCommerce order verification & status update silently
+          // 3. Perform background WooCommerce order verification & status update silently
           fetchApi<{ success: boolean; paymentId: string; orderRefCode?: string }>('/checkout/verify-payment', {
             method: 'POST',
             body: JSON.stringify({
@@ -307,6 +315,13 @@ export async function retryRazorpayPayment(
       image: 'https://www.homemadefoodsmadurai.com/favicon.png',
       handler: async function (response: any) {
         try {
+          try {
+            useSyncStore.getState().setActiveCheckoutSession(null);
+            localStorage.removeItem('hf_active_checkout_session');
+            localStorage.removeItem('hf_checkout_reservation_expires_at');
+            useSyncStore.getState().clearCart();
+          } catch (e) {}
+
           // 1. Instantly trigger onSuccess UI transition (< 100ms)
           onSuccess({
             wcOrderId: order.wcOrderId,
