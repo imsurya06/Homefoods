@@ -1023,9 +1023,13 @@ async function sendOrderTrackingEmail(options: {
     const mailOptions = {
       from: `"Homemade Foods" <${smtpFromEmail}>`,
       to: toEmail,
-      replyTo: 'care.homemadefoods@gmail.com',
-      subject: `🎉 Order Confirmed! Reference: ${orderRefCode}`,
-      text: `Thank you for your order, ${customerName}! Your order reference is: ${orderRefCode}. Track it live here: ${trackingLink}`,
+      replyTo: smtpFromEmail || 'care.homemadefoods@gmail.com',
+      subject: `Order Confirmation - ${orderRefCode} | Homemade Foods`,
+      text: `Hello ${customerName},\n\nThank you for your order with Homemade Foods! Your order reference code is ${orderRefCode}.\n\nYou can track your order live anytime using this link: ${trackingLink}\n\nThank you for shopping with us!`,
+      headers: {
+        'X-Entity-Ref-ID': `order-${wcOrderId}-${Date.now()}`,
+        'X-Auto-Response-Suppress': 'OOF, AutoReply',
+      },
       html: `
         <!DOCTYPE html>
         <html>
@@ -1348,20 +1352,20 @@ async function sendEmailOtp(email: string, otp: string, purpose: 'login' | 'chec
       tls: { rejectUnauthorized: false },
     });
 
-    let subject = `Password Reset Verification Code: ${otp}`;
+    let subject = `${otp} is your verification code - Homemade Foods`;
     let title = 'Password Reset Request';
     let desc = 'We received a request to reset your password. Use the following verification code to complete the process:';
 
     if (purpose === 'login') {
-      subject = `🔐 Verification Code: ${otp} - Homemade Foods`;
+      subject = `${otp} is your login code - Homemade Foods`;
       title = 'Login Verification';
       desc = 'Use the following verification code to sign in to your Homemade Foods account:';
     } else if (purpose === 'checkout') {
-      subject = `🎟️ Checkout Verification Code: ${otp} - Homemade Foods`;
+      subject = `${otp} is your checkout verification code - Homemade Foods`;
       title = 'Checkout Email Verification';
       desc = 'Use the following verification code to verify your email address and proceed with your order:';
     } else if (purpose === 'email_change') {
-      subject = `🔄 Email Change Code: ${otp} - Homemade Foods`;
+      subject = `${otp} is your email verification code - Homemade Foods`;
       title = 'Verify Email Change';
       desc = 'Use the following verification code to confirm changing your account email address:';
     }
@@ -1369,9 +1373,13 @@ async function sendEmailOtp(email: string, otp: string, purpose: 'login' | 'chec
     const mailOptions = {
       from: `"Homemade Foods" <${smtpFromEmail}>`,
       to: email,
-      replyTo: 'care.homemadefoods@gmail.com',
+      replyTo: smtpFromEmail || 'care.homemadefoods@gmail.com',
       subject: subject,
-      text: `Your Homemade Foods verification code is: ${otp}`,
+      text: `Your Homemade Foods verification code is: ${otp}\n\nThis code expires in 10 minutes. Please do not share this code with anyone.`,
+      headers: {
+        'X-Entity-Ref-ID': `otp-${Date.now()}`,
+        'X-Auto-Response-Suppress': 'OOF, AutoReply',
+      },
       html: `
         <!DOCTYPE html>
         <html>
