@@ -1,5 +1,5 @@
 import React from 'react';
-import { PhoneCall, MapPin, Heart, ArrowUpRight, Leaf, Sparkles, Mail } from 'lucide-react';
+import { PhoneCall, MapPin, Heart, ArrowUpRight, Leaf, Droplet, Mail } from 'lucide-react';
 
 interface FooterProps {
   onNavigatePage?: (page: 'home' | 'shop', categoryId?: string) => void;
@@ -57,7 +57,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage, onOpenTrackModal
                 100% Vegetarian
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-gray-200 text-xs font-bold text-gray-700 shadow-2xs">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <Droplet className="w-3.5 h-3.5 text-amber-500 fill-amber-400 shrink-0" />
                 Pure Desi Ghee
               </span>
             </div>
