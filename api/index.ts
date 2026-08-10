@@ -623,21 +623,20 @@ async function validateCouponCode(couponCode: string, cartSubtotal: number): Pro
 
   if (!coupon) {
     try {
-      let res = await wcFetch('coupons', { params: { code: cleanCode } });
-      if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) {
-        res = await wcFetch('coupons', { params: { search: cleanCode } });
-      }
-      if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) {
-        res = await wcFetch('coupons', { params: { per_page: 100 } });
+      let res = await wcFetch('coupons', { params: { search: cleanCode, per_page: 100 } });
+      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        coupon = res.data.find((c: any) => (c.code || '').trim().toLowerCase() === cleanCode);
       }
 
-      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
-        coupon = res.data.find((c: any) => (c.code || '').toLowerCase() === cleanCode) || res.data[0];
-        if ((coupon.code || '').toLowerCase() === cleanCode) {
-          couponServerCache.set(cleanCode, { coupon, timestamp: Date.now() });
-        } else {
-          coupon = null;
+      if (!coupon) {
+        let allRes = await wcFetch('coupons', { params: { per_page: 100 } });
+        if (allRes.ok && Array.isArray(allRes.data) && allRes.data.length > 0) {
+          coupon = allRes.data.find((c: any) => (c.code || '').trim().toLowerCase() === cleanCode);
         }
+      }
+
+      if (coupon) {
+        couponServerCache.set(cleanCode, { coupon, timestamp: Date.now() });
       }
     } catch (err: any) {
       console.error('Coupon lookup failed:', err.message);
