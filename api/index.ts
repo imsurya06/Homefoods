@@ -410,6 +410,15 @@ async function saveSessionHashes(customerId: string | number, sessions: any[]): 
   }
 }
 
+function parseWeightInGrams(str: string): number {
+  const clean = str.toLowerCase().replace(/\s+/g, '');
+  const kgMatch = clean.match(/([\d.]+)\s*kg/);
+  if (kgMatch) return parseFloat(kgMatch[1]) * 1000;
+  const gMatch = clean.match(/([\d.]+)\s*g/);
+  if (gMatch) return parseFloat(gMatch[1]);
+  return parseInt(clean.replace(/\D/g, ''), 10) || 0;
+}
+
 function extractProductVariants(p: any): { weight: string; basePrice: number; regularPrice?: number }[] {
   const basePrice = parseFloat(p.price || p.regular_price || '70');
   const regPrice = parseFloat(p.regular_price || p.price || '70');
@@ -433,10 +442,14 @@ function extractProductVariants(p: any): { weight: string; basePrice: number; re
   }
 
   if (options.length > 0) {
-    return options.map((opt: string, idx: number) => {
-      const multiplier = idx === 0 ? 1 : idx === 1 ? 1.8 : 3.4;
-      const saleP = Math.round(basePrice * multiplier);
-      const regP = Math.round(regPrice * multiplier);
+    options.sort((a, b) => parseWeightInGrams(a) - parseWeightInGrams(b));
+    const firstWeight = parseWeightInGrams(options[0]) || 100;
+
+    return options.map((opt: string) => {
+      const currentWeight = parseWeightInGrams(opt) || firstWeight;
+      const ratio = currentWeight > 0 && firstWeight > 0 ? currentWeight / firstWeight : 1;
+      const saleP = Math.round(basePrice * ratio);
+      const regP = Math.round(regPrice * ratio);
       return {
         weight: opt,
         basePrice: saleP,
@@ -460,6 +473,43 @@ function extractProductVariants(p: any): { weight: string; basePrice: number; re
   }];
 }
 
+async function fetchProductVariationsFromWooCommerce(p: any): Promise<{ weight: string; basePrice: number; regularPrice?: number }[]> {
+  const basePrice = parseFloat(p.price || p.regular_price || '70');
+  const regPrice = parseFloat(p.regular_price || p.price || '70');
+  const onSale = p.on_sale === true;
+
+  if (p.type === 'variable' && Array.isArray(p.variations) && p.variations.length > 0) {
+    try {
+      const varRes = await wcFetch(`products/${p.id}/variations`, { params: { per_page: 50 } });
+      if (varRes.ok && Array.isArray(varRes.data) && varRes.data.length > 0) {
+        const parsedVariants = varRes.data.map((v: any) => {
+          const attr = Array.isArray(v.attributes) && v.attributes.length > 0 ? v.attributes[0] : null;
+          const weightLabel = attr?.option ? decodeHtmlEntities(String(attr.option).trim()) : '100gms';
+          const vPrice = parseFloat(v.price || v.sale_price || v.regular_price || String(basePrice));
+          const vRegPrice = parseFloat(v.regular_price || String(vPrice));
+          const vOnSale = v.on_sale === true || (vRegPrice > vPrice);
+
+          return {
+            weight: weightLabel,
+            basePrice: Math.round(vPrice),
+            regularPrice: vOnSale && vRegPrice > vPrice ? Math.round(vRegPrice) : undefined,
+          };
+        });
+
+        parsedVariants.sort((a, b) => parseWeightInGrams(a.weight) - parseWeightInGrams(b.weight));
+
+        if (parsedVariants.length > 0) {
+          return parsedVariants;
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[Variations Fetch Warning] Failed to fetch variations for product #${p.id}:`, err.message);
+    }
+  }
+
+  return extractProductVariants(p);
+}
+
 async function getProductFromWooCommerceOrCache(productId: string): Promise<any> {
   if (cachedProductsResponse && cachedProductsResponse.length > 0) {
     const found = cachedProductsResponse.find(p => p.id === productId);
@@ -469,7 +519,7 @@ async function getProductFromWooCommerceOrCache(productId: string): Promise<any>
     const res = await wcFetch(`products/${productId}`);
     if (res.ok && res.data) {
       const p = res.data;
-      const variants = extractProductVariants(p);
+      const variants = await fetchProductVariationsFromWooCommerce(p);
       return {
         id: p.id.toString(),
         name: decodeHtmlEntities(p.name),
@@ -1167,34 +1217,36 @@ app.get(['/api/v1/products', '/api/products', '/v1/products', '/products'], asyn
     try {
       const wcRes = await wcFetch('products', { params: { per_page: 100 } });
       if (wcRes.ok && Array.isArray(wcRes.data) && wcRes.data.length > 0) {
-        formattedProducts = wcRes.data.map((p: any) => {
-          const primaryCategory = p.categories && p.categories.length > 0 ? p.categories[0] : {};
-          const variants = extractProductVariants(p);
+        formattedProducts = await Promise.all(
+          wcRes.data.map(async (p: any) => {
+            const primaryCategory = p.categories && p.categories.length > 0 ? p.categories[0] : {};
+            const variants = await fetchProductVariationsFromWooCommerce(p);
 
-          return {
-            id: p.id.toString(),
-            name: decodeHtmlEntities(p.name),
-            slug: p.slug || `prod-${p.id}`,
-            categoryId: primaryCategory.slug || 'general',
-            categoryName: decodeHtmlEntities(primaryCategory.name || 'Traditional Delicacies'),
-            description: decodeHtmlEntities(p.description?.replace(/<[^>]*>?/gm, '') || p.short_description?.replace(/<[^>]*>?/gm, '') || ''),
-            ingredients: decodeHtmlEntities(p.attributes?.find((a: any) => a.name?.toLowerCase() === 'ingredients')?.options?.join(', ') || ''),
-            shelfLife: decodeHtmlEntities(p.attributes?.find((a: any) => a.name?.toLowerCase() === 'shelf life')?.options?.join(', ') || '6 Months'),
-            storageInstructions: 'Store in a cool dry place.',
-            imageUrl: p.images && p.images.length > 0 ? p.images[0].src : 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80',
-            images: p.images && p.images.length > 0
-              ? p.images.map((img: any) => ({
-                  id: img.id,
-                  src: img.src,
-                  alt: decodeHtmlEntities(img.alt || p.name)
-                }))
-              : [{ id: 0, src: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80', alt: decodeHtmlEntities(p.name) }],
-            gstPercentage: 5,
-            isAvailable: p.stock_status === 'instock',
-            stockQuantity: p.stock_quantity ?? 100,
-            variants,
-          };
-        });
+            return {
+              id: p.id.toString(),
+              name: decodeHtmlEntities(p.name),
+              slug: p.slug || `prod-${p.id}`,
+              categoryId: primaryCategory.slug || 'general',
+              categoryName: decodeHtmlEntities(primaryCategory.name || 'Traditional Delicacies'),
+              description: decodeHtmlEntities(p.description?.replace(/<[^>]*>?/gm, '') || p.short_description?.replace(/<[^>]*>?/gm, '') || ''),
+              ingredients: decodeHtmlEntities(p.attributes?.find((a: any) => a.name?.toLowerCase() === 'ingredients')?.options?.join(', ') || ''),
+              shelfLife: decodeHtmlEntities(p.attributes?.find((a: any) => a.name?.toLowerCase() === 'shelf life')?.options?.join(', ') || '6 Months'),
+              storageInstructions: 'Store in a cool dry place.',
+              imageUrl: p.images && p.images.length > 0 ? p.images[0].src : 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80',
+              images: p.images && p.images.length > 0
+                ? p.images.map((img: any) => ({
+                    id: img.id,
+                    src: img.src,
+                    alt: decodeHtmlEntities(img.alt || p.name)
+                  }))
+                : [{ id: 0, src: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80', alt: decodeHtmlEntities(p.name) }],
+              gstPercentage: 5,
+              isAvailable: p.stock_status === 'instock',
+              stockQuantity: p.stock_quantity ?? 100,
+              variants,
+            };
+          })
+        );
       }
     } catch (wcErr: any) {
       console.warn('WooCommerce products fetch warning:', wcErr?.message || wcErr);
