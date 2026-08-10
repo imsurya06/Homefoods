@@ -106,12 +106,6 @@ export function App() {
     updatePollingInterval(isCartOpen ? 'cart' : 'general');
   }, [isCartOpen]);
 
-  // Request browser notification permission if available
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {});
-    }
-  }, []);
 
   // Background Order Status Polling & Real-time Push Notifications
   const prevOrderStatusMapRef = useRef<Map<string, string>>(new Map());
