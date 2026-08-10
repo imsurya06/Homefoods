@@ -2355,7 +2355,8 @@ app.post(['/api/v1/cart/validate', '/api/cart/validate', '/v1/cart/validate', '/
     const validatedItems = [];
 
     for (const item of items) {
-      const price = parseFloat(item.pricePerUnit || item.price) || 70;
+      const pVal = item.pricePerUnit ?? item.price ?? item.selectedVariant?.basePrice ?? 70;
+      const price = typeof pVal === 'number' ? pVal : (parseFloat(pVal) || 70);
       const qty = parseInt(item.quantity, 10) || 1;
       subtotal += price * qty;
       validatedItems.push({
@@ -2371,11 +2372,14 @@ app.post(['/api/v1/cart/validate', '/api/cart/validate', '/v1/cart/validate', '/
     
     let couponDiscount = 0;
     let appliedCouponInfo = null;
+    let couponErrorMsg = null;
     if (couponCode) {
       const couponRes = await validateCouponCode(couponCode, subtotal);
       if (couponRes && couponRes.isValid) {
         couponDiscount = couponRes.discountAmount;
         appliedCouponInfo = { code: couponCode.toUpperCase(), discount: couponDiscount };
+      } else if (couponRes) {
+        couponErrorMsg = couponRes.message || 'Invalid coupon code.';
       }
     }
 
@@ -2390,6 +2394,7 @@ app.post(['/api/v1/cart/validate', '/api/cart/validate', '/v1/cart/validate', '/
         discountAmount: couponDiscount,
         grandTotal,
         appliedCoupon: appliedCouponInfo,
+        couponError: couponErrorMsg,
         freeShippingThresholdMet: shipping.shippingCharge === 0,
         delivery: shipping
       },

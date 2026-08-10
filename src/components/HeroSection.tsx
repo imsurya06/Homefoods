@@ -373,7 +373,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   </div>
                   
                   <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs text-[#95CD1A] font-bold opacity-80 group-hover:opacity-100">
-                    <span>Browse</span>
+                    <span>Explore Products</span>
                     <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform duration-200" />
                   </div>
                 </div>

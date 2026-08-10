@@ -619,7 +619,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       } else {
         setCouponStatus({
           success: false,
-          message: 'Invalid, expired, or inapplicable coupon code.'
+          message: summary.couponError || 'Invalid, expired, or inapplicable coupon code.'
         });
       }
     } catch (err: any) {

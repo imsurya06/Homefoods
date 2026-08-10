@@ -8,6 +8,7 @@ export interface ValidationSummary {
   discountAmount: number;
   grandTotal: number;
   appliedCoupon?: { code: string; discount: number } | null;
+  couponError?: string | null;
   freeShippingThresholdMet: boolean;
 }
 
