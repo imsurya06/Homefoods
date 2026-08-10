@@ -45,6 +45,9 @@ export const Header: React.FC<HeaderProps> = ({
     };
   }, [isUserDropdownOpen]);
 
+  const isProgrammaticScrollRef = useRef(false);
+  const scrollTimerRef = useRef<any>(null);
+
   // Scrollspy logic to automatically activate navbar links based on scroll position
   useEffect(() => {
     if (currentPage === 'shop') {
@@ -53,22 +56,28 @@ export const Header: React.FC<HeaderProps> = ({
     }
 
     const handleScroll = () => {
-      const scrollPosition = window.scrollY + 180;
-      const bodyHeight = document.body.offsetHeight;
+      if (isProgrammaticScrollRef.current) return;
+
+      const headerHeight = 90;
+      const scrollPosition = window.scrollY + headerHeight + 40;
+      const bodyHeight = document.documentElement.scrollHeight;
       const windowHeight = window.innerHeight;
 
       // Bottom of page -> Footer (Contact Us)
-      if (windowHeight + window.scrollY >= bodyHeight - 150) {
+      if (windowHeight + window.scrollY >= bodyHeight - 120) {
         setActiveSection('footer');
         return;
       }
 
+      const footerEl = document.getElementById('footer');
       const processEl = document.getElementById('process');
       const categoriesEl = document.getElementById('categories');
 
-      if (processEl && scrollPosition >= processEl.offsetTop) {
+      if (footerEl && scrollPosition >= footerEl.offsetTop - 40) {
+        setActiveSection('footer');
+      } else if (processEl && scrollPosition >= processEl.offsetTop - 40) {
         setActiveSection('process');
-      } else if (categoriesEl && scrollPosition >= categoriesEl.offsetTop) {
+      } else if (categoriesEl && scrollPosition >= categoriesEl.offsetTop - 40) {
         setActiveSection('categories');
       } else {
         setActiveSection('home');
@@ -96,15 +105,39 @@ export const Header: React.FC<HeaderProps> = ({
 
     if (hashAnchor) {
       setActiveSection(hashAnchor);
-      setTimeout(() => {
+      isProgrammaticScrollRef.current = true;
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+
+      const scrollToElement = () => {
         const el = document.getElementById(hashAnchor);
         if (el) {
-          el.scrollIntoView({ behavior: 'smooth' });
+          const headerHeight = 80;
+          const elementPosition = el.getBoundingClientRect().top + window.scrollY;
+          const offsetPosition = Math.max(0, elementPosition - headerHeight);
+
+          window.scrollTo({
+            top: offsetPosition,
+            behavior: 'smooth'
+          });
         }
-      }, 100);
+      };
+
+      scrollToElement();
+      setTimeout(scrollToElement, 100);
+
+      scrollTimerRef.current = setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 900);
     } else {
       setActiveSection('home');
+      isProgrammaticScrollRef.current = true;
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+
       window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      scrollTimerRef.current = setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 900);
     }
   };
 
