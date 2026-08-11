@@ -164,7 +164,33 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
   }, [productsList]);
 
   const activeCategoryInfo = useMemo(() => {
-    return categoryFilters.find((c) => c.id === selectedCategory) || categoryFilters[0] || { id: 'all', label: 'All Products', count: productsList.length };
+    if (!selectedCategory || selectedCategory === 'all') {
+      return categoryFilters.find((c) => c.id === 'all') || { id: 'all', label: 'All Products', count: productsList.length };
+    }
+
+    const target = selectedCategory.toLowerCase().trim();
+    const targetBase = target.endsWith('s') ? target.slice(0, -1) : target;
+
+    // 1. Direct ID match
+    let match = categoryFilters.find((c) => c.id.toLowerCase().trim() === target);
+    if (match) return match;
+
+    // 2. Substring ID match (e.g. 'thokku' matching 'thokku-varieties')
+    match = categoryFilters.find((c) => {
+      const cId = c.id.toLowerCase().trim();
+      const cBase = cId.endsWith('s') ? cId.slice(0, -1) : cId;
+      return cId.includes(targetBase) || targetBase.includes(cBase);
+    });
+    if (match) return match;
+
+    // 3. Substring Label match
+    match = categoryFilters.find((c) => {
+      const cLabel = c.label.toLowerCase().trim();
+      return cLabel.includes(targetBase);
+    });
+    if (match) return match;
+
+    return categoryFilters[0] || { id: 'all', label: 'All Products', count: productsList.length };
   }, [categoryFilters, selectedCategory, productsList.length]);
 
   return (
@@ -249,7 +275,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
         {/* Mobile-Only Horizontal Category Pills (Scrolly Pill Row) */}
         <div className="md:hidden mb-6 overflow-x-auto hide-scrollbar flex items-center gap-2.5 pb-2">
           {categoryFilters.map((cat) => {
-            const isActive = !searchQuery.trim() && selectedCategory === cat.id;
+            const isActive = !searchQuery.trim() && (selectedCategory === cat.id || activeCategoryInfo.id === cat.id);
             return (
               <button
                 key={cat.id}
@@ -294,7 +320,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
 
               <nav className="flex flex-col space-y-1.5 font-bold text-sm">
                 {categoryFilters.map((cat) => {
-                  const isActive = !searchQuery.trim() && selectedCategory === cat.id;
+                  const isActive = !searchQuery.trim() && (selectedCategory === cat.id || activeCategoryInfo.id === cat.id);
                   return (
                     <button
                       key={cat.id}

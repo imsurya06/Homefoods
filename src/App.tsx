@@ -9,6 +9,7 @@ import { AuthModal } from './components/AuthModal';
 import { LogoutConfirmModal } from './components/LogoutConfirmModal';
 import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { CATEGORY_FILTERS } from './data/products';
+import { CATEGORIES } from './data/categories';
 import { type CartItem } from './data/bestsellers';
 import { fetchCustomerOrders, validateSession, type UserProfile } from './services/authService';
 import { useSyncStore } from './store/useSyncStore';
@@ -178,8 +179,8 @@ export function App() {
   };
 
   const handleCategorySelect = (categoryId: string) => {
-    const catObj = CATEGORY_FILTERS.find((c) => c.id === categoryId);
-    const categoryName = catObj ? catObj.label : categoryId;
+    const catObj = CATEGORY_FILTERS.find((c) => c.id === categoryId) || CATEGORIES.find((c) => c.id === categoryId);
+    const categoryName = catObj ? ((catObj as any).title || (catObj as any).label || categoryId) : categoryId;
     showToast(`Filter applied for "${categoryName}"`);
     handleNavigatePage('shop', categoryId, '');
   };
