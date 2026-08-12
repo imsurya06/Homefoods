@@ -183,7 +183,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [checkoutInfoMsg, setCheckoutInfoMsg] = useState<string | null>(null);
-  const [orderSuccess, setOrderSuccess] = useState<{ wcOrderId: number; paymentId: string; orderRefCode?: string } | null>(null);
+  const [orderSuccess, setOrderSuccess] = useState<{ wcOrderId: number; paymentId: string; orderRefCode?: string } | null>(() => {
+    try {
+      const saved = sessionStorage.getItem('hf_latest_order_success');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [checkoutStep, setCheckoutStep] = useState<'cart' | 'shipping'>('cart');
 
@@ -464,6 +471,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       if (interval) clearInterval(interval);
     };
   }, [resendTimer]);
+
+  // Clear orderSuccess state when user adds new items to shopping cart
+  useEffect(() => {
+    if (items.length > 0 && orderSuccess) {
+      sessionStorage.removeItem('hf_latest_order_success');
+      setOrderSuccess(null);
+    }
+  }, [items.length]);
 
   // Run cart validation instantly on item/pincode changes
   useEffect(() => {
@@ -808,6 +823,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         localStorage.removeItem('hf_pending_order');
         useSyncStore.getState().setActiveCheckoutSession(null);
         setCheckoutStep('cart');
+        sessionStorage.setItem('hf_latest_order_success', JSON.stringify(response));
         setOrderSuccess(response);
 
         // Prepend optimistic confirmed order directly to state
@@ -834,10 +850,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           return [optimisticConfirmedOrder, ...filtered];
         });
 
-        // Switch active tab to 'orders' tab automatically
-        sessionStorage.setItem('hf_redirect_tab', 'orders');
-        setActiveTab('orders');
-        setOrdersSubTab('active');
+        // Show confirmation view on Shopping Cart tab
+        setActiveTab('cart');
+        setCheckoutStep('cart');
         if (response && response.wcOrderId) {
           setExpandedOrderId(response.wcOrderId);
         }
@@ -1089,45 +1104,34 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </div>
 
                   <div className="pt-2 space-y-2.5">
-                    {isLoggedIn ? (
-                      <>
-                        <button
-                          onClick={() => {
-                            if (orderSuccess && orderSuccess.wcOrderId) {
-                              setExpandedOrderId(orderSuccess.wcOrderId);
-                            }
-                            setActiveTab('orders');
-                            setOrderSuccess(null);
-                          }}
-                          className="w-full py-3.5 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          <Package className="w-4 h-4 text-white" />
-                          <span>View My Orders</span>
-                        </button>
+                    <button
+                      onClick={() => {
+                        if (orderSuccess && orderSuccess.wcOrderId) {
+                          setExpandedOrderId(orderSuccess.wcOrderId);
+                        }
+                        sessionStorage.removeItem('hf_latest_order_success');
+                        setOrderSuccess(null);
+                        setActiveTab('orders');
+                        setOrdersSubTab('active');
+                      }}
+                      className="w-full py-3.5 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Package className="w-4.5 h-4.5 text-white" />
+                      <span>View Order Status & Tracking</span>
+                    </button>
 
-                        <button
-                          onClick={() => {
-                            setOrderSuccess(null);
-                            onClose();
-                            if (onExploreShop) onExploreShop();
-                          }}
-                          className="w-full py-3 border border-gray-200 hover:bg-gray-50 text-gray-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer"
-                        >
-                          Continue Shopping
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setOrderSuccess(null);
-                          onClose();
-                          if (onExploreShop) onExploreShop();
-                        }}
-                        className="w-full py-3.5 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        Continue Shopping
-                      </button>
-                    )}
+                    <button
+                      onClick={() => {
+                        sessionStorage.removeItem('hf_latest_order_success');
+                        setOrderSuccess(null);
+                        onClose();
+                        if (onExploreShop) onExploreShop();
+                      }}
+                      className="w-full py-3 border border-gray-200 hover:bg-gray-50 text-gray-700 font-extrabold text-xs sm:text-sm rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <span>Continue Shopping</span>
+                      <ArrowRight className="w-4 h-4 text-gray-500" />
+                    </button>
                   </div>
                 </div>
               ) : items.length === 0 ? (
