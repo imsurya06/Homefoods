@@ -1246,6 +1246,7 @@ app.get(['/api/v1/products', '/api/products', '/v1/products', '/products'], asyn
               gstPercentage: 5,
               isAvailable: p.stock_status === 'instock',
               stockQuantity: p.stock_quantity ?? 100,
+              isBestseller: !!p.featured || (Array.isArray(p.categories) && p.categories.some((c: any) => c.slug === 'bestsellers')),
               variants,
             };
           })

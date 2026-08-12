@@ -24,6 +24,7 @@ export interface Product {
   gstPercentage: number;
   isAvailable: boolean;
   stockQuantity?: number;
+  isBestseller?: boolean;
   variants: ProductVariant[];
   images?: ProductImage[];
 }

@@ -12,9 +12,19 @@ interface CuratedProcessSectionProps {
 }
 
 export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ onAddToCart, onOrderNow }) => {
+  const pickBestsellers = (list: Product[]) => {
+    const starred = list.filter((p) => p.isBestseller);
+    if (starred.length >= 3) {
+      return starred.slice(0, 3);
+    }
+    const nonStarred = list.filter((p) => !p.isBestseller);
+    return [...starred, ...nonStarred].slice(0, 3);
+  };
+
   const [liveProducts, setLiveProducts] = useState<Product[]>(() => {
     const cached = getCachedProductsSync();
-    return cached && cached.length > 0 ? cached.slice(0, 3) : PRODUCTS.slice(0, 3);
+    const source = cached && cached.length > 0 ? cached : PRODUCTS;
+    return pickBestsellers(source);
   });
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
   const [lightboxState, setLightboxState] = useState<{
@@ -56,7 +66,9 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
 
   useEffect(() => {
     getLiveProducts().then((data) => {
-      if (data && data.length > 0) setLiveProducts(data.slice(0, 3));
+      if (data && data.length > 0) {
+        setLiveProducts(pickBestsellers(data));
+      }
     });
   }, []);
 
