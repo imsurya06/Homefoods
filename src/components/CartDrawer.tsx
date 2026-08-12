@@ -113,7 +113,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   // Sync activeTab when initialTab or isOpen changes
   useEffect(() => {
     if (isOpen) {
-      setActiveTab(initialTab);
+      const redirectTab = sessionStorage.getItem('hf_redirect_tab');
+      if (redirectTab === 'orders') {
+        setActiveTab('orders');
+        sessionStorage.removeItem('hf_redirect_tab');
+      } else {
+        setActiveTab(initialTab);
+      }
     }
   }, [initialTab, isOpen]);
 
@@ -309,6 +315,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       setIsProcessing(false);
       removeLocalPendingOrder(wcOrderId);
       setCheckoutSuccessMsg(`Order #${wcOrderId} has already been paid and confirmed!`);
+      setOrdersRefreshTrigger((prev) => prev + 1);
+      return;
+    }
+
+    if (!retryDetails || !(retryDetails as any).success) {
+      setIsProcessing(false);
+      useSyncStore.getState().setActiveCheckoutSession(null);
+      localStorage.removeItem('hf_active_checkout_session');
+      localStorage.removeItem('hf_pending_order');
+      localStorage.removeItem(`hf_pending_reservation_${wcOrderId}`);
+      setOrders((prev) => prev.filter((o) => o.id !== wcOrderId && o.id?.toString() !== wcOrderId?.toString()));
+      setCheckoutError(`Order #${wcOrderId} is no longer active or has been removed from our system.`);
       setOrdersRefreshTrigger((prev) => prev + 1);
       return;
     }
@@ -563,6 +581,22 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             if (Array.isArray(remoteOrders)) {
               const activeOrders = remoteOrders.filter((o) => o.status !== 'trash');
               setOrders(activeOrders);
+
+              // Auto-purge activeCheckoutSession if deleted from WooCommerce database
+              const activeSess = useSyncStore.getState().activeCheckoutSession;
+              if (activeSess && activeSess.wcOrderId) {
+                const existsInRemote = activeOrders.some((o: any) =>
+                  String(o.id) === String(activeSess.wcOrderId) ||
+                  String((o as any).wcOrderId) === String(activeSess.wcOrderId) ||
+                  String(o.orderRefCode) === String(activeSess.orderRefCode)
+                );
+                if (!existsInRemote) {
+                  console.log(`[Auto Purge] Pending order #${activeSess.wcOrderId} was deleted from database. Purging activeCheckoutSession.`);
+                  useSyncStore.getState().setActiveCheckoutSession(null);
+                  localStorage.removeItem('hf_active_checkout_session');
+                  localStorage.removeItem('hf_pending_order');
+                }
+              }
             }
           })
           .catch((err) => {
@@ -801,6 +835,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         });
 
         // Switch active tab to 'orders' tab automatically
+        sessionStorage.setItem('hf_redirect_tab', 'orders');
         setActiveTab('orders');
         setOrdersSubTab('active');
         if (response && response.wcOrderId) {
