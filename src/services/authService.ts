@@ -182,18 +182,43 @@ export async function fetchCustomerOrders(): Promise<CustomerOrderHistoryItem[]>
   const token = getSavedToken();
   if (!token) return [];
 
+  // Retrieve order IDs confirmed via payment in the active session
+  let confirmedIds: string[] = [];
+  try {
+    confirmedIds = JSON.parse(sessionStorage.getItem('hf_confirmed_order_ids') || '[]');
+  } catch {}
+
+  const mapConfirmed = (orders: CustomerOrderHistoryItem[]) => {
+    if (confirmedIds.length === 0 || !Array.isArray(orders)) return orders;
+    return orders.map((ord) => {
+      const isConfirmed = confirmedIds.some(
+        (cid) => String(cid) === String(ord.id) || String(cid) === String((ord as any).wcOrderId)
+      );
+      if (isConfirmed) {
+        return {
+          ...ord,
+          status: 'processing',
+          paymentState: 'confirmed',
+          statusText: 'Order Confirmed (Kitchen Processing)'
+        };
+      }
+      return ord;
+    });
+  };
+
   try {
     const res = await fetchApi<{ success: boolean; data: CustomerOrderHistoryItem[] }>('/orders/me');
     if (res && res.success && Array.isArray(res.data)) {
+      const sanitized = mapConfirmed(res.data);
       try {
-        localStorage.setItem('hf_cached_customer_orders', JSON.stringify(res.data));
+        localStorage.setItem('hf_cached_customer_orders', JSON.stringify(sanitized));
       } catch {}
-      return res.data;
+      return sanitized;
     }
   } catch (err: any) {
     console.warn('Fetch customer orders warning:', err);
   }
-  return getCachedCustomerOrders();
+  return mapConfirmed(getCachedCustomerOrders());
 }
 
 export function logoutCustomer() {

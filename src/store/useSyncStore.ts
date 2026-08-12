@@ -99,7 +99,7 @@ const getInitialAuth = () => {
     const token = localStorage.getItem('hf_auth_token') || localStorage.getItem('hf_refresh_token');
     const profile = localStorage.getItem('hf_user_profile');
     if (token && profile) {
-      return { user: JSON.parse(profile), accessToken: token, isLoggedIn: true, isAuthValidating: true };
+      return { user: JSON.parse(profile), accessToken: token, isLoggedIn: true, isAuthValidating: false };
     }
   } catch {}
   return { user: null, accessToken: null, isLoggedIn: false, isAuthValidating: false };

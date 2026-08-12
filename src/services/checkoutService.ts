@@ -144,7 +144,17 @@ export async function processRazorpayCheckout(
             sessionStorage.setItem('hf_guest_orders', JSON.stringify([newOrder, ...existingOrders]));
           } catch (e) {}
 
-          // 1. Clear active checkout session and cart immediately upon successful payment
+          // 1. Store order ID in sessionStorage as confirmed immediately
+          try {
+            const existing = JSON.parse(sessionStorage.getItem('hf_confirmed_order_ids') || '[]');
+            const strId = String(orderRes.wcOrderId);
+            if (!existing.includes(strId)) {
+              existing.push(strId);
+              sessionStorage.setItem('hf_confirmed_order_ids', JSON.stringify(existing));
+            }
+          } catch {}
+
+          // 2. Clear active checkout session and cart immediately upon successful payment
           try {
             useSyncStore.getState().setActiveCheckoutSession(null);
             localStorage.removeItem('hf_active_checkout_session');
@@ -152,38 +162,41 @@ export async function processRazorpayCheckout(
             useSyncStore.getState().clearCart();
           } catch (e) {}
 
-          // 2. Instantly trigger onSuccess UI transition (< 100ms)
-          onSuccess({
-            wcOrderId: orderRes.wcOrderId,
-            paymentId: response.razorpay_payment_id,
-            orderRefCode: orderRes.orderRefCode,
-          });
+          // 3. Await backend verification so WooCommerce order status is updated to processing FIRST
+          try {
+            const verifyRes = await fetchApi<{ success: boolean; accessToken?: string; refreshToken?: string; user?: any }>('/checkout/verify-payment', {
+              method: 'POST',
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                wcOrderId: orderRes.wcOrderId,
+                orderRefCode: orderRes.orderRefCode,
+                customerEmail: payload.customerDetails.email,
+                customerName: payload.customerDetails.name,
+                totalAmount: orderRes.amount || (orderRes.amountInPaise ? orderRes.amountInPaise / 100 : 0),
+                items: payload.items,
+                shippingAddress: `${payload.shippingAddress.address}, ${payload.shippingAddress.city} - ${payload.shippingAddress.pincode}`,
+                phone: payload.customerDetails.phone,
+              }),
+            });
 
-          // 3. Perform background WooCommerce order verification & status update silently
-          fetchApi<{ success: boolean; paymentId: string; orderRefCode?: string }>('/checkout/verify-payment', {
-            method: 'POST',
-            body: JSON.stringify({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              wcOrderId: orderRes.wcOrderId,
-              orderRefCode: orderRes.orderRefCode,
-              customerEmail: payload.customerDetails.email,
-              customerName: payload.customerDetails.name,
-              totalAmount: orderRes.amount || (orderRes.amountInPaise ? orderRes.amountInPaise / 100 : 0),
-              items: payload.items,
-              shippingAddress: `${payload.shippingAddress.address}, ${payload.shippingAddress.city} - ${payload.shippingAddress.pincode}`,
-              phone: payload.customerDetails.phone,
-            }),
-          }).then((verifyRes: any) => {
             if (verifyRes && verifyRes.success) {
               if (verifyRes.accessToken && verifyRes.refreshToken && verifyRes.user) {
                 useSyncStore.getState().login(verifyRes.user, verifyRes.accessToken, verifyRes.refreshToken);
               }
-              window.dispatchEvent(new Event('hf_orders_updated'));
             }
-          }).catch((err) => {
-            console.warn('[Background Verification Notice]:', err);
+          } catch (err: any) {
+            console.warn('[Verification Notice]:', err);
+          }
+
+          window.dispatchEvent(new Event('hf_orders_updated'));
+
+          // 4. Trigger onSuccess UI transition AFTER WooCommerce status is confirmed
+          onSuccess({
+            wcOrderId: orderRes.wcOrderId,
+            paymentId: response.razorpay_payment_id,
+            orderRefCode: orderRes.orderRefCode,
           });
         } catch (err: any) {
           console.warn('[Payment Handler Notice]:', err);
@@ -322,38 +335,59 @@ export async function retryRazorpayPayment(
             useSyncStore.getState().clearCart();
           } catch (e) {}
 
-          // 1. Instantly trigger onSuccess UI transition (< 100ms)
-          onSuccess({
-            wcOrderId: order.wcOrderId,
-            paymentId: response.razorpay_payment_id,
-            orderRefCode: displayOrderCode,
-          });
+          // 1. Store order ID in sessionStorage as confirmed immediately
+          try {
+            const existing = JSON.parse(sessionStorage.getItem('hf_confirmed_order_ids') || '[]');
+            const strId = String(order.wcOrderId);
+            if (!existing.includes(strId)) {
+              existing.push(strId);
+              sessionStorage.setItem('hf_confirmed_order_ids', JSON.stringify(existing));
+            }
+          } catch {}
 
-          // 2. Perform background verification & WooCommerce order update silently
-          fetchApi<{ success: boolean; orderRefCode?: string }>('/checkout/verify-payment', {
-            method: 'POST',
-            body: JSON.stringify({
-              razorpay_order_id: order.razorpayOrderId,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              wcOrderId: order.wcOrderId,
-              orderRefCode: displayOrderCode,
-              customerEmail: order.customerEmail || '',
-              customerName: order.customerName || 'Valued Customer',
-              totalAmount: order.amountInPaise / 100,
-              items: order.items || [],
-              shippingAddress: order.shippingAddress || '',
-              phone: order.phone || '',
-            }),
-          }).then((verifyRes) => {
+          // 2. Clear active checkout session and cart
+          try {
+            useSyncStore.getState().setActiveCheckoutSession(null);
+            localStorage.removeItem('hf_active_checkout_session');
+            localStorage.removeItem('hf_checkout_reservation_expires_at');
+            useSyncStore.getState().clearCart();
+          } catch (e) {}
+
+          // 3. Await backend verification FIRST so WooCommerce order status is updated to processing
+          try {
+            const verifyRes = await fetchApi<{ success: boolean; orderRefCode?: string }>('/checkout/verify-payment', {
+              method: 'POST',
+              body: JSON.stringify({
+                razorpay_order_id: order.razorpayOrderId,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                wcOrderId: order.wcOrderId,
+                orderRefCode: displayOrderCode,
+                customerEmail: order.customerEmail || '',
+                customerName: order.customerName || 'Valued Customer',
+                totalAmount: order.amountInPaise / 100,
+                items: order.items || [],
+                shippingAddress: order.shippingAddress || '',
+                phone: order.phone || '',
+              }),
+            });
+
             if (verifyRes && verifyRes.success) {
               if ((verifyRes as any).accessToken && (verifyRes as any).refreshToken && (verifyRes as any).user) {
                 useSyncStore.getState().login((verifyRes as any).user, (verifyRes as any).accessToken, (verifyRes as any).refreshToken);
               }
-              window.dispatchEvent(new Event('hf_orders_updated'));
             }
-          }).catch((err) => {
-            console.warn('[Background Retry Verification Notice]:', err);
+          } catch (err: any) {
+            console.warn('[Retry Verification Notice]:', err);
+          }
+
+          window.dispatchEvent(new Event('hf_orders_updated'));
+
+          // 4. Trigger onSuccess UI transition AFTER status update is completed
+          onSuccess({
+            wcOrderId: order.wcOrderId,
+            paymentId: response.razorpay_payment_id,
+            orderRefCode: displayOrderCode,
           });
         } catch (err: any) {
           console.warn('[Retry Payment Handler Notice]:', err);

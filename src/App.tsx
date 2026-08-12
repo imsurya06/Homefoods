@@ -24,7 +24,6 @@ export function App() {
   // Read state from Zustand store
   const user = useSyncStore((state) => state.user);
   const isLoggedIn = useSyncStore((state) => state.isLoggedIn);
-  const isAuthValidating = useSyncStore((state) => state.isAuthValidating);
   const cartItems = useSyncStore((state) => state.cartItems);
   const cartRevision = useSyncStore((state) => state.cartRevision);
 
@@ -34,27 +33,31 @@ export function App() {
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [cartDrawerInitialTab, setCartDrawerInitialTab] = useState<'cart' | 'orders'>('cart');
 
-  // Initialize Sync Manager, Real-Time Session Validation, and Adaptive Polling
+  // Initialize Sync Manager, Background Session Revalidation, and Adaptive Polling
   useEffect(() => {
     initSyncManager();
     updatePollingInterval('general');
 
     const hasToken = localStorage.getItem('hf_auth_token') || localStorage.getItem('hf_refresh_token');
     if (hasToken) {
-      useSyncStore.setState({ isAuthValidating: true });
-      validateSession()
-        .then((res) => {
-          if (res.valid && res.user) {
-            useSyncStore.setState({ user: res.user, isLoggedIn: true, isAuthValidating: false });
-          } else {
-            useSyncStore.getState().logout();
-            useSyncStore.setState({ isAuthValidating: false });
-          }
-        })
-        .catch(() => {
+      // Parallel background session revalidation & bootstrap sync without blocking instant UI restore
+      Promise.all([
+        validateSession().catch(() => null),
+        bootstrapSync().catch(() => null)
+      ]).then(([res]) => {
+        if (res && res.valid && res.user) {
+          useSyncStore.setState({ user: res.user, isLoggedIn: true, isAuthValidating: false });
+          localStorage.setItem('hf_user_profile', JSON.stringify(res.user));
+        } else if (res && res.valid === false) {
+          // Explicit session invalidation (401 / account deleted)
           useSyncStore.getState().logout();
           useSyncStore.setState({ isAuthValidating: false });
-        });
+        } else {
+          useSyncStore.setState({ isAuthValidating: false });
+        }
+      }).catch(() => {
+        useSyncStore.setState({ isAuthValidating: false });
+      });
     } else {
       useSyncStore.setState({ isAuthValidating: false });
     }
@@ -403,7 +406,7 @@ export function App() {
           setCartDrawerInitialTab('orders');
           setIsCartOpen(true);
         }}
-        user={isAuthValidating ? null : user}
+        user={user}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onLogout={() => setIsLogoutConfirmOpen(true)}
       />
