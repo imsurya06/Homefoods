@@ -862,9 +862,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           cartSnapshot: [...(reservedItems || items)],
         });
 
-        // Enforce Single Source of Truth: Empty active cart immediately when pending reservation is created
-        useSyncStore.getState().clearCart();
-        if (typeof onClearCart === 'function') onClearCart();
+        // Keep items in cart until payment succeeds. Cart is cleared only on payment completion.
         setCouponCode('');
         setCouponStatus(null);
       }
@@ -1522,45 +1520,61 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       const displayList = Array.isArray(orders) ? [...orders] : [];
 
                       if (activeCheckoutSession && activeCheckoutSession.reservationExpiresAt > now) {
-                        const sessionOrder = {
-                          id: activeCheckoutSession.wcOrderId,
-                          orderRefCode: activeCheckoutSession.orderRefCode,
-                          status: 'pending',
-                          statusLabel: 'Payment Pending',
-                          stage: 1,
-                          total: (activeCheckoutSession.amountInPaise / 100).toFixed(2),
-                          currency: '₹',
-                          dateCreated: new Date().toISOString(),
-                          items: activeCheckoutSession.cartSnapshot || [],
-                          shippingAddress: activeCheckoutSession.shippingAddress || '',
-                          razorpayOrderId: activeCheckoutSession.razorpayOrderId,
-                          amountInPaise: activeCheckoutSession.amountInPaise,
-                          keyId: activeCheckoutSession.keyId,
-                          expiresAt: activeCheckoutSession.reservationExpiresAt,
-                        };
                         const sessWcId = activeCheckoutSession.wcOrderId?.toString();
                         const sessRefCode = activeCheckoutSession.orderRefCode;
 
-                        const alreadyExists = displayList.some((o: any) => {
-                          const oIdStr = o.id?.toString();
-                          const oWcIdStr = o.wcOrderId?.toString();
-                          const oRefStr = o.orderRefCode?.toString();
-                          const isMatch = (
-                            (sessWcId && (oIdStr === sessWcId || oWcIdStr === sessWcId)) ||
-                            (sessRefCode && (oRefStr === sessRefCode || oIdStr === sessRefCode))
-                          );
-                          const isPaidStatus = ['processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'completed', 'delivered'].includes((o.status || '').toLowerCase());
-                          if (isMatch && isPaidStatus) {
-                            setTimeout(() => {
-                              useSyncStore.getState().setActiveCheckoutSession(null);
-                              localStorage.removeItem('hf_active_checkout_session');
-                            }, 0);
-                          }
-                          return isMatch;
-                        });
+                        let confirmedIds: string[] = [];
+                        try {
+                          confirmedIds = JSON.parse(sessionStorage.getItem('hf_confirmed_order_ids') || '[]');
+                        } catch {}
 
-                        if (!alreadyExists) {
-                          displayList.unshift(sessionOrder);
+                        const isConfirmedInSession = (sessWcId && confirmedIds.includes(sessWcId)) ||
+                          (sessRefCode && confirmedIds.includes(sessRefCode));
+
+                        if (isConfirmedInSession) {
+                          setTimeout(() => {
+                            useSyncStore.getState().setActiveCheckoutSession(null);
+                            localStorage.removeItem('hf_active_checkout_session');
+                          }, 0);
+                        } else {
+                          const sessionOrder = {
+                            id: activeCheckoutSession.wcOrderId,
+                            orderRefCode: activeCheckoutSession.orderRefCode,
+                            status: 'pending',
+                            statusLabel: 'Payment Pending',
+                            stage: 1,
+                            total: (activeCheckoutSession.amountInPaise / 100).toFixed(2),
+                            currency: '₹',
+                            dateCreated: new Date().toISOString(),
+                            items: activeCheckoutSession.cartSnapshot || [],
+                            shippingAddress: activeCheckoutSession.shippingAddress || '',
+                            razorpayOrderId: activeCheckoutSession.razorpayOrderId,
+                            amountInPaise: activeCheckoutSession.amountInPaise,
+                            keyId: activeCheckoutSession.keyId,
+                            expiresAt: activeCheckoutSession.reservationExpiresAt,
+                          };
+
+                          const alreadyExists = displayList.some((o: any) => {
+                            const oIdStr = o.id?.toString();
+                            const oWcIdStr = o.wcOrderId?.toString();
+                            const oRefStr = o.orderRefCode?.toString();
+                            const isMatch = (
+                              (sessWcId && (oIdStr === sessWcId || oWcIdStr === sessWcId)) ||
+                              (sessRefCode && (oRefStr === sessRefCode || oIdStr === sessRefCode))
+                            );
+                            const isPaidStatus = ['processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'completed', 'delivered'].includes((o.status || '').toLowerCase());
+                            if (isMatch && isPaidStatus) {
+                              setTimeout(() => {
+                                useSyncStore.getState().setActiveCheckoutSession(null);
+                                localStorage.removeItem('hf_active_checkout_session');
+                              }, 0);
+                            }
+                            return isMatch;
+                          });
+
+                          if (!alreadyExists) {
+                            displayList.unshift(sessionOrder);
+                          }
                         }
                       }
 
