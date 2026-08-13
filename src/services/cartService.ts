@@ -19,8 +19,8 @@ export async function validateCart(
 ): Promise<ValidationSummary> {
   const safeItems = Array.isArray(items) ? items : [];
   const subtotal = safeItems.reduce((sum, item) => sum + (item?.pricePerUnit || 0) * (item?.quantity || 1), 0);
-  const gst = Math.round(subtotal * 0.05);
-  const shippingCharge = subtotal >= 499 || subtotal === 0 ? 0 : 40;
+  const gst = Math.round(subtotal - (subtotal / 1.05)); // Included GST
+  const shippingCharge = (subtotal >= 499 || subtotal === 0) ? 0 : 40;
 
   // Instant 0ms response when no coupon validation is requested
   if (!couponCode || !couponCode.trim()) {
@@ -29,7 +29,7 @@ export async function validateCart(
       gst,
       shippingCharge,
       discountAmount: 0,
-      grandTotal: subtotal + gst + shippingCharge,
+      grandTotal: subtotal + shippingCharge,
       appliedCoupon: null,
       freeShippingThresholdMet: shippingCharge === 0,
     };
@@ -53,7 +53,7 @@ export async function validateCart(
     gst,
     shippingCharge,
     discountAmount: 0,
-    grandTotal: subtotal + gst + shippingCharge,
+    grandTotal: subtotal + shippingCharge,
     appliedCoupon: null,
     freeShippingThresholdMet: shippingCharge === 0,
   };

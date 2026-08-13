@@ -106,6 +106,20 @@ export async function processRazorpayCheckout(
       });
     }
 
+    // Pre-checkout Pricing Integrity Checksum Guard
+    if (orderRes && orderRes.amountInPaise) {
+      const backendRupees = Math.round(orderRes.amountInPaise / 100);
+      const safeItems = Array.isArray(payload.items) ? payload.items : [];
+      const subtotal = safeItems.reduce((s, i) => s + (i?.pricePerUnit || 0) * (i?.quantity || 1), 0);
+      const expectedRupees = subtotal + (subtotal >= 499 || subtotal === 0 ? 0 : 40);
+
+      if (Math.abs(expectedRupees - backendRupees) > 1) {
+        console.error(`[Pricing Checksum Discrepancy] Frontend Cart Expected: ₹${expectedRupees} | Backend Razorpay Total: ₹${backendRupees}`);
+      } else {
+        console.log(`[Pricing Integrity Verified] Frontend Cart: ₹${expectedRupees} === Backend Razorpay: ₹${backendRupees}`);
+      }
+    }
+
     // 3. Open Razorpay Modal
     const razorpayOptions: any = {
       key: orderRes.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E',

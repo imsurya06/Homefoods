@@ -2367,10 +2367,10 @@ app.post(['/api/v1/cart/validate', '/api/cart/validate', '/v1/cart/validate', '/
       });
     }
 
-    const gst = Math.round(subtotal * 0.05);
     const pincodeVal = pincode ? pincode.toString() : '625001';
     const shipping = validatePincodeAndShipping(pincodeVal, subtotal);
-    
+    const shippingCharge = subtotal >= 499 || subtotal === 0 ? 0 : shipping.shippingCharge;
+
     let couponDiscount = 0;
     let appliedCouponInfo = null;
     let couponErrorMsg = null;
@@ -2384,7 +2384,9 @@ app.post(['/api/v1/cart/validate', '/api/cart/validate', '/v1/cart/validate', '/
       }
     }
 
-    const grandTotal = Math.max(0, subtotal - couponDiscount + gst + shipping.shippingCharge);
+    const netSubtotalAfterDiscount = Math.max(0, subtotal - couponDiscount);
+    const gst = Math.round(netSubtotalAfterDiscount - (netSubtotalAfterDiscount / 1.05));
+    const grandTotal = Math.max(0, netSubtotalAfterDiscount + shippingCharge);
 
     return res.json({
       success: true,
@@ -3624,12 +3626,12 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       });
     }
 
-    const gst = Math.round(subtotal * 0.05);
     const pincodeVal = (shippingAddress?.pincode || billingAddress?.pincode || '625001').toString();
     const shipping = validatePincodeAndShipping(pincodeVal, subtotal);
     if (!shipping.isValid) {
       return res.status(400).json({ success: false, message: `Delivery unserviceable: ${shipping.message}` });
     }
+    const shippingCharge = subtotal >= 499 || subtotal === 0 ? 0 : shipping.shippingCharge;
 
     let couponDiscount = 0;
     if (couponCode) {
@@ -3639,7 +3641,9 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       }
     }
 
-    let totalAmountInRupees = Math.max(0, subtotal - couponDiscount + gst + shipping.shippingCharge);
+    const netSubtotalAfterDiscount = Math.max(0, subtotal - couponDiscount);
+    const gst = Math.round(netSubtotalAfterDiscount - (netSubtotalAfterDiscount / 1.05));
+    let totalAmountInRupees = Math.max(0, netSubtotalAfterDiscount + shippingCharge);
     const amountInPaise = Math.round(totalAmountInRupees * 100);
 
     // Idempotency check using client header or auto-generated fallback payload key

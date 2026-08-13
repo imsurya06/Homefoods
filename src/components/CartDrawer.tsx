@@ -2074,9 +2074,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center justify-between text-gray-500 font-bold">
-                  <span>GST (5%)</span>
+                  <span>GST (5% Included)</span>
                   <span className="text-[#1F2937] font-extrabold">
-                    ₹{calcSummary ? calcSummary.gst : Math.round(subtotal * 0.05)}
+                    ₹{calcSummary ? calcSummary.gst : Math.round(subtotal - (subtotal / 1.05))}
                   </span>
                 </div>
                 
