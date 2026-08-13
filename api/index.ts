@@ -3689,15 +3689,21 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       });
     }
 
+    const trackingToken = crypto.randomBytes(24).toString('hex');
+    const trackingTokenExpires = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
+
     const wcOrderPayload: any = {
       payment_method: 'razorpay',
       payment_method_title: 'Razorpay (UPI/Cards/NetBanking)',
       set_paid: false,
       status: 'pending',
+      total: totalAmountInRupees.toFixed(2),
       ...(existingCustomerId > 0 ? { customer_id: existingCustomerId } : {}),
       meta_data: [
         { key: '_order_ref_code', value: orderRefCode },
         { key: '_customer_phone', value: customerPhone },
+        { key: '_tracking_token', value: trackingToken },
+        { key: '_tracking_token_expires', value: trackingTokenExpires.toString() },
       ],
       billing: {
         first_name: firstName,
@@ -3727,13 +3733,6 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
           total: shipping.shippingCharge.toFixed(2),
         },
       ],
-      fee_lines: gst > 0 ? [
-        {
-          name: 'GST (5%)',
-          total: gst.toFixed(2),
-          tax_status: 'none',
-        }
-      ] : [],
       coupon_lines: couponCode ? [
         {
           code: couponCode.trim().toLowerCase(),
@@ -3743,89 +3742,68 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       customer_note: notes || 'Order placed via Headless Storefront',
     };
 
-    let trackingToken = '';
     let wcOrderId = Date.now();
-    orderRefCode = `HF-${wcOrderId}`;
+    let rzpOrderId = `order_mock_${wcOrderId}`;
+    const finalAmountInPaise = Math.round(totalAmountInRupees * 100);
+
     try {
-      const wcRes = await wcFetch('orders', { method: 'POST', body: wcOrderPayload });
+      // Execute WooCommerce order creation & Razorpay order creation IN PARALLEL for sub-500ms response
+      const [wcRes, rzpOrder] = await Promise.all([
+        wcFetch('orders', { method: 'POST', body: wcOrderPayload }),
+        razorpay.orders.create({
+          amount: finalAmountInPaise,
+          currency: 'INR',
+          receipt: `rcpt_${Date.now()}`,
+          notes: {
+            customer_email: customerEmail,
+          }
+        }).catch((err: any) => {
+          console.warn('[Razorpay Order Creation Notice]:', err.message);
+          return null;
+        })
+      ]);
+
       if (wcRes.ok && wcRes.data && wcRes.data.id) {
         wcOrderId = wcRes.data.id;
-        
-        // Construct the custom time//date//ordernumber reference code in IST (UTC+5:30)
         const nowIst = new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000));
         const pad = (n: number) => n.toString().padStart(2, '0');
         const HHMM = `${pad(nowIst.getUTCHours())}${pad(nowIst.getUTCMinutes())}`;
         const DDMMYY = `${pad(nowIst.getUTCDate())}${pad(nowIst.getUTCMonth() + 1)}${nowIst.getUTCFullYear().toString().slice(-2)}`;
         orderRefCode = `${HHMM}//${DDMMYY}//${wcOrderId}`;
-        
-        // Ensure total is based on exact calculated grand total
-        const finalPaise = Math.round(totalAmountInRupees * 100);
 
-        // Generate a cryptographically secure guest tracking token
-        trackingToken = crypto.randomBytes(24).toString('hex');
-        const trackingTokenExpires = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
-
-        // Save the correct reference code to WooCommerce metadata
-        await wcFetch(`orders/${wcOrderId}`, {
+        // Non-blocking background sync of customized orderRefCode
+        wcFetch(`orders/${wcOrderId}`, {
           method: 'PUT',
           body: {
-            total: totalAmountInRupees.toFixed(2),
-            meta_data: [
-              { key: '_order_ref_code', value: orderRefCode },
-              { key: '_customer_phone', value: customerPhone },
-              { key: '_tracking_token', value: trackingToken },
-              { key: '_tracking_token_expires', value: trackingTokenExpires.toString() },
-            ],
-          },
+            meta_data: [{ key: '_order_ref_code', value: orderRefCode }]
+          }
         }).catch(() => {});
       }
-    } catch {}
 
-    const keyId = (process.env.RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E').trim();
-    const finalAmountInPaise = Math.round(totalAmountInRupees * 100);
-
-    let rzpOrderId = `order_mock_${wcOrderId}`;
-    try {
-      const rzpOrder = await razorpay.orders.create({
-        amount: finalAmountInPaise,
-        currency: 'INR',
-        receipt: `rcpt_${wcOrderId}`,
-        notes: {
-          wc_order_id: wcOrderId.toString(),
-          order_ref_code: orderRefCode,
-          customer_phone: customerPhone,
-          customer_email: customerEmail,
-        },
-      });
       if (rzpOrder && rzpOrder.id) {
         rzpOrderId = rzpOrder.id;
       }
-    } catch {}
+    } catch (err: any) {
+      console.error('[Order Creation Error]:', err.message);
+    }
 
     if (rzpOrderId && !rzpOrderId.startsWith('order_mock_')) {
       razorpayToWcOrderMap.set(rzpOrderId, wcOrderId);
-      try {
-        await wcFetch(`orders/${wcOrderId}`, {
-          method: 'PUT',
-          body: {
-            meta_data: [
-              { key: '_razorpay_order_id', value: rzpOrderId },
-              { key: '_payment_state', value: 'pending' }
-            ]
-          }
-        });
-      } catch {}
     }
 
+    const keyId = (process.env.RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E').trim();
+
     const resPayload = {
+      success: true,
       wcOrderId,
       orderRefCode,
       razorpayOrderId: rzpOrderId,
       amount: totalAmountInRupees,
       amountInPaise: finalAmountInPaise,
+      currency: 'INR',
       keyId,
-      timestamp: now,
       trackingToken,
+      expiresAt: now + 10 * 60 * 1000,
     };
 
     await setIdempotencyInDatabase(idempotencyKey, resPayload);
@@ -3836,18 +3814,7 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
 
     await releaseLock();
 
-    return res.json({
-      success: true,
-      wcOrderId,
-      orderRefCode,
-      razorpayOrderId: rzpOrderId,
-      amount: totalAmountInRupees,
-      amountInPaise,
-      currency: 'INR',
-      keyId,
-      trackingToken,
-      expiresAt: now + 10 * 60 * 1000 // 10-minute reservation countdown
-    });
+    return res.json(resPayload);
   } catch (error: any) {
     if (existingCustomerId) {
       try {
