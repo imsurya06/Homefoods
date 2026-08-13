@@ -3607,8 +3607,8 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
         }
       }
       
-      const variant = p.variants?.find((v: any) => v.weight === item.weight) || p.variants?.[0];
-      const verifiedPrice = variant ? variant.basePrice : 70;
+      const pVal = item.pricePerUnit ?? item.price ?? (p.variants?.find((v: any) => v.weight === item.weight) || p.variants?.[0])?.basePrice ?? 70;
+      const verifiedPrice = typeof pVal === 'number' ? pVal : (parseFloat(pVal) || 70);
       const lineTotal = (verifiedPrice * qty).toFixed(2);
       
       subtotal += verifiedPrice * qty;
