@@ -3754,8 +3754,9 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
         const DDMMYY = `${pad(nowIst.getUTCDate())}${pad(nowIst.getUTCMonth() + 1)}${nowIst.getUTCFullYear().toString().slice(-2)}`;
         orderRefCode = `${HHMM}//${DDMMYY}//${wcOrderId}`;
         
-        totalAmountInRupees = parseFloat(wcRes.data.total) || totalAmountInRupees;
-        
+        // Ensure total is based on exact calculated grand total
+        const finalPaise = Math.round(totalAmountInRupees * 100);
+
         // Generate a cryptographically secure guest tracking token
         trackingToken = crypto.randomBytes(24).toString('hex');
         const trackingTokenExpires = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -3764,6 +3765,7 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
         await wcFetch(`orders/${wcOrderId}`, {
           method: 'PUT',
           body: {
+            total: totalAmountInRupees.toFixed(2),
             meta_data: [
               { key: '_order_ref_code', value: orderRefCode },
               { key: '_customer_phone', value: customerPhone },
@@ -3776,11 +3778,12 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
     } catch {}
 
     const keyId = (process.env.RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E').trim();
+    const finalAmountInPaise = Math.round(totalAmountInRupees * 100);
 
     let rzpOrderId = `order_mock_${wcOrderId}`;
     try {
       const rzpOrder = await razorpay.orders.create({
-        amount: amountInPaise,
+        amount: finalAmountInPaise,
         currency: 'INR',
         receipt: `rcpt_${wcOrderId}`,
         notes: {
@@ -3815,7 +3818,7 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
       orderRefCode,
       razorpayOrderId: rzpOrderId,
       amount: totalAmountInRupees,
-      amountInPaise,
+      amountInPaise: finalAmountInPaise,
       keyId,
       timestamp: now,
       trackingToken,

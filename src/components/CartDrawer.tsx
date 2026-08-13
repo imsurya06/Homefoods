@@ -1601,7 +1601,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                               (sessWcId && (oIdStr === sessWcId || oWcIdStr === sessWcId)) ||
                               (sessRefCode && (oRefStr === sessRefCode || oIdStr === sessRefCode))
                             );
-                            const isPaidStatus = ['processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'completed', 'delivered'].includes((o.status || '').toLowerCase());
+                            const isPaidStatus = ['processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'completed', 'delivered'].includes((o.status || '').toLowerCase()) ||
+                              confirmedIds.some((cid) => {
+                                const cStr = String(cid);
+                                return oIdStr === cStr || oWcIdStr === cStr || oRefStr === cStr || oIdStr.endsWith(`//${cStr}`) || oRefStr.endsWith(`//${cStr}`);
+                              });
+
                             if (isMatch && isPaidStatus) {
                               setTimeout(() => {
                                 useSyncStore.getState().setActiveCheckoutSession(null);

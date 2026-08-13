@@ -110,10 +110,17 @@ const getInitialActiveSession = (): ActiveCheckoutSession | null => {
     const saved = localStorage.getItem('hf_active_checkout_session');
     if (saved) {
       const session: ActiveCheckoutSession = JSON.parse(saved);
-      if (session && session.reservationExpiresAt > Date.now()) {
+      let confirmedIds: string[] = [];
+      try {
+        confirmedIds = JSON.parse(sessionStorage.getItem('hf_confirmed_order_ids') || '[]');
+      } catch {}
+
+      const isConfirmed = session.wcOrderId && confirmedIds.map(String).includes(String(session.wcOrderId));
+      if (session && session.reservationExpiresAt > Date.now() && !isConfirmed && (session as any).status !== 'processing') {
         return session;
       } else {
         localStorage.removeItem('hf_active_checkout_session');
+        localStorage.removeItem('hf_pending_order');
       }
     }
   } catch {}

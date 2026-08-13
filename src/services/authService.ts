@@ -191,15 +191,30 @@ export async function fetchCustomerOrders(): Promise<CustomerOrderHistoryItem[]>
   const mapConfirmed = (orders: CustomerOrderHistoryItem[]) => {
     if (confirmedIds.length === 0 || !Array.isArray(orders)) return orders;
     return orders.map((ord) => {
-      const isConfirmed = confirmedIds.some(
-        (cid) => String(cid) === String(ord.id) || String(cid) === String((ord as any).wcOrderId)
-      );
+      const ordIdStr = String(ord.id || '');
+      const ordWcIdStr = String((ord as any).wcOrderId || '');
+      const ordRefStr = String((ord as any).orderRefCode || '');
+
+      const isConfirmed = confirmedIds.some((cid) => {
+        const cStr = String(cid);
+        return (
+          cStr === ordIdStr ||
+          cStr === ordWcIdStr ||
+          cStr === ordRefStr ||
+          ordIdStr.endsWith(`//${cStr}`) ||
+          ordRefStr.endsWith(`//${cStr}`) ||
+          ordIdStr.endsWith(`-${cStr}`)
+        );
+      });
+
       if (isConfirmed) {
         return {
           ...ord,
           status: 'processing',
           paymentState: 'confirmed',
-          statusText: 'Order Confirmed (Kitchen Processing)'
+          statusText: 'Order Confirmed & Kitchen Preparation',
+          statusLabel: 'Order Confirmed & Kitchen Preparation',
+          stage: 2,
         };
       }
       return ord;
