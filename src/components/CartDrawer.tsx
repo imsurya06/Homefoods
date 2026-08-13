@@ -318,9 +318,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     // Fetch fresh retry payment parameters from server
     const retryDetails = await fetchRetryPaymentDetails(wcOrderId);
 
+    const expTime = orderOrSession.expiresAt || (activeCheckoutSession?.wcOrderId === wcOrderId ? activeCheckoutSession?.reservationExpiresAt : null);
+    if (expTime && Date.now() >= expTime) {
+      setIsProcessing(false);
+      useSyncStore.getState().setActiveCheckoutSession(null);
+      localStorage.removeItem('hf_active_checkout_session');
+      localStorage.removeItem('hf_pending_order');
+      setCheckoutInfoMsg(null);
+      setCheckoutError(`Reservation for Order #${wcOrderId} has expired and cannot be paid.`);
+      return;
+    }
+
     if (retryDetails && (retryDetails as any).isAlreadyPaid) {
       setIsProcessing(false);
       removeLocalPendingOrder(wcOrderId);
+      setCheckoutInfoMsg(null);
       setCheckoutSuccessMsg(`Order #${wcOrderId} has already been paid and confirmed!`);
       setOrdersRefreshTrigger((prev) => prev + 1);
       return;
@@ -332,6 +344,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       localStorage.removeItem('hf_active_checkout_session');
       localStorage.removeItem('hf_pending_order');
       localStorage.removeItem(`hf_pending_reservation_${wcOrderId}`);
+      setCheckoutInfoMsg(null);
       setOrders((prev) => prev.filter((o) => o.id !== wcOrderId && o.id?.toString() !== wcOrderId?.toString()));
       setCheckoutError(`Order #${wcOrderId} is no longer active or has been removed from our system.`);
       setOrdersRefreshTrigger((prev) => prev + 1);
@@ -479,6 +492,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       setOrderSuccess(null);
     }
   }, [items.length]);
+
+  // Auto-purge activeCheckoutSession and checkoutInfoMsg when reservation timer expires
+  useEffect(() => {
+    if (activeCheckoutSession && activeCheckoutSession.reservationExpiresAt) {
+      if (now >= activeCheckoutSession.reservationExpiresAt) {
+        useSyncStore.getState().setActiveCheckoutSession(null);
+        localStorage.removeItem('hf_active_checkout_session');
+        localStorage.removeItem('hf_pending_order');
+        setCheckoutInfoMsg(null);
+      }
+    } else if (!activeCheckoutSession && checkoutInfoMsg && checkoutInfoMsg.includes('still reserved')) {
+      setCheckoutInfoMsg(null);
+    }
+  }, [activeCheckoutSession, now, checkoutInfoMsg]);
 
   // Run cart validation instantly on item/pincode changes
   useEffect(() => {
@@ -1646,6 +1673,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       const isCancelledOrInactive = (o: any) => {
                         const rawStatus = (o.status || '').toLowerCase().trim();
                         const rawLabel = (o.statusLabel || '').toLowerCase().trim();
+                        const expTime = o.expiresAt || (activeCheckoutSession?.wcOrderId === o.id ? activeCheckoutSession?.reservationExpiresAt : null);
+                        const isExpiredTimer = expTime ? now >= expTime : false;
+
+                        if (isExpiredTimer) return true;
 
                         if (rawLabel.includes('dispatched') || rawLabel.includes('kitchen') || rawLabel.includes('confirmed') || rawLabel.includes('delivered') || rawLabel.includes('preparation') || rawLabel.includes('out for delivery')) {
                           if (rawStatus !== 'cancelled' && rawStatus !== 'refunded' && !rawLabel.includes('cancelled')) {
@@ -1653,7 +1684,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           }
                         }
 
-                        return rawStatus === 'cancelled' || rawStatus === 'refunded' || rawStatus === 'expired' ||
+                        return rawStatus === 'cancelled' || rawStatus === 'refunded' || rawStatus === 'expired' || rawStatus === 'trash' ||
                                rawLabel.includes('cancelled') || rawLabel.includes('refunded');
                       };
 
@@ -1692,18 +1723,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           stage = 2;
                         }
 
-                        const isPending = rawStatus === 'pending' || rawStatus === 'pending_payment';
-                        const isCancelled = rawStatus === 'cancelled' || rawStatus === 'failed' || rawStatus === 'expired';
+                        const expTime = ord.expiresAt || (activeCheckoutSession?.wcOrderId === ord.id ? activeCheckoutSession?.reservationExpiresAt : null);
+                        const isExpiredTimer = expTime ? now >= expTime : false;
+
+                        const isPending = (rawStatus === 'pending' || rawStatus === 'pending_payment') && !isExpiredTimer;
+                        const isCancelled = rawStatus === 'cancelled' || rawStatus === 'failed' || rawStatus === 'expired' || isExpiredTimer;
                         const isCompleted = rawStatus === 'completed' || rawStatus === 'delivered';
 
                         const stageLabel = ord.statusLabel || (
                           isPending ? 'Payment Pending' :
-                          isCancelled ? (rawStatus === 'expired' ? 'Payment Expired' : 'Cancelled') :
+                          isCancelled ? 'Cancelled' :
                           isCompleted ? 'Delivered' :
                           stage === 3 ? 'Dispatched' : stage === 2 ? 'Kitchen' : 'Confirmed'
                         );
-
-                        const expTime = ord.expiresAt || (activeCheckoutSession?.wcOrderId === ord.id ? activeCheckoutSession?.reservationExpiresAt : null);
 
                         return (
                           <div
