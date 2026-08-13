@@ -38,7 +38,8 @@ export async function processRazorpayCheckout(
     amountPaid?: number;
   }) => void,
   onError: (errorMsg: string, isOutOfSync?: boolean) => void,
-  onReservationCreated?: (wcOrderId: number, items: CartItem[], expiresAt: number) => void
+  onReservationCreated?: (wcOrderId: number, items: CartItem[], expiresAt: number) => void,
+  onPaymentSuccessCallback?: () => void
 ) {
   try {
     const generateUUID = () => {
@@ -138,6 +139,9 @@ export async function processRazorpayCheckout(
       },
       handler: async function (response: any) {
         try {
+          if (typeof onPaymentSuccessCallback === 'function') {
+            onPaymentSuccessCallback();
+          }
           localStorage.removeItem('hf_checkout_idempotency_key');
           try {
             const displayCode = orderRes.orderRefCode || `HF-${orderRes.wcOrderId}`;

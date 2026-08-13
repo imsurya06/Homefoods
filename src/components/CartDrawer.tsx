@@ -182,6 +182,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   });
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isWaitingForPayment, setIsWaitingForPayment] = useState<boolean>(false);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState<boolean>(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [checkoutInfoMsg, setCheckoutInfoMsg] = useState<string | null>(null);
@@ -839,12 +840,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       cartRevision: isLoggedIn ? cartRevision : undefined,
     };
 
-    // Set verifying payment loading state when payment handler executes
-    setIsVerifyingPayment(true);
+    // Step 1: Set waiting for payment state while Razorpay window is opening/open
+    setIsWaitingForPayment(true);
+    setIsVerifyingPayment(false);
 
     await processRazorpayCheckout(
       payload,
       (response) => {
+        setIsWaitingForPayment(false);
         setIsVerifyingPayment(false);
         setCheckoutInProgress(false);
         setIsProcessing(false);
@@ -913,6 +916,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         }
       },
       async (errorMsg, isOutOfSync) => {
+        setIsWaitingForPayment(false);
         setIsVerifyingPayment(false);
         setCheckoutInProgress(false);
         setIsProcessing(false);
@@ -925,7 +929,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           setCheckoutError(errorMsg);
         }
       },
-      (wcOrderId, reservedItems, expiresAt) => {
+      (wcOrderId: number, reservedItems: CartItem[], expiresAt: number) => {
         try {
           const reservationData = {
             wcOrderId,
@@ -945,10 +949,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           keyId: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E',
           cartSnapshot: [...(reservedItems || items)],
         });
-
-        // Keep items in cart until payment succeeds. Cart is cleared only on payment completion.
-        setCouponCode('');
-        setCouponStatus(null);
+      },
+      // Step 2: Transition from Waiting for Payment -> Payment Verified & Confirming Order
+      () => {
+        setIsWaitingForPayment(false);
+        setIsVerifyingPayment(true);
       }
     );
   };
@@ -1088,7 +1093,48 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           {/* TAB 1: SHOPPING CART CONTENT */}
           {activeTab === 'cart' && (
             <div ref={scrollableBodyRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-              {isVerifyingPayment ? (
+              {isWaitingForPayment ? (
+                /* Stage 1: Waiting for Payment View */
+                <div className="py-12 px-2 text-center space-y-6 animate-in zoom-in-95 duration-300">
+                  <div className="relative w-20 h-20 mx-auto">
+                    <div className="w-20 h-20 rounded-full bg-[#1F2937] text-[#95CD1A] border-4 border-gray-700 flex items-center justify-center shadow-xl relative z-10">
+                      <CreditCard className="w-9 h-9 text-[#95CD1A] animate-pulse" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="text-xs font-black uppercase tracking-widest text-gray-700 bg-gray-100 border border-gray-200 px-3.5 py-1 rounded-full inline-block">
+                      Waiting for Payment
+                    </span>
+                    <h3 className="text-2xl font-black text-[#1F2937]">
+                      Payment Window Open
+                    </h3>
+                    <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed">
+                      Please complete your payment in the secure Razorpay payment window to lock in your order.
+                    </p>
+                  </div>
+
+                  {/* Progress Checklist */}
+                  <div className="bg-[#FAFBF6] p-4 rounded-2xl border border-[#ECF9CA] text-left text-xs space-y-3 font-semibold max-w-xs mx-auto">
+                    <div className="flex items-center gap-2.5 text-[#2D5A1E]">
+                      <Loader2 className="w-4 h-4 text-[#95CD1A] animate-spin shrink-0" />
+                      <span>Completing Payment in Razorpay...</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-gray-400">
+                      <Clock className="w-4 h-4 text-gray-300 shrink-0" />
+                      <span>Kitchen Order Confirmation</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-gray-400">
+                      <PackageCheck className="w-4 h-4 text-gray-300 shrink-0" />
+                      <span>Order Placement & Live Tracking</span>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-gray-400 italic">
+                    If the payment window did not open, please check popup blockers or click order now again.
+                  </p>
+                </div>
+              ) : isVerifyingPayment ? (
                 /* Full-Screen Payment Verifying Processing View */
                 <div className="py-12 px-2 text-center space-y-6 animate-in zoom-in-95 duration-300">
                   <div className="relative w-20 h-20 mx-auto">

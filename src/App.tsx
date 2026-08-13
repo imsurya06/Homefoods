@@ -329,11 +329,11 @@ export function App() {
     showToast('Pack weight updated');
   };
 
-  const SHIPPING_FEE = 40;
   const safeCartItems = Array.isArray(cartItems) ? cartItems : [];
   const totalCartItemCount = safeCartItems.reduce((sum, item) => sum + (item?.quantity || 1), 0);
   const cartSubtotal = safeCartItems.reduce((sum, item) => sum + (item?.pricePerUnit || 0) * (item?.quantity || 1), 0);
-  const cartGrandTotal = cartSubtotal > 0 ? cartSubtotal + SHIPPING_FEE : 0;
+  const shippingFee = (cartSubtotal >= 499 || cartSubtotal === 0) ? 0 : 40;
+  const cartGrandTotal = cartSubtotal > 0 ? cartSubtotal + shippingFee : 0;
 
   return (
     <div className="min-h-screen bg-white text-[#1F2937] font-sans flex flex-col justify-between">
