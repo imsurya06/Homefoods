@@ -35,6 +35,7 @@ export async function processRazorpayCheckout(
     refreshToken?: string;
     user?: any;
     cartRevision?: number;
+    amountPaid?: number;
   }) => void,
   onError: (errorMsg: string, isOutOfSync?: boolean) => void,
   onReservationCreated?: (wcOrderId: number, items: CartItem[], expiresAt: number) => void
@@ -168,15 +169,7 @@ export async function processRazorpayCheckout(
             }
           } catch {}
 
-          // 2. Clear active checkout session and cart immediately upon successful payment
-          try {
-            useSyncStore.getState().setActiveCheckoutSession(null);
-            localStorage.removeItem('hf_active_checkout_session');
-            localStorage.removeItem('hf_checkout_reservation_expires_at');
-            useSyncStore.getState().clearCart();
-          } catch (e) {}
-
-          // 3. Await backend verification so WooCommerce order status is updated to processing FIRST
+          // 2. Await backend verification so WooCommerce order status is updated to processing FIRST
           try {
             const verifyRes = await fetchApi<{ success: boolean; accessToken?: string; refreshToken?: string; user?: any }>('/checkout/verify-payment', {
               method: 'POST',
@@ -204,6 +197,14 @@ export async function processRazorpayCheckout(
             console.warn('[Verification Notice]:', err);
           }
 
+          // 3. Clear active checkout session and cart ONLY AFTER backend order confirmation
+          try {
+            useSyncStore.getState().setActiveCheckoutSession(null);
+            localStorage.removeItem('hf_active_checkout_session');
+            localStorage.removeItem('hf_checkout_reservation_expires_at');
+            useSyncStore.getState().clearCart();
+          } catch (e) {}
+
           window.dispatchEvent(new Event('hf_orders_updated'));
 
           // 4. Trigger onSuccess UI transition AFTER WooCommerce status is confirmed
@@ -211,6 +212,7 @@ export async function processRazorpayCheckout(
             wcOrderId: orderRes.wcOrderId,
             paymentId: response.razorpay_payment_id,
             orderRefCode: orderRes.orderRefCode,
+            amountPaid: orderRes.amount || (orderRes.amountInPaise ? orderRes.amountInPaise / 100 : 0),
           });
         } catch (err: any) {
           console.warn('[Payment Handler Notice]:', err);

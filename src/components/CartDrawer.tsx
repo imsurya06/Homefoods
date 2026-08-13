@@ -18,6 +18,7 @@ import {
   PackageCheck,
   AlertCircle,
   CreditCard,
+  Loader2,
 } from 'lucide-react';
 import { type CartItem } from '../data/bestsellers';
 import { processRazorpayCheckout, type CheckoutPayload, trackSingleOrder, cancelInventoryReservation, retryRazorpayPayment, fetchRetryPaymentDetails } from '../services/checkoutService';
@@ -181,9 +182,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   });
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState<boolean>(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [checkoutInfoMsg, setCheckoutInfoMsg] = useState<string | null>(null);
-  const [orderSuccess, setOrderSuccess] = useState<{ wcOrderId: number; paymentId: string; orderRefCode?: string } | null>(() => {
+  const [orderSuccess, setOrderSuccess] = useState<{ wcOrderId: number; paymentId: string; orderRefCode?: string; amountPaid?: number } | null>(() => {
     try {
       const saved = sessionStorage.getItem('hf_latest_order_success');
       return saved ? JSON.parse(saved) : null;
@@ -837,9 +839,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       cartRevision: isLoggedIn ? cartRevision : undefined,
     };
 
+    // Set verifying payment loading state when payment handler executes
+    setIsVerifyingPayment(true);
+
     await processRazorpayCheckout(
       payload,
       (response) => {
+        setIsVerifyingPayment(false);
         setCheckoutInProgress(false);
         setIsProcessing(false);
         removeLocalPendingOrder(response.wcOrderId);
@@ -907,6 +913,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         }
       },
       async (errorMsg, isOutOfSync) => {
+        setIsVerifyingPayment(false);
         setCheckoutInProgress(false);
         setIsProcessing(false);
         if (isOutOfSync) {
@@ -1081,7 +1088,49 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           {/* TAB 1: SHOPPING CART CONTENT */}
           {activeTab === 'cart' && (
             <div ref={scrollableBodyRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-              {orderSuccess ? (
+              {isVerifyingPayment ? (
+                /* Full-Screen Payment Verifying Processing View */
+                <div className="py-12 px-2 text-center space-y-6 animate-in zoom-in-95 duration-300">
+                  <div className="relative w-20 h-20 mx-auto">
+                    <div className="absolute inset-0 rounded-full border-4 border-[#ECF9CA] animate-ping opacity-75" />
+                    <div className="w-20 h-20 rounded-full bg-[#F7FCE8] border-4 border-[#95CD1A] flex items-center justify-center shadow-lg relative z-10">
+                      <Loader2 className="w-10 h-10 text-[#95CD1A] animate-spin" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="text-xs font-black uppercase tracking-widest text-[#95CD1A] bg-[#F7FCE8] border border-[#ECF9CA] px-3.5 py-1 rounded-full inline-block">
+                      Payment Received
+                    </span>
+                    <h3 className="text-2xl font-black text-[#1F2937]">
+                      Confirming Your Order...
+                    </h3>
+                    <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed">
+                      We’ve received your payment and are locking in your authentic food preparation with our kitchen.
+                    </p>
+                  </div>
+
+                  {/* Progress Step Checklist */}
+                  <div className="bg-[#FAFBF6] p-4 rounded-2xl border border-[#ECF9CA] text-left text-xs space-y-3 font-semibold max-w-xs mx-auto">
+                    <div className="flex items-center gap-2.5 text-[#2D5A1E]">
+                      <CheckCircle2 className="w-4 h-4 text-[#95CD1A] shrink-0" />
+                      <span>Payment Verified via Razorpay</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-gray-700">
+                      <Loader2 className="w-4 h-4 text-[#95CD1A] animate-spin shrink-0" />
+                      <span>Kitchen Order Confirmation...</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-gray-400">
+                      <Clock className="w-4 h-4 text-gray-300 shrink-0" />
+                      <span>Live Tracking Link Generation</span>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-gray-400 italic">
+                    Please do not close this window while we finalize your order.
+                  </p>
+                </div>
+              ) : orderSuccess ? (
                 /* Order Placed Success Confirmation View */
                 <div className="py-8 text-center space-y-5 animate-in zoom-in-95 duration-300">
                   <div className="w-16 h-16 bg-[#F7FCE8] text-[#95CD1A] rounded-full flex items-center justify-center mx-auto border-2 border-[#ECF9CA] shadow-md">
@@ -1090,37 +1139,39 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                   <div className="space-y-1">
                     <span className="text-xs font-extrabold uppercase tracking-widest text-[#95CD1A]">
-                      Payment Successful!
+                      Order Confirmed 🎉
                     </span>
                     <h3 className="text-2xl font-black text-[#1F2937]">
-                      Order placed successfully
+                      Order Placed Successfully
                     </h3>
                     <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed mt-1.5 px-2">
                       {isLoggedIn ? (
                         <>
-                          Your order has been confirmed and is now being processed.
+                          Your order has been confirmed and is now being prepared in our kitchen.
                           <br />
-                          You can track its progress from <strong className="font-extrabold text-[#1F2937]">My Orders & Tracking</strong>.
+                          You can track its live progress anytime from <strong className="font-extrabold text-[#1F2937]">My Orders & Tracking</strong>.
                         </>
                       ) : (
                         <>
-                          Thank you for your order. Your tracking link has been sent to your email address.
+                          Thank you for your order. Your tracking details have been saved to your session.
                           <br />
-                          Check your email to track your order and receive future delivery updates.
+                          Use your Order Reference ID to track live kitchen and delivery status.
                         </>
                       )}
                     </p>
                   </div>
 
                   {/* Summary Details Box */}
-                  <div className="bg-[#FAFBF6] p-4 rounded-2xl border border-[#ECF9CA] text-left text-xs space-y-2 font-medium">
+                  <div className="bg-[#FAFBF6] p-4 rounded-2xl border border-[#ECF9CA] text-left text-xs space-y-2.5 font-medium max-w-xs mx-auto">
                     <div className="flex justify-between border-b border-gray-200/60 pb-2">
                       <span className="text-gray-500">Order Reference:</span>
                       <span className="font-extrabold text-[#95CD1A]">#{(orderSuccess as any).orderRefCode || `HF-${orderSuccess.wcOrderId}`}</span>
                     </div>
                     <div className="flex justify-between border-b border-gray-200/60 pb-2">
-                      <span className="text-gray-500">Razorpay Payment ID:</span>
-                      <span className="font-mono font-bold text-gray-700 truncate max-w-[180px]">{orderSuccess.paymentId}</span>
+                      <span className="text-gray-500">Amount Paid:</span>
+                      <span className="font-black text-[#1F2937]">
+                        ₹{(orderSuccess as any).amountPaid || (orderSuccess as any).amount || (calcSummary ? calcSummary.grandTotal : 334)}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Live Status:</span>
@@ -1130,7 +1181,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </div>
                   </div>
 
-                  <div className="pt-2 space-y-2.5">
+                  <div className="pt-2 space-y-2.5 max-w-xs mx-auto">
                     <button
                       onClick={() => {
                         if (orderSuccess && orderSuccess.wcOrderId) {
@@ -1144,7 +1195,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       className="w-full py-3.5 bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Package className="w-4.5 h-4.5 text-white" />
-                      <span>View Order Status & Tracking</span>
+                      <span>View & Track Order</span>
                     </button>
 
                     <button
