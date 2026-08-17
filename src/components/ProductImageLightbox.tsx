@@ -105,12 +105,12 @@ export const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
         // Close if clicking the dark overlay backdrop itself
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between items-center py-6 select-none animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100] bg-black/95 flex flex-col justify-between items-center pt-5 pb-8 sm:py-6 select-none animate-in fade-in duration-200"
     >
       {/* Lightbox Header / Controls */}
       <div className="w-full max-w-5xl px-4 flex items-center justify-between z-10 shrink-0">
-        <div className="text-left">
-          <h4 className="text-sm sm:text-base font-black text-white leading-tight">
+        <div className="text-left min-w-0 flex-1 mr-4">
+          <h4 className="text-sm sm:text-base font-black text-white leading-tight truncate">
             {productName}
           </h4>
           <span className="text-[10px] sm:text-xs font-bold text-gray-400">
@@ -118,7 +118,7 @@ export const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0">
           {/* Zoom Toggle Button */}
           <button
             onClick={() => setIsZoomed((prev) => !prev)}
@@ -141,7 +141,7 @@ export const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
 
       {/* Main Image Container */}
       <div
-        className="flex-1 w-full max-w-5xl flex items-center justify-center relative overflow-hidden px-4"
+        className="flex-1 w-full max-w-5xl flex items-center justify-center relative overflow-hidden px-4 my-2"
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
@@ -174,7 +174,7 @@ export const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
 
         {/* The Zoomable Display Image */}
         <div
-          className={`relative max-h-[70vh] sm:max-h-[75vh] max-w-full aspect-auto transition-transform duration-300 ease-out select-none flex items-center justify-center ${
+          className={`relative max-h-[60vh] sm:max-h-[75vh] max-w-full aspect-auto transition-transform duration-300 ease-out select-none flex items-center justify-center ${
             isZoomed ? 'scale-175 cursor-zoom-out overflow-auto' : 'scale-100 cursor-zoom-in'
           }`}
           onClick={() => setIsZoomed((prev) => !prev)}
@@ -182,20 +182,20 @@ export const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
           <img
             src={currentImage.src}
             alt={currentImage.alt || productName}
-            className="max-h-[70vh] sm:max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl pointer-events-none select-none"
+            className="max-h-[60vh] sm:max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl pointer-events-none select-none"
           />
         </div>
       </div>
 
       {/* Lightbox Footer (Captions overlay) */}
-      <div className="w-full max-w-2xl px-6 text-center z-10 shrink-0">
+      <div className="w-full max-w-2xl px-6 text-center z-10 shrink-0 pb-2 sm:pb-0">
         <p className="text-xs sm:text-sm text-gray-200 font-extrabold leading-relaxed animate-in fade-in slide-in-from-bottom-1 duration-300">
           {description || getCaption(currentIndex, currentImage.alt)}
         </p>
         
         {/* Mobile Swipe Guidance */}
         {hasMultiple && (
-          <span className="md:hidden block text-[9px] text-gray-500 font-bold mt-2">
+          <span className="md:hidden block text-[9px] text-gray-400 font-bold mt-1.5">
             Swipe left/right to browse images
           </span>
         )}
