@@ -8,7 +8,7 @@ import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
 import { AuthModal } from './components/AuthModal';
 import { LogoutConfirmModal } from './components/LogoutConfirmModal';
-import { AccountModal } from './components/AccountModal';
+import { AccountPage } from './components/AccountPage';
 import { MobileBottomNav, type MobileTab } from './components/MobileBottomNav';
 import { CATEGORY_FILTERS } from './data/products';
 import { CATEGORIES } from './data/categories';
@@ -18,7 +18,7 @@ import { useSyncStore } from './store/useSyncStore';
 import { initSyncManager, bootstrapSync, replayOfflineQueue, updatePollingInterval } from './services/syncManager';
 
 export function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'shop'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'shop' | 'account'>('home');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeNotification, setActiveNotification] = useState<string | null>(null);
@@ -31,7 +31,6 @@ export function App() {
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState<boolean>(false);
-  const [isAccountModalOpen, setIsAccountModalOpen] = useState<boolean>(false);
 
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [cartDrawerInitialTab, setCartDrawerInitialTab] = useState<'cart' | 'orders'>('cart');
@@ -95,6 +94,8 @@ export function App() {
       const hash = window.location.hash;
       if (hash === '#shop') {
         setCurrentPage('shop');
+      } else if (hash === '#account' || hash === '#profile') {
+        setCurrentPage('account');
       } else if (hash === '#home' || hash === '') {
         setCurrentPage('home');
       } else if (hash.startsWith('#track')) {
@@ -166,11 +167,11 @@ export function App() {
     }, 4000);
   };
 
-  const handleNavigatePage = (page: 'home' | 'shop', categoryId: string = 'all', query: string = '') => {
+  const handleNavigatePage = (page: 'home' | 'shop' | 'account', categoryId: string = 'all', query: string = '') => {
     setCurrentPage(page);
     setSelectedCategory(categoryId);
     setSearchQuery(query);
-    window.location.hash = page === 'shop' ? '#shop' : '#home';
+    window.location.hash = page === 'shop' ? '#shop' : page === 'account' ? '#account' : '#home';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -338,32 +339,27 @@ export function App() {
   const shippingFee = (cartSubtotal >= 499 || cartSubtotal === 0) ? 0 : 40;
   const cartGrandTotal = cartSubtotal > 0 ? cartSubtotal + shippingFee : 0;
 
-  const activeMobileTab: MobileTab = isAccountModalOpen
-    ? 'profile'
-    : (isCartOpen && cartDrawerInitialTab === 'orders')
+  const activeMobileTab: MobileTab = (isCartOpen && cartDrawerInitialTab === 'orders')
     ? 'orders'
+    : currentPage === 'account'
+    ? 'profile'
     : currentPage === 'shop'
     ? 'store'
     : 'home';
 
   const handleMobileTabChange = (tab: MobileTab) => {
     if (tab === 'home') {
-      setCurrentPage('home');
+      handleNavigatePage('home', 'all', '');
       setIsCartOpen(false);
-      setIsAccountModalOpen(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (tab === 'store') {
-      setCurrentPage('shop');
-      setSelectedCategory('all');
+      handleNavigatePage('shop', 'all', '');
       setIsCartOpen(false);
-      setIsAccountModalOpen(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (tab === 'orders') {
-      setIsAccountModalOpen(false);
       setCartDrawerInitialTab('orders');
       setIsCartOpen(true);
     } else if (tab === 'profile') {
-      setIsAccountModalOpen(true);
+      handleNavigatePage('account', 'all', '');
+      setIsCartOpen(false);
     }
   };
 
@@ -450,26 +446,6 @@ export function App() {
         onSuccess={handleAuthSuccess}
       />
 
-      {/* Mobile & Desktop Account Profile Modal */}
-      <AccountModal
-        isOpen={isAccountModalOpen}
-        onClose={() => setIsAccountModalOpen(false)}
-        user={user}
-        onOpenAuthModal={() => {
-          setIsAccountModalOpen(false);
-          setIsAuthModalOpen(true);
-        }}
-        onOpenOrders={() => {
-          setIsAccountModalOpen(false);
-          setCartDrawerInitialTab('orders');
-          setIsCartOpen(true);
-        }}
-        onLogout={() => {
-          setIsAccountModalOpen(false);
-          setIsLogoutConfirmOpen(true);
-        }}
-      />
-
       {/* Logout Confirmation Dialog Modal */}
       <LogoutConfirmModal
         isOpen={isLogoutConfirmOpen}
@@ -510,7 +486,7 @@ export function App() {
               onOrderNow={handleOrderNow}
             />
           </>
-        ) : (
+        ) : currentPage === 'shop' ? (
           /* Separate Shop Catalog Page View */
           <ShopCatalog
             initialCategory={selectedCategory}
@@ -518,6 +494,19 @@ export function App() {
             onNavigateHome={() => handleNavigatePage('home', 'all', '')}
             onAddToCart={handleAddToCart}
             onOrderNow={handleOrderNow}
+          />
+        ) : (
+          /* Dedicated User Account Page View */
+          <AccountPage
+            user={user}
+            onNavigateHome={() => handleNavigatePage('home', 'all', '')}
+            onNavigateShop={() => handleNavigatePage('shop', 'all', '')}
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            onOpenOrders={() => {
+              setCartDrawerInitialTab('orders');
+              setIsCartOpen(true);
+            }}
+            onLogout={() => setIsLogoutConfirmOpen(true)}
           />
         )}
       </main>

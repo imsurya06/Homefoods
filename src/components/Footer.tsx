@@ -24,7 +24,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage, onOpenTrackModal
   };
 
   return (
-    <footer id="footer" className="bg-[#FAFBF6] text-[#1F2937] pt-16 pb-8 px-4 sm:px-8 lg:px-12 border-t border-gray-200/80 relative overflow-hidden">
+    <footer id="footer" className="bg-[#FAFBF6] text-[#1F2937] pt-8 md:pt-16 pb-24 md:pb-8 px-4 sm:px-8 lg:px-12 border-t border-gray-200/80 relative overflow-hidden">
 
       {/* Subtle Warm Background Ambient Glow */}
       <div className="absolute inset-0 pointer-events-none -z-0">
@@ -32,10 +32,10 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage, onOpenTrackModal
         <div className="absolute -top-20 -right-20 w-96 h-96 bg-lime-50/50 rounded-full blur-3xl opacity-70" />
       </div>
 
-      <div className="max-w-7xl mx-auto relative z-10 space-y-12">
+      <div className="max-w-7xl mx-auto relative z-10 space-y-8 md:space-y-12">
 
-        {/* Main 4-Column Premium Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-12 items-start text-left">
+        {/* Desktop Only: Main 4-Column Premium Grid (hidden md:grid) */}
+        <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-12 items-start text-left">
 
           {/* Column 1: Brand & Heritage (4 cols lg) */}
           <div className="lg:col-span-4 space-y-4">
@@ -169,8 +169,26 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage, onOpenTrackModal
 
         </div>
 
-        {/* Footer Bottom Bar */}
-        <div className="pt-8 border-t border-gray-200/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-gray-500">
+        {/* Mobile Only: Compact Mini Footer (md:hidden) */}
+        <div className="md:hidden space-y-4 text-center">
+          <div className="inline-flex items-center gap-3 bg-white px-4 py-2 rounded-2xl border border-gray-200/80 shadow-2xs">
+            <img src="/fssai-logo.png" alt="FSSAI Logo" className="h-6 w-auto object-contain" />
+            <div className="text-left text-[11px]">
+              <span className="font-extrabold text-[#1F2937] block">FSSAI Certified</span>
+              <span className="font-mono text-gray-500 font-bold block">Lic No: 22425577000230</span>
+            </div>
+          </div>
+
+          <div className="text-xs font-medium text-gray-500 space-y-1">
+            <p>© {new Date().getFullYear()} Homemade Foods. All rights reserved.</p>
+            <p className="flex items-center justify-center gap-1.5 text-[11px] text-gray-400">
+              Made with <Heart className="w-3 h-3 text-[#95CD1A] fill-[#95CD1A]" /> for South Indian Taste Traditions
+            </p>
+          </div>
+        </div>
+
+        {/* Desktop Only Bottom Bar */}
+        <div className="hidden md:flex pt-8 border-t border-gray-200/80 flex-row items-center justify-between gap-4 text-xs font-semibold text-gray-500">
           <p>© {new Date().getFullYear()} Homemade Foods. All rights reserved.</p>
 
           <p className="flex items-center gap-1.5">

@@ -3,6 +3,7 @@ import { Search, Filter, X, ArrowLeft, Check, ShoppingBag, Zap } from 'lucide-re
 import { PRODUCTS, type Product } from '../data/products';
 import { getLiveProducts, getCachedProductsSync } from '../services/productService';
 import { calculatePriceDetails, type CartItem } from '../data/bestsellers';
+import { filterAndSortProductsBySearch } from '../utils/searchUtils';
 import { CustomDropdown } from './CustomDropdown';
 import { ProductImageSlider } from './ProductImageSlider';
 import { ProductImageLightbox } from './ProductImageLightbox';
@@ -105,41 +106,38 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
     setSearchQuery('');
   };
 
-  // Filter products: Global Search across all store items, with Category filter active when search is empty
+  // Filter & Sort products: Global Search with relevance ranking, or Category filter when search query is empty
   const filteredProducts = useMemo(() => {
-    return productsList.filter((product: Product) => {
-      // In-Stock Filter
-      if (showInStockOnly && !product.isAvailable) {
-        return false;
-      }
-      // Global Search Query Filter (Matches Name, Description, Ingredients, or Category)
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        const matchesName = product.name.toLowerCase().includes(query);
-        const matchesDesc = product.description ? product.description.toLowerCase().includes(query) : false;
-        const matchesIngr = product.ingredients ? product.ingredients.toLowerCase().includes(query) : false;
-        const matchesCategory = product.categoryName ? product.categoryName.toLowerCase().includes(query) : false;
-        return matchesName || matchesDesc || matchesIngr || matchesCategory;
-      }
-      // Category Filter (applies when search bar is empty) - Flexible matching for home page cards & sidebar tabs
-      if (selectedCategory && selectedCategory !== 'all') {
-        const selCat = selectedCategory.toLowerCase().trim();
+    let list = productsList;
+
+    // Apply In-Stock Filter first if enabled
+    if (showInStockOnly) {
+      list = list.filter((product) => product.isAvailable);
+    }
+
+    // Global Search Query Filter & Relevance Ranking
+    if (searchQuery.trim()) {
+      return filterAndSortProductsBySearch(list, searchQuery);
+    }
+
+    // Category Filter (applies when search bar is empty)
+    if (selectedCategory && selectedCategory !== 'all') {
+      const selCat = selectedCategory.toLowerCase().trim();
+      const selCatBase = selCat.endsWith('s') ? selCat.slice(0, -1) : selCat;
+
+      list = list.filter((product: Product) => {
         const prodCatId = (product.categoryId || '').toLowerCase().trim();
         const prodCatName = (product.categoryName || '').toLowerCase().trim();
-
-        // Strip trailing 's' for simple singular/plural matching (e.g., 'flours' vs 'flour')
-        const selCatBase = selCat.endsWith('s') ? selCat.slice(0, -1) : selCat;
 
         const isExactId = prodCatId === selCat;
         const isSubstringMatch = prodCatId.includes(selCatBase) || selCatBase.includes(prodCatId);
         const isNameMatch = prodCatName.includes(selCatBase) || selCatBase.includes(prodCatName);
 
-        if (!isExactId && !isSubstringMatch && !isNameMatch) {
-          return false;
-        }
-      }
-      return true;
-    });
+        return isExactId || isSubstringMatch || isNameMatch;
+      });
+    }
+
+    return list;
   }, [productsList, selectedCategory, searchQuery, showInStockOnly]);
 
   // Dynamically compute category filters based on live products

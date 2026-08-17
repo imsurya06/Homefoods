@@ -3,8 +3,8 @@ import { ArrowRight, ShoppingBag, User, LogOut, Package } from 'lucide-react';
 import type { UserProfile } from '../services/authService';
 
 interface HeaderProps {
-  currentPage: 'home' | 'shop';
-  onNavigate: (page: 'home' | 'shop') => void;
+  currentPage: 'home' | 'shop' | 'account';
+  onNavigate: (page: 'home' | 'shop' | 'account') => void;
   onSearchClick?: () => void;
   cartItemCount?: number;
   onOpenCart?: () => void;
@@ -21,7 +21,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCart,
   onOpenTrackModal,
   user = null,
-  onOpenAuthModal,
   onLogout,
 }) => {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -271,6 +270,17 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     onClick={() => {
                       setIsUserDropdownOpen(false);
+                      onNavigate('account');
+                    }}
+                    className="w-full px-3 py-2.5 text-xs font-extrabold text-gray-700 hover:bg-[#F7FCE8] hover:text-[#7EB30E] rounded-xl flex items-center gap-2.5 transition-all cursor-pointer group/item"
+                  >
+                    <User className="w-4 h-4 text-[#95CD1A] group-hover/item:scale-110 transition-transform" />
+                    <span>My Profile & Account</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsUserDropdownOpen(false);
                       if (onOpenTrackModal) onOpenTrackModal();
                     }}
                     className="w-full px-3 py-2.5 text-xs font-extrabold text-gray-700 hover:bg-[#F7FCE8] hover:text-[#7EB30E] rounded-xl flex items-center gap-2.5 transition-all cursor-pointer group/item"
@@ -294,7 +304,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           ) : (
             <button
-              onClick={onOpenAuthModal}
+              onClick={() => onNavigate('account')}
               aria-label="Account Login"
               title="Account Login / Signup"
               className="hidden md:flex p-3.5 rounded-2xl bg-gray-100 text-[#1F2937] hover:bg-[#F7FCE8] hover:text-[#95CD1A] transition-all cursor-pointer group shadow-2xs items-center justify-center"

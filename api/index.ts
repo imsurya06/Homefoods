@@ -982,6 +982,37 @@ async function linkGuestOrdersToCustomer(email: string, customerId: string | num
 
 const sentOrderEmailIds = new Set<string>();
 
+function isRealSendableEmail(email: string): boolean {
+  if (!email || typeof email !== 'string') return false;
+  const clean = email.trim().toLowerCase();
+  if (!clean.includes('@') || !clean.includes('.')) return false;
+
+  const dummyDomains = [
+    'homemadefoods.com', // placeholder domain used in test/audit accounts (real domain is homemadefoodsmadurai.com / homemadefoodsmd.com)
+    'example.com',
+    'example.org',
+    'example.net',
+    'test.com',
+    'invalid',
+    'localhost',
+  ];
+
+  const dummyPrefixes = ['audit_customer_', 'test_customer_', 'dummy_', 'guest_test_'];
+
+  const [localPart, domainPart] = clean.split('@');
+  if (!domainPart || !localPart) return false;
+
+  if (dummyDomains.some((d) => domainPart.endsWith(d))) {
+    return false;
+  }
+
+  if (dummyPrefixes.some((p) => localPart.startsWith(p))) {
+    return false;
+  }
+
+  return true;
+}
+
 // Transactional Email Dispatcher for Order Confirmation & Tracking
 async function sendOrderTrackingEmail(options: {
   toEmail: string;
@@ -996,6 +1027,11 @@ async function sendOrderTrackingEmail(options: {
 }) {
   try {
     const { toEmail, customerName, orderRefCode, wcOrderId, totalAmount, items = [], shippingAddress = '', phone = '', trackingLink } = options;
+
+    if (!isRealSendableEmail(toEmail)) {
+      console.log(`✉️ [Email Skipped]: Suppressed transactional email for dummy/test recipient (${toEmail}) for Order #${wcOrderId}`);
+      return;
+    }
 
     const emailLockKey = `email_sent_${wcOrderId}`;
     if (sentOrderEmailIds.has(emailLockKey)) {
@@ -1195,6 +1231,71 @@ async function sendOrderTrackingEmail(options: {
   }
 }
 
+function getSearchRelevanceScoreApi(product: any, searchQuery: string): number {
+  if (!searchQuery) return 0;
+  const q = searchQuery.toLowerCase().trim();
+  if (!q) return 0;
+
+  const rawName = (product.name || '').toLowerCase();
+  const englishName = rawName.replace(/\s*\([^)]*\)/g, '').trim();
+  const catName = (product.categoryName || '').toLowerCase();
+  const desc = (product.description || '').toLowerCase();
+  const ingr = (product.ingredients || '').toLowerCase();
+
+  let score = 0;
+
+  if (englishName === q || rawName === q) {
+    score += 5000;
+  } else if (englishName.startsWith(q) || rawName.startsWith(q)) {
+    score += 3000;
+  } else if (rawName.split(/[\s,()/]+/).some((w) => w.startsWith(q))) {
+    score += 2000;
+  } else if (rawName.includes(q)) {
+    score += 1000;
+  }
+
+  const queryTokens = q.split(/\s+/).filter(Boolean);
+  if (queryTokens.length > 1) {
+    let matchedInTitle = 0;
+    queryTokens.forEach((token) => {
+      if (rawName.includes(token)) matchedInTitle++;
+    });
+    if (matchedInTitle === queryTokens.length) {
+      score += 800;
+    } else {
+      score += matchedInTitle * 200;
+    }
+  }
+
+  if (catName === q) {
+    score += 500;
+  } else if (catName.startsWith(q)) {
+    score += 300;
+  } else if (catName.includes(q)) {
+    score += 150;
+  }
+
+  const ingrWords = ingr.split(/[\s,()/.]+/);
+  if (ingrWords.some((w) => w === q)) {
+    score += 100;
+  } else if (ingrWords.some((w) => w.startsWith(q))) {
+    score += 70;
+  } else if (ingr.includes(q)) {
+    score += 40;
+  }
+
+  const descWords = desc.split(/[\s,()/.]+/);
+  if (descWords.some((w) => w === q)) {
+    score += 30;
+  } else if (descWords.some((w) => w.startsWith(q))) {
+    score += 20;
+  } else if (desc.includes(q)) {
+    score += 10;
+  }
+
+  return score;
+}
+
 function filterProducts(list: any[], category?: any, search?: any, inStock?: any) {
   let filtered = [...list];
   if (category && category !== 'all') {
@@ -1208,11 +1309,13 @@ function filterProducts(list: any[], category?: any, search?: any, inStock?: any
   }
   if (search) {
     const sQuery = String(search).toLowerCase().trim();
-    filtered = filtered.filter((p: any) =>
-      (p.name || '').toLowerCase().includes(sQuery) ||
-      (p.categoryName || '').toLowerCase().includes(sQuery) ||
-      (p.description || '').toLowerCase().includes(sQuery)
-    );
+    if (sQuery) {
+      const scored = filtered
+        .map((p) => ({ product: p, score: getSearchRelevanceScoreApi(p, sQuery) }))
+        .filter((item) => item.score > 0);
+      scored.sort((a, b) => b.score - a.score);
+      filtered = scored.map((item) => item.product);
+    }
   }
   if (inStock === 'true') {
     filtered = filtered.filter((p: any) => p.isAvailable);
@@ -1387,6 +1490,11 @@ const loginSchema = z.object({
 
 
 async function sendEmailOtp(email: string, otp: string, purpose: 'login' | 'checkout' | 'email_change' | 'forgot_password' = 'forgot_password') {
+  if (!isRealSendableEmail(email)) {
+    console.warn(`[Mail Warning] Suppressed sending OTP to placeholder/dummy email: ${email}`);
+    return false;
+  }
+
   const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;

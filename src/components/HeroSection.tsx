@@ -4,6 +4,7 @@ import { MarqueeTrustBar } from './MarqueeTrustBar';
 import { CATEGORIES, type Category } from '../data/categories';
 import { type Product } from '../data/products';
 import { getLiveProducts, getCachedProductsSync } from '../services/productService';
+import { filterAndSortProductsBySearch } from '../utils/searchUtils';
 
 interface HeroSectionProps {
   onSearchSubmit?: (searchTerm: string) => void;
@@ -35,18 +36,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
     'Flour',
   ];
 
-  // Dynamic Matching Product Options for the Search Dropdown
+  // Dynamic Matching Product Options for the Search Dropdown with Relevance Ranking
   const dropdownProducts = useMemo(() => {
     if (!searchTerm.trim()) {
       return liveProducts.slice(0, 5); // Featured recommendations
     }
-    const query = searchTerm.toLowerCase().trim();
-    return liveProducts.filter((p: Product) => 
-      p.name.toLowerCase().includes(query) ||
-      (p.categoryName && p.categoryName.toLowerCase().includes(query)) ||
-      (p.description && p.description.toLowerCase().includes(query)) ||
-      (p.ingredients && p.ingredients.toLowerCase().includes(query))
-    ).slice(0, 6);
+    return filterAndSortProductsBySearch(liveProducts, searchTerm).slice(0, 6);
   }, [searchTerm, liveProducts]);
 
   // Handle Outside Click to Close Dropdown
