@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { CuratedProcessSection } from './components/CuratedProcessSection';
@@ -7,7 +8,8 @@ import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
 import { AuthModal } from './components/AuthModal';
 import { LogoutConfirmModal } from './components/LogoutConfirmModal';
-import { CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
+import { AccountModal } from './components/AccountModal';
+import { MobileBottomNav, type MobileTab } from './components/MobileBottomNav';
 import { CATEGORY_FILTERS } from './data/products';
 import { CATEGORIES } from './data/categories';
 import { type CartItem } from './data/bestsellers';
@@ -29,6 +31,7 @@ export function App() {
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState<boolean>(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState<boolean>(false);
 
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [cartDrawerInitialTab, setCartDrawerInitialTab] = useState<'cart' | 'orders'>('cart');
@@ -335,6 +338,35 @@ export function App() {
   const shippingFee = (cartSubtotal >= 499 || cartSubtotal === 0) ? 0 : 40;
   const cartGrandTotal = cartSubtotal > 0 ? cartSubtotal + shippingFee : 0;
 
+  const activeMobileTab: MobileTab = isAccountModalOpen
+    ? 'profile'
+    : (isCartOpen && cartDrawerInitialTab === 'orders')
+    ? 'orders'
+    : currentPage === 'shop'
+    ? 'store'
+    : 'home';
+
+  const handleMobileTabChange = (tab: MobileTab) => {
+    if (tab === 'home') {
+      setCurrentPage('home');
+      setIsCartOpen(false);
+      setIsAccountModalOpen(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (tab === 'store') {
+      setCurrentPage('shop');
+      setSelectedCategory('all');
+      setIsCartOpen(false);
+      setIsAccountModalOpen(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (tab === 'orders') {
+      setIsAccountModalOpen(false);
+      setCartDrawerInitialTab('orders');
+      setIsCartOpen(true);
+    } else if (tab === 'profile') {
+      setIsAccountModalOpen(true);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white text-[#1F2937] font-sans flex flex-col justify-between">
       
@@ -347,7 +379,7 @@ export function App() {
               setIsCartOpen(true);
             }
           }}
-          className={`fixed ${cartItems.length > 0 && !isCartOpen ? 'bottom-24 sm:bottom-28' : 'bottom-8'} left-1/2 -translate-x-1/2 z-[60] bg-[#1F2937] text-white px-4 py-3 rounded-2xl shadow-2xl border border-gray-700/80 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 transition-all max-w-[92vw] sm:max-w-lg w-auto`}
+          className={`fixed ${cartItems.length > 0 && !isCartOpen ? 'bottom-32 sm:bottom-28' : 'bottom-20 sm:bottom-8'} left-1/2 -translate-x-1/2 z-[60] bg-[#1F2937] text-white px-4 py-3 rounded-2xl shadow-2xl border border-gray-700/80 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 transition-all max-w-[92vw] sm:max-w-lg w-auto cursor-pointer`}
         >
           <div className="w-6 h-6 rounded-full bg-[#95CD1A] text-white flex items-center justify-center shrink-0 shadow-md">
             <CheckCircle className="w-4 h-4 text-white" />
@@ -360,7 +392,7 @@ export function App() {
 
       {/* Floating Bottom Cart Checkout Bar */}
       {cartItems.length > 0 && !isCartOpen && (
-        <div className="fixed bottom-4 left-3 right-3 sm:bottom-6 sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-xl z-50 animate-in slide-in-from-bottom-6 duration-300">
+        <div className="fixed bottom-20 left-3 right-3 md:bottom-6 md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-xl z-40 animate-in slide-in-from-bottom-6 duration-300">
           <div
             onClick={() => {
               setCartDrawerInitialTab('cart');
@@ -375,7 +407,7 @@ export function App() {
                   {totalCartItemCount}
                 </span>
               </div>
-              <div className="text-left">
+              <div className="text-[#1F2937] font-numeric text-left">
                 <div className="text-xs font-black tracking-wide text-[#95CD1A] flex items-center gap-1.5">
                   <span>{totalCartItemCount} {totalCartItemCount === 1 ? 'item' : 'items'} added</span>
                 </div>
@@ -416,6 +448,26 @@ export function App() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onSuccess={handleAuthSuccess}
+      />
+
+      {/* Mobile & Desktop Account Profile Modal */}
+      <AccountModal
+        isOpen={isAccountModalOpen}
+        onClose={() => setIsAccountModalOpen(false)}
+        user={user}
+        onOpenAuthModal={() => {
+          setIsAccountModalOpen(false);
+          setIsAuthModalOpen(true);
+        }}
+        onOpenOrders={() => {
+          setIsAccountModalOpen(false);
+          setCartDrawerInitialTab('orders');
+          setIsCartOpen(true);
+        }}
+        onLogout={() => {
+          setIsAccountModalOpen(false);
+          setIsLogoutConfirmOpen(true);
+        }}
       />
 
       {/* Logout Confirmation Dialog Modal */}
@@ -477,6 +529,14 @@ export function App() {
           setCartDrawerInitialTab('orders');
           setIsCartOpen(true);
         }}
+      />
+
+      {/* Mobile Native-Style App Bottom Navigation Bar */}
+      <MobileBottomNav
+        activeTab={activeMobileTab}
+        onTabChange={handleMobileTabChange}
+        user={user}
+        cartItemCount={totalCartItemCount}
       />
 
     </div>

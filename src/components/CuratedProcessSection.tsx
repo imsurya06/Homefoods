@@ -232,7 +232,7 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
                       {/* Product Image - Full Bleed Covering Parent Card Left */}
                       <div 
                         onClick={() => openProductLightbox(product, 0)}
-                        className="relative w-full sm:w-60 sm:self-stretch min-h-[220px] sm:min-h-full shrink-0 overflow-hidden bg-gray-100 cursor-pointer"
+                        className="relative w-full sm:w-60 sm:self-stretch h-36 sm:h-auto shrink-0 overflow-hidden bg-gray-100 cursor-pointer"
                       >
                         <img
                           src={product.imageUrl}

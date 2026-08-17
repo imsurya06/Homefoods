@@ -347,7 +347,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 className="group cursor-pointer flex flex-col bg-white rounded-2xl border-2 border-transparent hover:border-[#95CD1A] overflow-hidden shadow-xs hover:shadow-xl hover:shadow-[#95CD1A]/15 hover:-translate-y-2.5 transition-all duration-300 transform"
               >
                 {/* Physical Printed Photo Frame Container */}
-                <div className="relative aspect-4/3 sm:aspect-square w-full overflow-hidden bg-gray-100 border-b border-gray-100">
+                <div className="relative aspect-4/3 sm:aspect-square w-full max-h-36 sm:max-h-none overflow-hidden bg-gray-100 border-b border-gray-100">
                   <img
                     src={category.imageUrl}
                     alt={category.title}

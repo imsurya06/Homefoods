@@ -187,10 +187,16 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else if (origin.endsWith('.vercel.app')) {
-        // Allow dynamic Vercel previews
+      if (
+        !origin || 
+        allowedOrigins.includes(origin) ||
+        origin.endsWith('.vercel.app') ||
+        origin.startsWith('http://192.168.') ||
+        origin.startsWith('http://10.') ||
+        origin.startsWith('http://172.') ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1')
+      ) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -974,6 +980,8 @@ async function linkGuestOrdersToCustomer(email: string, customerId: string | num
   }
 }
 
+const sentOrderEmailIds = new Set<string>();
+
 // Transactional Email Dispatcher for Order Confirmation & Tracking
 async function sendOrderTrackingEmail(options: {
   toEmail: string;
@@ -988,6 +996,13 @@ async function sendOrderTrackingEmail(options: {
 }) {
   try {
     const { toEmail, customerName, orderRefCode, wcOrderId, totalAmount, items = [], shippingAddress = '', phone = '', trackingLink } = options;
+
+    const emailLockKey = `email_sent_${wcOrderId}`;
+    if (sentOrderEmailIds.has(emailLockKey)) {
+      console.log(`✉️ [Email Suppressed]: Order confirmation email already dispatched for Order #${wcOrderId} (${orderRefCode})`);
+      return;
+    }
+    sentOrderEmailIds.add(emailLockKey);
     const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
     const smtpUser = process.env.SMTP_USER || '';
     const smtpPass = process.env.SMTP_PASS || '';
@@ -1205,6 +1220,47 @@ function filterProducts(list: any[], category?: any, search?: any, inStock?: any
   return filtered;
 }
 
+// Helper to resolve curated dish image when WooCommerce product image is missing or generic
+function resolveCuratedProductImage(pName: string, pSlug: string, catSlug: string, rawSrc?: string): string {
+  if (rawSrc && rawSrc.includes('/wp-content/uploads/') && !rawSrc.includes('placeholder')) {
+    return rawSrc;
+  }
+  const s = (pSlug || '').toLowerCase();
+  const n = (pName || '').toLowerCase();
+  const cat = (catSlug || '').toLowerCase();
+
+  if (s.includes('adai') || n.includes('adai') || n.includes('அடை')) {
+    return 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=800&q=80';
+  }
+  if (s.includes('vendaya') || n.includes('vendaya') || n.includes('வெந்தயக்')) {
+    return 'https://images.unsplash.com/photo-1610057099443-fde8c4d50f91?auto=format&fit=crop&w=800&q=80';
+  }
+  if (s.includes('black-urad') || n.includes('black urad') || n.includes('கருப்பு உளுந்து')) {
+    return 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=800&q=80';
+  }
+  if (s.includes('sathu') || s.includes('health-mix') || n.includes('sathu') || n.includes('சத்து')) {
+    return 'https://images.unsplash.com/photo-1546548970-71785318a17b?auto=format&fit=crop&w=800&q=80';
+  }
+  if (s.includes('thokku') || n.includes('thokku') || n.includes('தொக்கு') || cat.includes('thokku')) {
+    return 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=800&q=80';
+  }
+  if (s.includes('cookie') || s.includes('brownie') || n.includes('cookie') || n.includes('brownie') || n.includes('குக்கீஸ்') || cat.includes('cookie')) {
+    return 'https://images.unsplash.com/photo-1499636136210-6f4ee915583e?auto=format&fit=crop&w=800&q=80';
+  }
+  if (s.includes('sharbath') || s.includes('beverage') || n.includes('sharbath') || n.includes('jaggery') || cat.includes('beverage')) {
+    return 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=800&q=80';
+  }
+  if (s.includes('podi') || s.includes('soup') || n.includes('podi') || n.includes('பொடி') || cat.includes('podi')) {
+    return 'https://images.unsplash.com/photo-1610057099443-fde8c4d50f91?auto=format&fit=crop&w=800&q=80';
+  }
+  if (cat.includes('flour') || cat.includes('premix')) {
+    return 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=800&q=80';
+  }
+  return rawSrc && !rawSrc.includes('placeholder')
+    ? rawSrc
+    : 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80';
+}
+
 // GET /api/v1/products & /products
 app.get(['/api/v1/products', '/api/products', '/v1/products', '/products'], async (req, res) => {
   try {
@@ -1225,6 +1281,9 @@ app.get(['/api/v1/products', '/api/products', '/v1/products', '/products'], asyn
             const primaryCategory = p.categories && p.categories.length > 0 ? p.categories[0] : {};
             const variants = await fetchProductVariationsFromWooCommerce(p);
 
+            const rawImg = p.images && p.images.length > 0 ? p.images[0].src : undefined;
+            const finalImg = resolveCuratedProductImage(p.name, p.slug, primaryCategory.slug || '', rawImg);
+
             return {
               id: p.id.toString(),
               name: decodeHtmlEntities(p.name),
@@ -1235,14 +1294,14 @@ app.get(['/api/v1/products', '/api/products', '/v1/products', '/products'], asyn
               ingredients: decodeHtmlEntities(p.attributes?.find((a: any) => a.name?.toLowerCase() === 'ingredients')?.options?.join(', ') || ''),
               shelfLife: decodeHtmlEntities(p.attributes?.find((a: any) => a.name?.toLowerCase() === 'shelf life')?.options?.join(', ') || '6 Months'),
               storageInstructions: 'Store in a cool dry place.',
-              imageUrl: p.images && p.images.length > 0 ? p.images[0].src : 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80',
+              imageUrl: finalImg,
               images: p.images && p.images.length > 0
                 ? p.images.map((img: any) => ({
                     id: img.id,
-                    src: img.src,
+                    src: resolveCuratedProductImage(p.name, p.slug, primaryCategory.slug || '', img.src),
                     alt: decodeHtmlEntities(img.alt || p.name)
                   }))
-                : [{ id: 0, src: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80', alt: decodeHtmlEntities(p.name) }],
+                : [{ id: 0, src: finalImg, alt: decodeHtmlEntities(p.name) }],
               gstPercentage: 5,
               isAvailable: p.stock_status === 'instock',
               stockQuantity: p.stock_quantity ?? 100,
@@ -4147,20 +4206,6 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
     const trackingLink = trackingToken 
       ? `${APP_URL}/#track?token=${encodeURIComponent(trackingToken)}`
       : `${APP_URL}/#track?id=${encodeURIComponent(displayOrderCode)}`;
-
-    if (customerEmail && customerEmail.includes('@')) {
-      sendOrderTrackingEmail({
-        toEmail: customerEmail,
-        customerName: customerName || 'Valued Customer',
-        orderRefCode: displayOrderCode,
-        wcOrderId,
-        totalAmount: totalAmount || 0,
-        items: items || [],
-        shippingAddress: shippingAddress || '',
-        phone: phone || '',
-        trackingLink,
-      });
-    }
 
     return res.json({
       success: true,

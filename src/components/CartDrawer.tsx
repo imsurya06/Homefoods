@@ -1018,7 +1018,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[70] overflow-hidden animate-in fade-in duration-200">
       {/* Darkened Semi-Transparent Backdrop */}
       <div
         onClick={onClose}
@@ -2085,7 +2085,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
           {/* Cart Footer & Checkout Panel (Only Visible in Shopping Cart Tab) */}
           {activeTab === 'cart' && items.length > 0 && !orderSuccess && (
-            <div className="p-4 sm:p-5 bg-white border-t border-gray-200 space-y-3.5 shadow-lg shrink-0">
+            <div className="p-4 sm:p-5 pb-8 sm:pb-5 bg-white border-t border-gray-200 space-y-3.5 shadow-lg shrink-0">
               
               {/* Coupon Block */}
               {checkoutStep === 'cart' ? (

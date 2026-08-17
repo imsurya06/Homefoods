@@ -60,7 +60,11 @@ export async function getLiveCategories(): Promise<{ id: string; label: string; 
 
   return [
     { id: 'all', label: 'All Products', count: PRODUCTS.length },
-    { id: 'flour-premix-malt', label: 'Flours & Premixes', count: 4 },
-    { id: 'thokku-varieties', label: 'Thokku Varieties', count: 2 },
+    { id: 'flour-premix-malt', label: 'Flours & Premixes', count: 10 },
+    { id: 'thokku-varieties', label: 'Thokku Varieties', count: 7 },
+    { id: 'beverage-sweeteners', label: 'Beverages & Sweeteners', count: 7 },
+    { id: 'cookies-brownies', label: 'Cookies & Brownies', count: 10 },
+    { id: 'masala-varieties', label: 'Masala Varieties', count: 11 },
+    { id: 'idly-podi-rice-mixes', label: 'Idly Podi & Rice Mixes', count: 9 },
   ];
 }

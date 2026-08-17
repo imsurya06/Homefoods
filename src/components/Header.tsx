@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, X, ArrowRight, ShoppingBag, User, LogOut, Package } from 'lucide-react';
+import { ArrowRight, ShoppingBag, User, LogOut, Package } from 'lucide-react';
 import type { UserProfile } from '../services/authService';
 
 interface HeaderProps {
@@ -24,7 +24,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAuthModal,
   onLogout,
 }) => {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string>(currentPage === 'shop' ? 'shop' : 'home');
   const userDropdownRef = useRef<HTMLDivElement>(null);
@@ -89,12 +88,7 @@ export const Header: React.FC<HeaderProps> = ({
     return () => window.removeEventListener('scroll', handleScroll);
   }, [currentPage]);
 
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen((prev) => !prev);
-  };
-
   const handleNavClick = (page: 'home' | 'shop', hashAnchor?: string) => {
-    setIsMobileMenuOpen(false);
     onNavigate(page);
 
     if (page === 'shop') {
@@ -308,116 +302,8 @@ export const Header: React.FC<HeaderProps> = ({
               <User className="w-5 h-5 sm:w-6 sm:h-6 text-[#1F2937] group-hover:text-[#95CD1A] transition-colors" />
             </button>
           )}
-
-          {/* Mobile Hamburger Menu Toggle Button */}
-          <button
-            onClick={toggleMobileMenu}
-            aria-label="Toggle Navigation Menu"
-            className="md:hidden p-3 rounded-2xl bg-gray-100 text-[#1F2937] hover:bg-[#F7FCE8] hover:text-[#95CD1A] transition-colors cursor-pointer"
-          >
-            {isMobileMenuOpen ? <X className="w-7 h-7" /> : <Menu className="w-7 h-7" />}
-          </button>
         </div>
-
       </div>
-
-      {/* Mobile Slide-Down Navigation Menu */}
-      {isMobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-gray-200 px-6 py-6 space-y-4 shadow-xl animate-in slide-in-from-top duration-300">
-          
-          {/* User Account Banner inside Mobile Hamburger Menu */}
-          {user ? (
-            <div className="bg-[#F7FCE8] p-4 rounded-2xl border border-[#ECF9CA] space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#95CD1A] text-white flex items-center justify-center shadow-xs">
-                  <User className="w-5 h-5 text-white" />
-                </div>
-                <div className="text-left overflow-hidden">
-                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Logged In As</span>
-                  <span className="text-sm font-black text-[#1F2937] truncate block">{user.email}</span>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  if (onLogout) onLogout();
-                }}
-                className="w-full py-2.5 rounded-xl bg-white text-red-600 font-extrabold text-xs flex items-center justify-center gap-1.5 border border-red-100 hover:bg-red-50 transition-colors cursor-pointer"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Logout Account</span>
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => {
-                setIsMobileMenuOpen(false);
-                if (onOpenAuthModal) onOpenAuthModal();
-              }}
-              className="w-full py-3 rounded-2xl bg-gray-100 text-[#1F2937] hover:bg-[#F7FCE8] hover:text-[#95CD1A] font-extrabold text-sm flex items-center justify-center gap-2 border border-gray-200 transition-colors cursor-pointer"
-            >
-              <User className="w-4 h-4 text-[#95CD1A]" />
-              <span>Login / Sign Up Account</span>
-            </button>
-          )}
-
-          <nav className="flex flex-col space-y-3 font-bold text-lg text-gray-800 text-center">
-            <button
-              onClick={() => handleNavClick('home')}
-              className={`py-2.5 border-b border-gray-100 ${activeSection === 'home' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
-                }`}
-            >
-              <span>Home</span>
-            </button>
-
-            <button
-              onClick={() => handleNavClick('home', 'categories')}
-              className={`py-2.5 border-b border-gray-100 ${activeSection === 'categories' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
-                }`}
-            >
-              <span>Categories</span>
-            </button>
-
-            <button
-              onClick={() => handleNavClick('home', 'process')}
-              className={`py-2.5 border-b border-gray-100 ${activeSection === 'process' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
-                }`}
-            >
-              <span>Our Method</span>
-            </button>
-
-            <button
-              onClick={() => handleNavClick('home', 'footer')}
-              className={`py-2.5 border-b border-gray-100 ${activeSection === 'footer' ? 'text-[#95CD1A] font-black' : 'hover:text-[#95CD1A]'
-                }`}
-            >
-              <span>Contact Us</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setIsMobileMenuOpen(false);
-                if (onOpenTrackModal) onOpenTrackModal();
-              }}
-              className="py-2.5 border-b border-gray-100 text-gray-800 hover:text-[#95CD1A] flex items-center justify-center gap-2 cursor-pointer font-extrabold"
-            >
-              <Package className="w-5 h-5 text-[#95CD1A]" />
-              <span>{user ? 'My Orders' : 'Track Order'}</span>
-            </button>
-          </nav>
-
-          <div className="pt-2">
-            <button
-              onClick={() => handleNavClick('shop')}
-              className="w-full py-3.5 rounded-xl bg-[#95CD1A] hover:bg-[#7EB30E] text-white font-extrabold text-base flex items-center justify-center gap-2 shadow-lg shadow-[#95CD1A]/25 cursor-pointer"
-            >
-              <ShoppingBag className="w-5 h-5 text-white" />
-              <span>Shop Now</span>
-              <ArrowRight className="w-4 h-4 text-white stroke-[3] ml-1" />
-            </button>
-          </div>
-        </div>
-      )}
     </header>
   );
 };

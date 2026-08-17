@@ -469,7 +469,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                       className="group bg-white rounded-xl sm:rounded-2xl border border-gray-200 overflow-hidden shadow-xs hover:shadow-xl hover:border-[#95CD1A]/60 transition-all duration-300 flex flex-col justify-between h-full text-left"
                     >
                       {/* Product Image Frame with Slider */}
-                      <div className="relative aspect-square sm:aspect-4/3 w-full overflow-hidden bg-gray-100 border-b border-gray-100">
+                      <div className="relative aspect-4/3 sm:aspect-16/10 w-full max-h-44 sm:max-h-56 overflow-hidden bg-gray-100 border-b border-gray-100">
                         <ProductImageSlider
                           images={product.images && product.images.length > 0 
                             ? product.images 
