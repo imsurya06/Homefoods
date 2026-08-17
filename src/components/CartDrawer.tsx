@@ -417,6 +417,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setCheckoutError(null);
     setCheckoutInfoMsg(null);
     setCheckoutSuccessMsg(null);
+
+    // Optimistically update local order status to 'cancelled' so it instantly shifts from Active Orders to History
+    setOrders((prevOrders) =>
+      prevOrders.map((o) => {
+        if (o.id === orderId || o.id?.toString() === orderId?.toString()) {
+          return { ...o, status: 'cancelled', statusLabel: 'Order Cancelled' };
+        }
+        return o;
+      })
+    );
+
     try {
       const success = await cancelInventoryReservation(orderId);
       if (success) {
@@ -424,7 +435,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           setActiveCheckoutSession(null);
         }
 
-        // Restore reserved items back to active shopping cart
+        // Restore reserved items back to active shopping cart without doubling quantities
         const savedRes = localStorage.getItem(`hf_pending_reservation_${orderId}`);
         let restoredCount = 0;
         if (savedRes) {
@@ -434,9 +445,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               const currentCart = useSyncStore.getState().cartItems;
               const merged = [...currentCart];
               parsed.items.forEach((item: CartItem) => {
-                const existingIndex = merged.findIndex((i) => i.id === item.id);
+                const existingIndex = merged.findIndex(
+                  (i) => (i.id === item.id || (i.productId && i.productId === item.productId)) && i.weight === item.weight
+                );
                 if (existingIndex > -1) {
-                  merged[existingIndex].quantity += item.quantity;
+                  // Use Math.max instead of += to prevent doubling cart items if they already exist in cart
+                  merged[existingIndex].quantity = Math.max(merged[existingIndex].quantity, item.quantity);
                 } else {
                   merged.push(item);
                 }
