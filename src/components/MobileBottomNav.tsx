@@ -102,9 +102,6 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         >
           <div className="relative">
             <User className={`w-5 h-5 transition-transform ${activeTab === 'profile' ? 'stroke-[2.5]' : 'stroke-[1.75]'}`} />
-            {user && (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#95CD1A] rounded-full ring-2 ring-white" />
-            )}
             {activeTab === 'profile' && (
               <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#95CD1A] rounded-full" />
             )}

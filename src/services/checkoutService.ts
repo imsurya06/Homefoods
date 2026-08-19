@@ -38,7 +38,7 @@ export async function processRazorpayCheckout(
     amountPaid?: number;
   }) => void,
   onError: (errorMsg: string, isOutOfSync?: boolean) => void,
-  onReservationCreated?: (wcOrderId: number, items: CartItem[], expiresAt: number) => void,
+  _onReservationCreated?: any,
   onPaymentSuccessCallback?: () => void
 ) {
   try {
@@ -76,10 +76,6 @@ export async function processRazorpayCheckout(
         body: JSON.stringify(payload),
       });
 
-      if (orderRes.success && orderRes.wcOrderId && onReservationCreated) {
-        const expTime = orderRes.expiresAt || (Date.now() + 10 * 60 * 1000);
-        onReservationCreated(orderRes.wcOrderId, payload.items, expTime);
-      }
     } catch (err: any) {
       if (err.status === 409 || err.code === 'CART_OUT_OF_SYNC') {
         throw err;

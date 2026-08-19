@@ -506,6 +506,10 @@ export function App() {
               setCartDrawerInitialTab('orders');
               setIsCartOpen(true);
             }}
+            onOpenCart={() => {
+              setCartDrawerInitialTab('cart');
+              setIsCartOpen(true);
+            }}
             onLogout={() => setIsLogoutConfirmOpen(true)}
           />
         )}

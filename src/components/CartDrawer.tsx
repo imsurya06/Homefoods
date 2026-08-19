@@ -938,32 +938,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           setCheckoutError(null);
           await bootstrapSync();
         } else if (errorMsg.includes('cancelled by user')) {
-          setCheckoutInfoMsg('Payment was cancelled. Your items are still reserved for a few minutes. You can retry payment now or continue shopping.');
+          setCheckoutError('Payment was not completed. Click "Retry Payment" to try again.');
         } else {
-          setCheckoutError(errorMsg);
+          setCheckoutError(errorMsg || 'Payment process failed.');
         }
       },
-      (wcOrderId: number, reservedItems: CartItem[], expiresAt: number) => {
-        try {
-          const reservationData = {
-            wcOrderId,
-            items: reservedItems || items,
-            expiresAt,
-          };
-          localStorage.setItem(`hf_pending_reservation_${wcOrderId}`, JSON.stringify(reservationData));
-        } catch (e) {}
-
-        setActiveCheckoutSession({
-          wcOrderId,
-          orderRefCode: `HF-${wcOrderId}`,
-          status: 'pending_payment',
-          reservationExpiresAt: expiresAt,
-          razorpayOrderId: '',
-          amountInPaise: (calcSummary ? calcSummary.grandTotal : grandTotal) * 100,
-          keyId: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TJhDcvxup2pu4E',
-          cartSnapshot: [...(reservedItems || items)],
-        });
-      },
+      undefined,
       // Step 2: Transition from Waiting for Payment -> Payment Verified & Confirming Order
       () => {
         setIsWaitingForPayment(false);
@@ -1696,69 +1676,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     {(() => {
                       const displayList = Array.isArray(orders) ? [...orders] : [];
 
-                      if (activeCheckoutSession && activeCheckoutSession.reservationExpiresAt > now) {
-                        const sessWcId = activeCheckoutSession.wcOrderId?.toString();
-                        const sessRefCode = activeCheckoutSession.orderRefCode;
 
-                        let confirmedIds: string[] = [];
-                        try {
-                          confirmedIds = JSON.parse(sessionStorage.getItem('hf_confirmed_order_ids') || '[]');
-                        } catch {}
-
-                        const isConfirmedInSession = (sessWcId && confirmedIds.includes(sessWcId)) ||
-                          (sessRefCode && confirmedIds.includes(sessRefCode));
-
-                        if (isConfirmedInSession) {
-                          setTimeout(() => {
-                            useSyncStore.getState().setActiveCheckoutSession(null);
-                            localStorage.removeItem('hf_active_checkout_session');
-                          }, 0);
-                        } else {
-                          const sessionOrder = {
-                            id: activeCheckoutSession.wcOrderId,
-                            orderRefCode: activeCheckoutSession.orderRefCode,
-                            status: 'pending',
-                            statusLabel: 'Payment Pending',
-                            stage: 1,
-                            total: (activeCheckoutSession.amountInPaise / 100).toFixed(2),
-                            currency: '₹',
-                            dateCreated: new Date().toISOString(),
-                            items: activeCheckoutSession.cartSnapshot || [],
-                            shippingAddress: activeCheckoutSession.shippingAddress || '',
-                            razorpayOrderId: activeCheckoutSession.razorpayOrderId,
-                            amountInPaise: activeCheckoutSession.amountInPaise,
-                            keyId: activeCheckoutSession.keyId,
-                            expiresAt: activeCheckoutSession.reservationExpiresAt,
-                          };
-
-                          const alreadyExists = displayList.some((o: any) => {
-                            const oIdStr = o.id?.toString();
-                            const oWcIdStr = o.wcOrderId?.toString();
-                            const oRefStr = o.orderRefCode?.toString();
-                            const isMatch = (
-                              (sessWcId && (oIdStr === sessWcId || oWcIdStr === sessWcId)) ||
-                              (sessRefCode && (oRefStr === sessRefCode || oIdStr === sessRefCode))
-                            );
-                            const isPaidStatus = ['processing', 'confirmed', 'kitchen', 'dispatched', 'shipped', 'completed', 'delivered'].includes((o.status || '').toLowerCase()) ||
-                              confirmedIds.some((cid) => {
-                                const cStr = String(cid);
-                                return oIdStr === cStr || oWcIdStr === cStr || oRefStr === cStr || oIdStr.endsWith(`//${cStr}`) || oRefStr.endsWith(`//${cStr}`);
-                              });
-
-                            if (isMatch && isPaidStatus) {
-                              setTimeout(() => {
-                                useSyncStore.getState().setActiveCheckoutSession(null);
-                                localStorage.removeItem('hf_active_checkout_session');
-                              }, 0);
-                            }
-                            return isMatch;
-                          });
-
-                          if (!alreadyExists) {
-                            displayList.unshift(sessionOrder);
-                          }
-                        }
-                      }
 
                       if (guestSearchResult) {
                         const guestOrderObj = {
@@ -2207,45 +2125,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
               </div>
 
-              {/* Active Checkout Session & Stock Reservation Banner */}
-              {activeCheckoutSession && activeCheckoutSession.reservationExpiresAt > now && (
-                <div className="bg-[#F7FCE8] border border-[#ECF9CA] rounded-2xl p-3.5 space-y-2.5 animate-in fade-in duration-300 text-left shadow-xs">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Clock className={`w-4 h-4 ${
-                        Math.floor((activeCheckoutSession.reservationExpiresAt - now) / 1000) <= 120 ? 'text-amber-500 animate-pulse' : 'text-[#95CD1A]'
-                      }`} />
-                      <span className="text-xs font-black text-[#1F2937]">
-                        Items reserved for Order #{activeCheckoutSession.orderRefCode}
-                      </span>
-                    </div>
-                    {renderReservationTimer(activeCheckoutSession.reservationExpiresAt)}
-                  </div>
 
-                  <p className="text-xs text-[#4A7C34] font-medium leading-snug">
-                    Complete payment before the timer expires to guarantee stock availability of these items.
-                  </p>
-
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={() => handleRetryPayment(activeCheckoutSession)}
-                      disabled={isProcessing}
-                      className="flex-1 py-2 px-3 bg-[#95CD1A] hover:bg-[#7EB30E] disabled:bg-gray-400 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <CreditCard className="w-3.5 h-3.5" />
-                      <span>{isProcessing ? 'Opening Payment...' : 'Resume Payment Now'}</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleCancelOrder(activeCheckoutSession.wcOrderId)}
-                      disabled={isProcessing}
-                      className="py-2 px-3 bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 text-gray-600 font-extrabold text-xs rounded-xl transition-all cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
 
               {/* Neutral Payment Status / Info Notice Banner */}
               {checkoutInfoMsg && (

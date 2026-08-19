@@ -3486,7 +3486,7 @@ app.get([
     const now = Date.now();
     const cached = customerOrdersServerCache.get(cacheKey);
 
-    if (cached && (now - cached.lastChecked < 30000)) {
+    if (cached && (now - cached.lastChecked < 1000)) {
       return res.json({ success: true, data: cached.orders, cached: true });
     }
 
@@ -3502,7 +3502,7 @@ app.get([
     }
 
     const formattedOrders = ordersRes.data
-      .filter((o: any) => o.status !== 'trash')
+      .filter((o: any) => o.status !== 'trash' && o.status !== 'pending' && o.status !== 'cancelled')
       .map((order: any) => {
         const stageInfo = getOrderStatusDetails(order.status);
         const refMeta = Array.isArray(order.meta_data)
@@ -3914,44 +3914,24 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
     const finalAmountInPaise = Math.round(totalAmountInRupees * 100);
 
     try {
-      // Execute WooCommerce order creation & Razorpay order creation IN PARALLEL for sub-500ms response
-      const [wcRes, rzpOrder] = await Promise.all([
-        wcFetch('orders', { method: 'POST', body: wcOrderPayload }),
-        razorpay.orders.create({
-          amount: finalAmountInPaise,
-          currency: 'INR',
-          receipt: `rcpt_${Date.now()}`,
-          notes: {
-            customer_email: customerEmail,
-          }
-        }).catch((err: any) => {
-          console.warn('[Razorpay Order Creation Notice]:', err.message);
-          return null;
-        })
-      ]);
-
-      if (wcRes.ok && wcRes.data && wcRes.data.id) {
-        wcOrderId = wcRes.data.id;
-        const nowIst = new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000));
-        const pad = (n: number) => n.toString().padStart(2, '0');
-        const HHMM = `${pad(nowIst.getUTCHours())}${pad(nowIst.getUTCMinutes())}`;
-        const DDMMYY = `${pad(nowIst.getUTCDate())}${pad(nowIst.getUTCMonth() + 1)}${nowIst.getUTCFullYear().toString().slice(-2)}`;
-        orderRefCode = `${HHMM}//${DDMMYY}//${wcOrderId}`;
-
-        // Non-blocking background sync of customized orderRefCode
-        wcFetch(`orders/${wcOrderId}`, {
-          method: 'PUT',
-          body: {
-            meta_data: [{ key: '_order_ref_code', value: orderRefCode }]
-          }
-        }).catch(() => {});
-      }
+      // Create Razorpay payment order directly (No WooCommerce order created prior to payment)
+      const rzpOrder = await razorpay.orders.create({
+        amount: finalAmountInPaise,
+        currency: 'INR',
+        receipt: `rcpt_${Date.now()}`,
+        notes: {
+          customer_email: customerEmail,
+        }
+      }).catch((err: any) => {
+        console.warn('[Razorpay Order Creation Notice]:', err.message);
+        return null;
+      });
 
       if (rzpOrder && rzpOrder.id) {
         rzpOrderId = rzpOrder.id;
       }
     } catch (err: any) {
-      console.error('[Order Creation Error]:', err.message);
+      console.error('[Razorpay Order Creation Error]:', err.message);
     }
 
     if (rzpOrderId && !rzpOrderId.startsWith('order_mock_')) {
@@ -4165,8 +4145,90 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
       }
     }
 
-    if (wcOrderId) {
-      await confirmWooOrder(wcOrderId, razorpay_payment_id || `tx_${Date.now()}`, 'verify');
+    let finalWcOrderId = wcOrderId;
+    let finalOrderRefCode = orderRefCode;
+
+    // Create WooCommerce Order directly upon payment verification (No pre-created pending orders)
+    if (!finalWcOrderId || typeof finalWcOrderId !== 'number' || finalWcOrderId > 1000000000000) {
+      try {
+        const cleanEmail = (customerEmail || '').trim().toLowerCase();
+        const fullName = (customerName || 'Customer').trim();
+        const firstName = fullName.split(' ')[0] || 'Customer';
+        const lastName = fullName.split(' ').slice(1).join(' ') || '';
+        const cleanPhone = (phone || '').trim();
+
+        const safeItems = Array.isArray(items) ? items : [];
+        const lineItems = safeItems.map((item: any) => ({
+          product_id: parseInt(item.productId || item.id, 10) || 35,
+          quantity: parseInt(item.quantity || 1, 10),
+          subtotal: ((item.pricePerUnit || item.price || 70) * (item.quantity || 1)).toFixed(2),
+          total: ((item.pricePerUnit || item.price || 70) * (item.quantity || 1)).toFixed(2),
+          meta_data: [{ key: 'weight', value: item.weight || '250gms' }]
+        }));
+
+        const wcOrderPayload = {
+          payment_method: 'razorpay',
+          payment_method_title: 'Razorpay (UPI/Cards/NetBanking)',
+          set_paid: true,
+          status: 'processing',
+          transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
+          total: (totalAmount || 0).toString(),
+          meta_data: [
+            { key: '_payment_verified', value: 'true' },
+            { key: '_payment_state', value: 'confirmed' },
+            { key: '_razorpay_payment_id', value: razorpay_payment_id || '' }
+          ],
+          billing: {
+            first_name: firstName,
+            last_name: lastName,
+            email: cleanEmail,
+            phone: cleanPhone,
+            address_1: shippingAddress || 'Main Road',
+            city: 'Madurai',
+            state: 'TN',
+            country: 'IN'
+          },
+          shipping: {
+            first_name: firstName,
+            last_name: lastName,
+            address_1: shippingAddress || 'Main Road',
+            city: 'Madurai',
+            state: 'TN',
+            country: 'IN'
+          },
+          line_items: lineItems
+        };
+
+        const createRes = await wcFetch('orders', { method: 'POST', body: wcOrderPayload });
+        if (createRes.ok && createRes.data && createRes.data.id) {
+          finalWcOrderId = createRes.data.id;
+          const nowIst = new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000));
+          const pad = (n: number) => n.toString().padStart(2, '0');
+          const HHMM = `${pad(nowIst.getUTCHours())}${pad(nowIst.getUTCMinutes())}`;
+          const DDMMYY = `${pad(nowIst.getUTCDate())}${pad(nowIst.getUTCMonth() + 1)}${nowIst.getUTCFullYear().toString().slice(-2)}`;
+          finalOrderRefCode = `${HHMM}//${DDMMYY}//${finalWcOrderId}`;
+
+          wcFetch(`orders/${finalWcOrderId}`, {
+            method: 'PUT',
+            body: { meta_data: [{ key: '_order_ref_code', value: finalOrderRefCode }] }
+          }).catch(() => {});
+
+          sendOrderTrackingEmail({
+            toEmail: cleanEmail,
+            customerName: fullName,
+            orderRefCode: finalOrderRefCode,
+            wcOrderId: finalWcOrderId,
+            totalAmount: parseFloat(totalAmount || '0'),
+            items: safeItems.map((i: any) => ({ name: i.name, quantity: i.quantity, totalPrice: (i.pricePerUnit || 70) * i.quantity, weight: i.weight || '250gms' })),
+            shippingAddress: shippingAddress || 'Madurai',
+            trackingLink: `${APP_URL}/#track?id=${encodeURIComponent(finalOrderRefCode)}`
+          }).catch(() => {});
+        }
+      } catch (err: any) {
+        console.error('[Verify Payment Order Creation Error]:', err.message);
+      }
+    } else if (finalWcOrderId) {
+      await confirmWooOrder(finalWcOrderId, razorpay_payment_id || `tx_${Date.now()}`, 'verify');
     }
 
     const cleanEmail = (customerEmail || '').trim().toLowerCase();
@@ -4310,7 +4372,7 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
       }
     } catch {}
 
-    const displayOrderCode = orderRefCode || `HF-${wcOrderId}`;
+    const displayOrderCode = finalOrderRefCode || orderRefCode || `HF-${finalWcOrderId || wcOrderId}`;
     const trackingLink = trackingToken 
       ? `${APP_URL}/#track?token=${encodeURIComponent(trackingToken)}`
       : `${APP_URL}/#track?id=${encodeURIComponent(displayOrderCode)}`;
@@ -4318,7 +4380,7 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
     return res.json({
       success: true,
       message: 'Payment verified',
-      wcOrderId,
+      wcOrderId: finalWcOrderId || wcOrderId,
       orderRefCode: displayOrderCode,
       trackingLink,
       cartRevision: finalCartRevision,

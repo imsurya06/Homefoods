@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, User, LogOut, Package, MapPin, Phone, ShieldCheck, ArrowRight, KeyRound } from 'lucide-react';
+import { X, User, LogOut, Package, MapPin, ShoppingBag, ShieldCheck, ArrowRight, KeyRound } from 'lucide-react';
 import type { UserProfile } from '../services/authService';
 
 interface AccountModalProps {
@@ -60,81 +60,101 @@ export const AccountModal: React.FC<AccountModalProps> = ({
           {user ? (
             /* ================= LOGGED IN USER VIEW ================= */
             <>
-              {/* User Profile Card */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-[#95CD1A]/10 via-[#95CD1A]/5 to-transparent border border-[#95CD1A]/20 flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-[#95CD1A] text-white flex items-center justify-center font-black text-2xl uppercase shadow-md shrink-0">
+              {/* Top Round Profile Icon in Center + Username Details at Bottom */}
+              <div className="p-6 rounded-2xl bg-white border border-gray-100 text-center flex flex-col items-center justify-center space-y-2.5 relative overflow-hidden">
+                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#7EB30E] to-[#95CD1A] text-white flex items-center justify-center font-black text-2xl uppercase shadow-lg shadow-[#95CD1A]/20 border-4 border-white shrink-0">
                   {user.email.charAt(0)}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-extrabold text-base text-[#1F2937] truncate">
+
+                <div className="space-y-0.5">
+                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                    <h3 className="font-extrabold text-lg text-[#1F2937]">
                       {user.displayName || 'Valued Customer'}
                     </h3>
-                    <span className="bg-[#95CD1A]/20 text-[#7EB30E] text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1">
+                    <span className="bg-[#95CD1A]/15 text-[#7EB30E] text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3" /> Verified
                     </span>
                   </div>
-                  <p className="text-xs font-bold text-gray-600 truncate mt-0.5" title={user.email}>
+                  <p className="text-xs font-bold text-gray-500 truncate" title={user.email}>
                     {user.email}
                   </p>
                 </div>
               </div>
 
-              {/* Account Quick Options Grid */}
+              {/* Action Buttons in Requested Order: View Orders -> My Cart -> View Products -> Logout */}
               <div className="space-y-2.5">
-
-                {/* 1. My Orders & Live Tracking */}
+                {/* 1. View Orders */}
                 <button
                   onClick={() => {
                     onClose();
                     onOpenOrders();
                   }}
-                  className="w-full p-3.5 rounded-2xl bg-gray-50 hover:bg-[#F7FCE8] border border-gray-100 hover:border-[#95CD1A]/40 flex items-center justify-between transition-all cursor-pointer group"
+                  className="w-full p-3.5 rounded-2xl bg-gray-50 hover:bg-[#F7FCE8] border border-gray-100 hover:border-[#95CD1A]/40 flex items-center justify-between transition-all cursor-pointer group text-left"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-white text-[#95CD1A] shadow-2xs flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div className="w-9 h-9 rounded-xl bg-white text-[#95CD1A] shadow-2xs flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
                       <Package className="w-4 h-4" />
                     </div>
                     <div>
-                      <span className="font-extrabold text-sm text-[#1F2937] block">My Orders & Live Tracking</span>
-                      <span className="text-[11px] text-gray-500 font-medium block">View active orders and past history</span>
+                      <span className="font-extrabold text-sm text-[#1F2937] block">View Orders</span>
+                      <span className="text-[11px] text-gray-500 font-medium block">Track active orders & history</span>
                     </div>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-[#95CD1A] group-hover:translate-x-1 transition-all" />
+                  <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-[#95CD1A] group-hover:translate-x-1 transition-all shrink-0" />
                 </button>
 
-                {/* 2. Customer Support */}
-                <a
-                  href="https://wa.me/919789444555?text=Hello%20Homemade%20Foods%20Support"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full p-3.5 rounded-2xl bg-gray-50 hover:bg-[#F7FCE8] border border-gray-100 hover:border-[#95CD1A]/40 flex items-center justify-between transition-all cursor-pointer group"
+                {/* 2. My Cart */}
+                <button
+                  onClick={() => {
+                    onClose();
+                    window.dispatchEvent(new CustomEvent('hf_open_cart'));
+                  }}
+                  className="w-full p-3.5 rounded-2xl bg-gray-50 hover:bg-emerald-50/50 border border-gray-100 hover:border-emerald-300 flex items-center justify-between transition-all cursor-pointer group text-left"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-white text-[#95CD1A] shadow-2xs flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <Phone className="w-4 h-4" />
+                    <div className="w-9 h-9 rounded-xl bg-white text-emerald-600 shadow-2xs flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
+                      <ShoppingBag className="w-4 h-4" />
                     </div>
                     <div>
-                      <span className="font-extrabold text-sm text-[#1F2937] block">Customer Support & Help</span>
-                      <span className="text-[11px] text-gray-500 font-medium block">Direct WhatsApp & Call support</span>
+                      <span className="font-extrabold text-sm text-[#1F2937] block">My Cart</span>
+                      <span className="text-[11px] text-gray-500 font-medium block">Review items & checkout</span>
                     </div>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-[#95CD1A] group-hover:translate-x-1 transition-all" />
-                </a>
+                  <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all shrink-0" />
+                </button>
 
+                {/* 3. View Products */}
+                <button
+                  onClick={() => {
+                    onClose();
+                    window.location.hash = '#shop';
+                  }}
+                  className="w-full p-3.5 rounded-2xl bg-gray-50 hover:bg-blue-50/50 border border-gray-100 hover:border-blue-300 flex items-center justify-between transition-all cursor-pointer group text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-white text-blue-600 shadow-2xs flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-extrabold text-sm text-[#1F2937] block">View Products</span>
+                      <span className="text-[11px] text-gray-500 font-medium block">Browse full store catalog</span>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all shrink-0" />
+                </button>
+
+                {/* 4. Logout */}
+                <button
+                  onClick={() => {
+                    onClose();
+                    onLogout();
+                  }}
+                  className="w-full py-3.5 rounded-2xl bg-red-50 hover:bg-red-100 text-red-600 font-extrabold text-sm flex items-center justify-center gap-2 border border-red-100 transition-colors cursor-pointer mt-2"
+                >
+                  <LogOut className="w-4 h-4 text-red-500" />
+                  <span>Logout</span>
+                </button>
               </div>
-
-              {/* Logout Button */}
-              <button
-                onClick={() => {
-                  onClose();
-                  onLogout();
-                }}
-                className="w-full py-3.5 rounded-2xl bg-red-50 hover:bg-red-100/80 text-red-600 font-extrabold text-sm flex items-center justify-center gap-2 border border-red-100 transition-colors cursor-pointer mt-4"
-              >
-                <LogOut className="w-4 h-4 text-red-500" />
-                <span>Logout Account</span>
-              </button>
             </>
           ) : (
             /* ================= GUEST / LOGGED OUT VIEW ================= */

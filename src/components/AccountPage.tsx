@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, LogOut, Package, MapPin, ShieldCheck, ArrowRight, KeyRound, ArrowLeft, ShoppingBag, MessageCircle } from 'lucide-react';
+import { LogOut, Package, ShieldCheck, ArrowRight, ArrowLeft, ShoppingBag, Store, User, MapPin, KeyRound } from 'lucide-react';
 import type { UserProfile } from '../services/authService';
 
 interface AccountPageProps {
@@ -8,6 +8,7 @@ interface AccountPageProps {
   onNavigateShop: () => void;
   onOpenAuthModal: () => void;
   onOpenOrders: () => void;
+  onOpenCart?: () => void;
   onLogout: () => void;
 }
 
@@ -17,14 +18,15 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   onNavigateShop,
   onOpenAuthModal,
   onOpenOrders,
+  onOpenCart,
   onLogout,
 }) => {
   return (
-    <div className="min-h-screen bg-gray-50/50 pb-24 md:pb-16 text-[#1F2937]">
+    <div className="min-h-screen bg-gray-50/50 pb-28 md:pb-16 text-[#1F2937]">
       
       {/* Top Banner & Navigation Header */}
       <div className="bg-white border-b border-gray-200/80 shadow-2xs py-6 px-4 sm:px-6">
-        <div className="max-w-4xl mx-auto flex flex-col gap-4">
+        <div className="max-w-xl mx-auto flex flex-col gap-4">
           
           {/* Breadcrumb & Back Button */}
           <div className="flex items-center justify-between">
@@ -43,169 +45,107 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             </div>
           </div>
 
-          {/* Page Headline */}
-          <div>
-            <h1 className="font-serif-headline text-2xl sm:text-3xl font-black text-[#1F2937]">
-              {user ? 'My Account & Profile' : 'Account & Login'}
-            </h1>
-            <p className="text-xs sm:text-sm text-gray-500 font-medium mt-1">
-              {user ? 'Manage your order history, shipping details, and account preferences' : 'Sign in to access your order history, save addresses, and track deliveries live'}
-            </p>
-          </div>
-
         </div>
       </div>
 
       {/* Main Page Container */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      <div className="max-w-xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
 
         {user ? (
           /* ================= LOGGED IN USER PAGE VIEW ================= */
           <div className="space-y-6 animate-in fade-in duration-300">
             
-            {/* User Profile Card */}
-            <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-[#95CD1A]/10 to-transparent rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
-              
-              <div className="flex items-center gap-5 relative z-10">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-[#7EB30E] to-[#95CD1A] text-white flex items-center justify-center font-black text-2xl sm:text-3xl uppercase shadow-lg shadow-[#95CD1A]/20 shrink-0">
-                  {user.email.charAt(0)}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <h2 className="font-serif-headline text-xl sm:text-2xl font-black text-[#1F2937]">
-                      {user.displayName || 'Valued Customer'}
-                    </h2>
-                    <span className="bg-[#95CD1A]/15 text-[#7EB30E] text-xs font-black px-3 py-1 rounded-full flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5" /> Verified Customer
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm font-bold text-gray-500 mt-1 truncate" title={user.email}>
-                    {user.email}
-                  </p>
-                </div>
+            {/* 1 & 2: Top Round Profile Icon in Center + Username Details at Bottom */}
+            <div className="bg-white rounded-3xl p-8 shadow-xs border border-gray-100 text-center flex flex-col items-center justify-center space-y-3 relative overflow-hidden">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 bg-gradient-to-b from-[#95CD1A]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+
+              {/* Round Profile Icon in Center */}
+              <div className="relative z-10 w-24 h-24 rounded-full bg-gradient-to-tr from-[#7EB30E] to-[#95CD1A] text-white flex items-center justify-center font-black text-3xl sm:text-4xl uppercase shadow-xl shadow-[#95CD1A]/25 border-4 border-white shrink-0">
+                {user.email.charAt(0)}
               </div>
 
+              {/* Username Details at Bottom of Icon */}
+              <div className="relative z-10 space-y-1">
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  <h2 className="font-serif-headline text-2xl sm:text-3xl font-black text-[#1F2937]">
+                    {user.displayName || 'Valued Customer'}
+                  </h2>
+                  <span className="bg-[#95CD1A]/15 text-[#7EB30E] text-xs font-black px-3 py-0.5 rounded-full flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Verified
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm font-bold text-gray-500 truncate" title={user.email}>
+                  {user.email}
+                </p>
+              </div>
+            </div>
+
+            {/* Ordered Action Cards: View Orders -> My Cart -> View Products -> Logout */}
+            <div className="space-y-3">
+              
+              {/* 3. View Orders */}
+              <button
+                onClick={onOpenOrders}
+                className="w-full p-4 rounded-2xl bg-white hover:bg-[#F7FCE8] border border-gray-200 hover:border-[#95CD1A] shadow-xs flex items-center justify-between transition-all cursor-pointer group text-left"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-[#F7FCE8] text-[#95CD1A] flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
+                    <Package className="w-5.5 h-5.5" />
+                  </div>
+                  <div>
+                    <span className="font-extrabold text-base text-[#1F2937] block">View Orders</span>
+                    <span className="text-xs text-gray-500 font-medium">Track active orders & view order history</span>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-[#95CD1A] group-hover:translate-x-1 transition-all shrink-0" />
+              </button>
+
+              {/* 4. My Cart */}
+              {onOpenCart && (
+                <button
+                  onClick={onOpenCart}
+                  className="w-full p-4 rounded-2xl bg-white hover:bg-emerald-50/50 border border-gray-200 hover:border-emerald-400 shadow-xs flex items-center justify-between transition-all cursor-pointer group text-left"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
+                      <ShoppingBag className="w-5.5 h-5.5" />
+                    </div>
+                    <div>
+                      <span className="font-extrabold text-base text-[#1F2937] block">My Cart</span>
+                      <span className="text-xs text-gray-500 font-medium">Review selected items & proceed to checkout</span>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all shrink-0" />
+                </button>
+              )}
+
+              {/* 5. View Products */}
+              <button
+                onClick={onNavigateShop}
+                className="w-full p-4 rounded-2xl bg-white hover:bg-blue-50/50 border border-gray-200 hover:border-blue-400 shadow-xs flex items-center justify-between transition-all cursor-pointer group text-left"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
+                    <Store className="w-5.5 h-5.5" />
+                  </div>
+                  <div>
+                    <span className="font-extrabold text-base text-[#1F2937] block">View Products</span>
+                    <span className="text-xs text-gray-500 font-medium">Explore fresh traditional snacks & mixes</span>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all shrink-0" />
+              </button>
+
+              {/* 6. Logout */}
               <button
                 onClick={onLogout}
-                className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-red-50 hover:bg-red-100/80 text-red-600 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 border border-red-100 transition-colors cursor-pointer shrink-0"
+                className="w-full py-4 rounded-2xl bg-red-50 hover:bg-red-100 text-red-600 font-extrabold text-sm flex items-center justify-center gap-2 border border-red-200 transition-colors cursor-pointer mt-4 shadow-xs"
               >
-                <LogOut className="w-4 h-4 text-red-500" />
-                <span>Logout Account</span>
+                <LogOut className="w-4.5 h-4.5 text-red-500" />
+                <span>Logout</span>
               </button>
-            </div>
-
-            {/* Main Action Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              
-              {/* 1. My Orders & Live Tracking */}
-              <div
-                onClick={onOpenOrders}
-                className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md hover:border-[#95CD1A]/40 transition-all cursor-pointer group flex flex-col justify-between"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-[#F7FCE8] text-[#95CD1A] flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Package className="w-6 h-6" />
-                  </div>
-                  <span className="text-[11px] font-extrabold bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full">
-                    Active & History
-                  </span>
-                </div>
-                <div className="mt-4">
-                  <h3 className="font-extrabold text-base sm:text-lg text-[#1F2937] group-hover:text-[#7EB30E] transition-colors">
-                    My Orders & Live Tracking
-                  </h3>
-                  <p className="text-xs text-gray-500 font-medium mt-1 leading-relaxed">
-                    View active delivery status, track live dispatch, and review previous home-cooked food orders.
-                  </p>
-                </div>
-                <div className="mt-5 flex items-center gap-2 text-xs font-black text-[#95CD1A] group-hover:translate-x-1 transition-transform">
-                  <span>View Orders</span>
-                  <ArrowRight className="w-4 h-4" />
-                </div>
-              </div>
-
-              {/* 2. Customer Support */}
-              <a
-                href="https://wa.me/919789444555?text=Hello%20Homemade%20Foods%20Support"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md hover:border-[#95CD1A]/40 transition-all cursor-pointer group flex flex-col justify-between"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <MessageCircle className="w-6 h-6" />
-                  </div>
-                  <span className="text-[11px] font-extrabold bg-emerald-100/60 text-emerald-700 px-2.5 py-1 rounded-full">
-                    Instant WhatsApp
-                  </span>
-                </div>
-                <div className="mt-4">
-                  <h3 className="font-extrabold text-base sm:text-lg text-[#1F2937] group-hover:text-emerald-600 transition-colors">
-                    Customer Support & Help
-                  </h3>
-                  <p className="text-xs text-gray-500 font-medium mt-1 leading-relaxed">
-                    Need help with your order or custom requirements? Chat directly with our Madurai team.
-                  </p>
-                </div>
-                <div className="mt-5 flex items-center gap-2 text-xs font-black text-emerald-600 group-hover:translate-x-1 transition-transform">
-                  <span>Chat on WhatsApp (+91 97894 44555)</span>
-                  <ArrowRight className="w-4 h-4" />
-                </div>
-              </a>
-
-              {/* 3. Account Security Info */}
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                    <KeyRound className="w-6 h-6" />
-                  </div>
-                  <span className="text-[11px] font-extrabold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full">
-                    Passwordless OTP
-                  </span>
-                </div>
-                <div className="mt-4">
-                  <h3 className="font-extrabold text-base sm:text-lg text-[#1F2937]">
-                    Account Security & Authentication
-                  </h3>
-                  <p className="text-xs text-gray-500 font-medium mt-1 leading-relaxed">
-                    Your account uses 100% passwordless Email OTP verification. No passwords to remember or reset.
-                  </p>
-                </div>
-                <div className="mt-5 text-xs font-bold text-gray-400">
-                  Secured with encrypted session tokens
-                </div>
-              </div>
-
-              {/* 4. Browse Store Card */}
-              <div
-                onClick={onNavigateShop}
-                className="bg-gradient-to-br from-[#1F2937] to-gray-900 text-white p-6 rounded-3xl shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-white/10 text-[#95CD1A] flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <ShoppingBag className="w-6 h-6" />
-                  </div>
-                  <span className="text-[11px] font-extrabold bg-[#95CD1A]/20 text-[#95CD1A] px-2.5 py-1 rounded-full">
-                    Store Catalog
-                  </span>
-                </div>
-                <div className="mt-4">
-                  <h3 className="font-serif-headline text-lg sm:text-xl font-black text-white group-hover:text-[#95CD1A] transition-colors">
-                    Explore Traditional Foods
-                  </h3>
-                  <p className="text-xs text-gray-300 font-medium mt-1 leading-relaxed">
-                    Browse our handcrafted masalas, idly podis, thokkus, and traditional premixes.
-                  </p>
-                </div>
-                <div className="mt-5 flex items-center gap-2 text-xs font-black text-[#95CD1A] group-hover:translate-x-1 transition-transform">
-                  <span>Go to Shop Catalog</span>
-                  <ArrowRight className="w-4 h-4" />
-                </div>
-              </div>
 
             </div>
-
           </div>
         ) : (
           /* ================= GUEST / LOGGED OUT PAGE VIEW ================= */

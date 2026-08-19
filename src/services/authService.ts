@@ -182,58 +182,18 @@ export async function fetchCustomerOrders(): Promise<CustomerOrderHistoryItem[]>
   const token = getSavedToken();
   if (!token) return [];
 
-  // Retrieve order IDs confirmed via payment in the active session
-  let confirmedIds: string[] = [];
-  try {
-    confirmedIds = JSON.parse(sessionStorage.getItem('hf_confirmed_order_ids') || '[]');
-  } catch {}
-
-  const mapConfirmed = (orders: CustomerOrderHistoryItem[]) => {
-    if (confirmedIds.length === 0 || !Array.isArray(orders)) return orders;
-    return orders.map((ord) => {
-      const ordIdStr = String(ord.id || '');
-      const ordWcIdStr = String((ord as any).wcOrderId || '');
-      const ordRefStr = String((ord as any).orderRefCode || '');
-
-      const isConfirmed = confirmedIds.some((cid) => {
-        const cStr = String(cid);
-        return (
-          cStr === ordIdStr ||
-          cStr === ordWcIdStr ||
-          cStr === ordRefStr ||
-          ordIdStr.endsWith(`//${cStr}`) ||
-          ordRefStr.endsWith(`//${cStr}`) ||
-          ordIdStr.endsWith(`-${cStr}`)
-        );
-      });
-
-      if (isConfirmed) {
-        return {
-          ...ord,
-          status: 'processing',
-          paymentState: 'confirmed',
-          statusText: 'Order Confirmed & Kitchen Preparation',
-          statusLabel: 'Order Confirmed & Kitchen Preparation',
-          stage: 2,
-        };
-      }
-      return ord;
-    });
-  };
-
   try {
     const res = await fetchApi<{ success: boolean; data: CustomerOrderHistoryItem[] }>('/orders/me');
     if (res && res.success && Array.isArray(res.data)) {
-      const sanitized = mapConfirmed(res.data);
       try {
-        localStorage.setItem('hf_cached_customer_orders', JSON.stringify(sanitized));
+        localStorage.setItem('hf_cached_customer_orders', JSON.stringify(res.data));
       } catch {}
-      return sanitized;
+      return res.data;
     }
   } catch (err: any) {
     console.warn('Fetch customer orders warning:', err);
   }
-  return mapConfirmed(getCachedCustomerOrders());
+  return getCachedCustomerOrders();
 }
 
 export function logoutCustomer() {
