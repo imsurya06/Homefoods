@@ -224,7 +224,7 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
               Shop Traditional Delicacies
             </h1>
             <p className="text-xs sm:text-sm text-gray-500 mt-1 max-w-xl mx-auto">
-              Select product variants, check dynamic GST prices, and click "Order Now" to place your order directly.
+              Select product variants and click "Order Now" to place your order directly.
             </p>
           </div>
 
@@ -495,10 +495,6 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                             In Stock
                           </span>
                         )}
-
-                        <span className="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-md pointer-events-none z-10">
-                          {product.gstPercentage}% GST
-                        </span>
                       </div>
 
                       {/* Content Details */}
@@ -553,9 +549,6 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
                                  </span>
                                </div>
                              </div>
-                             <span className="text-[10px] sm:text-xs text-gray-400 font-semibold hidden sm:block align-self-end mb-1">
-                               Incl. GST
-                             </span>
                            </div>
 
                          </div>

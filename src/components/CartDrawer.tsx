@@ -2102,13 +2102,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center justify-between text-gray-500 font-bold">
-                  <span>GST (5% Included)</span>
-                  <span className="text-[#1F2937] font-extrabold">
-                    ₹{calcSummary ? calcSummary.gst : Math.round(subtotal - (subtotal / 1.05))}
-                  </span>
-                </div>
-                
                 {/* Grand Total */}
                 <div className="pt-2 border-t border-gray-100 flex flex-wrap items-baseline justify-between gap-1">
                   <div>
@@ -2120,7 +2113,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </span>
                   </div>
                   <span className="text-[10px] text-gray-400 font-semibold">
-                    (Includes Shipping & GST)
+                    (Includes Delivery)
                   </span>
                 </div>
               </div>

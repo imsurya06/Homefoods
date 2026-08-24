@@ -58,7 +58,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Mudavaattuakkaal Soup Mix (முடவாட்டுக்கால் சூப் மிக்ஸ்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -86,7 +86,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Kids Special Idly Podi (கிட்ஸ் ஸ்பெஷல் இட்லி பொடி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -114,7 +114,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Andhra Paruppu Podi (ஆந்திரா பருப்பு பொடி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -142,7 +142,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Murungai Podi (முருங்கை பொடி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -175,7 +175,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Sundakkaai Podi (சுண்டக்காய் பொடி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -208,7 +208,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Mudavaattuakkaal Podi (முடவாட்டுக்கால் பொடி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -241,7 +241,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Pirandai Podi (பிரண்டை பொடி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -269,7 +269,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Ellu Podi (எள்ளு பொடி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -297,7 +297,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Idly Podi (இட்லி பொடி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -335,7 +335,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Fish Fry Masala (மீன் வறுவல் மசாலா)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -373,7 +373,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Chicken 65 Masala (சிக்கன் 65 மசாலா)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -411,7 +411,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Chicken Masala (சிக்கன் மசாலா)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -449,7 +449,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Mutton Masala (மட்டன் மசாலா)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -487,7 +487,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Biryani Masala (பிரியாணி மசாலா)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -525,7 +525,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Garam Masala (கரம் மசாலா)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -558,7 +558,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Chilli Powder (தனிமிளகாய் தூள்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -591,7 +591,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Kuzhambu Masala (குழம்பு மசாலா)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -624,7 +624,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Turmeric Powder (மஞ்சள் தூள்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -657,7 +657,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Coriander Powder (மல்லித் தூள்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -690,7 +690,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Sambar Masala (சாம்பார் மசாலா)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -723,7 +723,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Karuppu Kavuni Brownie (கருப்பு கவுனி பிரவுனி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -751,7 +751,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Ragi Brownie (ராகி பிரவுனி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -779,7 +779,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Walnut Brownie (வால்நட் பிரவுனி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -807,7 +807,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Nuts Overloaded Brownie (நட்ஸ் பிரவுனி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -835,7 +835,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Classic Brownie (கிளாசிக் பிரவுனி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -863,7 +863,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Choco Cookies (சாக்கோ குக்கீஸ்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -891,7 +891,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Spicy Cookies (ஸ்பைசி குக்கீஸ்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -919,7 +919,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Milk Cookies (மில்க் குக்கீஸ்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -947,7 +947,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Osmania Cookies (உஸ்மானியா குக்கீஸ்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -975,7 +975,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Millet Cookies (சிறு தானிய குக்கீஸ்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1003,7 +1003,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Masala Tea Powder (மசாலா டீ தூள்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1031,7 +1031,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Masala Chai (மசாலா டீ)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1059,7 +1059,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Nuts Powder (நட்ஸ் பவுடர்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1087,7 +1087,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Dates Powder (பேரீச்சை பொடி)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1115,7 +1115,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Natural Honey (தேன்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1143,7 +1143,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Country Sugar (நாட்டுச் சர்க்கரை)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1171,7 +1171,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Nannari Sherbet (நன்னாரி சர்பத்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1204,7 +1204,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Karuveppilai Thokku (கருவேப்பிலை தொக்கு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1232,7 +1232,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Pirandai Thokku (பிரண்டை தொக்கு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1260,7 +1260,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Puliyotharai Paste (புளியோதரை பேஸ்ட்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1288,7 +1288,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Pudhina Thokku (புதინა தொக்கு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1316,7 +1316,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Vatthal Kuzhambu Thokku (வத்தல் குழம்பு தொக்கு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1344,7 +1344,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Tomato Thokku (தக்காளி தொக்கு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1372,7 +1372,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Garlic Thokku (பூண்டு தொக்கு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1400,7 +1400,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Karuppu Kavuni Kanji Mix (கருப்பு கவுனி கஞ்சி மிக்ஸ்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1433,7 +1433,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Health Mix (சத்து மாவு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1461,7 +1461,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Millet Mix (சிறு தானிய மாவு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1489,7 +1489,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Sivappu Arisi Puttu Maavu (சிவப்பு அரிசி புட்டு/ இடியாப்பம்/ மாவு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1517,7 +1517,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Puttu, Idiyappam Maavu (கொழுக்கட்டை/ இடியாப்பம்/ புட்டு மாவு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1545,7 +1545,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Whole Wheat Flour (கோதுமை மாவு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1578,7 +1578,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Ragi Flour (ராகி மாவு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1606,7 +1606,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Adai Dosa Premix (அடை மாவு ப்ரீமிக்ஸ்)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1634,7 +1634,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Vendaya Kali Mix (வெந்தயக் களி மாவு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {
@@ -1662,7 +1662,7 @@ export const PRODUCTS: Product[] = [
         "alt": "Black Urad Dal Kali Mix (கருப்பு உளுந்து களி மாவு)"
       }
     ],
-    "gstPercentage": 5,
+    "gstPercentage": 0,
     "isAvailable": true,
     "variants": [
       {

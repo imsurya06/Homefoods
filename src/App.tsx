@@ -408,7 +408,7 @@ export function App() {
                   <span>{totalCartItemCount} {totalCartItemCount === 1 ? 'item' : 'items'} added</span>
                 </div>
                 <div className="text-sm font-black text-white font-numeric">
-                  ₹{cartGrandTotal} <span className="text-[10px] font-normal text-gray-400 font-sans">(Incl. Shipping & GST)</span>
+                  ₹{cartGrandTotal} <span className="text-[10px] font-normal text-gray-400 font-sans">(Incl. Delivery)</span>
                 </div>
               </div>
             </div>

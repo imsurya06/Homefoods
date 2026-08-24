@@ -529,7 +529,7 @@ async function getProductFromWooCommerceOrCache(productId: string): Promise<any>
       return {
         id: p.id.toString(),
         name: decodeHtmlEntities(p.name),
-        gstPercentage: 5,
+        gstPercentage: 0,
         isAvailable: p.stock_status === 'instock',
         stockQuantity: p.stock_quantity ?? 100,
         variants,
@@ -1405,7 +1405,7 @@ app.get(['/api/v1/products', '/api/products', '/v1/products', '/products'], asyn
                     alt: decodeHtmlEntities(img.alt || p.name)
                   }))
                 : [{ id: 0, src: finalImg, alt: decodeHtmlEntities(p.name) }],
-              gstPercentage: 5,
+              gstPercentage: 0,
               isAvailable: p.stock_status === 'instock',
               stockQuantity: p.stock_quantity ?? 100,
               isBestseller: !!p.featured || (Array.isArray(p.categories) && p.categories.some((c: any) => c.slug === 'bestsellers')),
@@ -2552,7 +2552,7 @@ app.post(['/api/v1/cart/validate', '/api/cart/validate', '/v1/cart/validate', '/
     }
 
     const netSubtotalAfterDiscount = Math.max(0, subtotal - couponDiscount);
-    const gst = Math.round(netSubtotalAfterDiscount - (netSubtotalAfterDiscount / 1.05));
+    const gst = 0;
     const grandTotal = Math.max(0, netSubtotalAfterDiscount + shippingCharge);
 
     return res.json({
@@ -3809,7 +3809,7 @@ app.post(['/api/v1/checkout/create-order', '/api/checkout/create-order', '/v1/ch
     }
 
     const netSubtotalAfterDiscount = Math.max(0, subtotal - couponDiscount);
-    const gst = Math.round(netSubtotalAfterDiscount - (netSubtotalAfterDiscount / 1.05));
+    const gst = 0;
     let totalAmountInRupees = Math.max(0, netSubtotalAfterDiscount + shippingCharge);
     const amountInPaise = Math.round(totalAmountInRupees * 100);
 

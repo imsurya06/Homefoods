@@ -319,11 +319,7 @@ export const CuratedProcessSection: React.FC<CuratedProcessSectionProps> = ({ on
                                 ₹{priceInfo.totalPrice}
                               </span>
                             </div>
-                            <span className="text-[10px] text-gray-400 font-semibold mt-0.5">
-                              (Base ₹{priceInfo.basePrice} + GST ₹{priceInfo.gstAmount})
-                            </span>
                           </div>
-
                         </div>
 
                         {/* Order Now Action Button */}

@@ -33,13 +33,11 @@ export const WHATSAPP_PHONE_NUMBER = '918608857705';
  * Calculates final price including GST.
  * Formula: Final Price = basePrice + (basePrice * gstPercentage / 100)
  */
-export function calculatePriceDetails(basePrice: number, gstPercentage: number) {
-  const gstAmount = (basePrice * gstPercentage) / 100;
-  const totalPrice = Math.round(basePrice + gstAmount);
+export function calculatePriceDetails(basePrice: number, _gstPercentage?: number) {
   return {
     basePrice,
-    gstPercentage,
-    gstAmount: Math.round(gstAmount),
-    totalPrice,
+    gstPercentage: 0,
+    gstAmount: 0,
+    totalPrice: Math.round(basePrice),
   };
 }
