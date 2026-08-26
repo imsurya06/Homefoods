@@ -241,7 +241,8 @@ export async function processRazorpayCheckout(
 
 export async function trackSingleOrder(orderId: number | string) {
   try {
-    const res = await fetchApi<{ success: boolean; data: any; message?: string }>(`/checkout/track/${orderId}`);
+    const cleanQuery = encodeURIComponent((orderId || '').toString().trim());
+    const res = await fetchApi<{ success: boolean; data: any; message?: string }>(`/checkout/track?q=${cleanQuery}`);
     if (res.success && res.data) {
       return res.data;
     }

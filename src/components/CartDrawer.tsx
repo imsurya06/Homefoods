@@ -549,23 +549,35 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   // Auto-search guest order if token/id parameter is present in URL hash
   useEffect(() => {
     if (isOpen && activeTab === 'orders') {
-      const hash = window.location.hash;
-      if (hash.includes('?token=') || hash.includes('?id=')) {
-        const urlParams = new URLSearchParams(hash.substring(hash.indexOf('?')));
-        const tokenParam = urlParams.get('token') || urlParams.get('id');
-        if (tokenParam) {
-          const decoded = decodeURIComponent(tokenParam);
+      let tokenParam = '';
+
+      try {
+        const hash = window.location.hash || '';
+        const search = window.location.search || '';
+
+        if (hash.includes('?')) {
+          const hashParams = new URLSearchParams(hash.substring(hash.indexOf('?')));
+          tokenParam = hashParams.get('token') || hashParams.get('id') || hashParams.get('order_id') || hashParams.get('q') || '';
+        }
+        if (!tokenParam && search) {
+          const searchParams = new URLSearchParams(search);
+          tokenParam = searchParams.get('token') || searchParams.get('id') || searchParams.get('order_id') || searchParams.get('q') || '';
+        }
+      } catch {}
+
+      if (tokenParam) {
+        const decoded = decodeURIComponent(tokenParam).trim();
+        if (decoded) {
           setGuestSearchInput(decoded);
-          
           setGuestSearchLoading(true);
           setGuestSearchError(null);
-          trackSingleOrder(decoded.trim())
+          trackSingleOrder(decoded)
             .then((data) => {
               if (data && data.orderId && !data.notFound) {
                 setGuestSearchResult(data);
                 setExpandedOrderId(data.orderId);
               } else {
-                setGuestSearchError(data?.message || 'Order not found. Check parameters.');
+                setGuestSearchError(data?.message || 'Order not found. Please check Order ID.');
               }
             })
             .catch(() => {
@@ -573,8 +585,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             })
             .finally(() => {
               setGuestSearchLoading(false);
-              // Clean the hash so it doesn't trigger repeatedly
-              window.history.replaceState(null, '', '#track');
+              try {
+                window.history.replaceState(null, '', '#track');
+              } catch {}
             });
         }
       }
@@ -962,46 +975,62 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setGuestSearchError(null);
     setGuestSearchResult(null);
 
+    const qLower = cleanId.toLowerCase();
+    const numbers = cleanId.match(/\d+/g) || [];
+
+    // 1. Instant check against state orders list & local storage
+    let localFound: any = null;
+    if (Array.isArray(orders) && orders.length > 0) {
+      localFound = orders.find((o) => {
+        const oId = (o.id || '').toString().toLowerCase();
+        const oRef = (o.orderRefCode || '').toLowerCase();
+        return oId === qLower || oRef === qLower || oRef.includes(qLower) || qLower.includes(oRef) || (numbers.length > 0 && oId === numbers[0]);
+      });
+    }
+
+    if (!localFound) {
+      try {
+        const saved = localStorage.getItem('hf_local_orders');
+        const localList: CustomerOrderHistoryItem[] = saved ? JSON.parse(saved) : [];
+        localFound = localList.find((lo) => {
+          const lId = lo.id ? lo.id.toString().toLowerCase() : '';
+          const lRef = lo.orderRefCode ? lo.orderRefCode.toLowerCase() : '';
+          return lId === qLower || lRef === qLower || lRef.includes(qLower) || qLower.includes(lRef) || (numbers.length > 0 && lId === numbers[0]);
+        });
+      } catch {}
+    }
+
+    if (localFound) {
+      setGuestSearchResult({
+        orderId: localFound.id,
+        orderRefCode: localFound.orderRefCode || `HF-${localFound.id}`,
+        status: localFound.status,
+        statusLabel: localFound.statusLabel,
+        stage: localFound.stage,
+        total: localFound.total,
+        currency: localFound.currency || '₹',
+        dateCreated: localFound.dateCreated,
+        customerName: 'Customer',
+        phone: '',
+        shippingAddress: localFound.shippingAddress || '',
+        items: localFound.items || [],
+      });
+      setExpandedOrderId(localFound.id);
+      setGuestSearchLoading(false);
+      return;
+    }
+
+    // 2. Fetch from remote backend API
     try {
       const data = await trackSingleOrder(cleanId);
       if (data && data.orderId && !data.notFound) {
         setGuestSearchResult(data);
         setExpandedOrderId(data.orderId);
       } else {
-        let localFound: any = null;
-        try {
-          const saved = localStorage.getItem('hf_local_orders');
-          const localList: CustomerOrderHistoryItem[] = saved ? JSON.parse(saved) : [];
-          localFound = localList.find((lo) => {
-            const lId = lo.id ? lo.id.toString().toLowerCase() : '';
-            const lRef = lo.orderRefCode ? lo.orderRefCode.toLowerCase() : '';
-            const qLower = cleanId.toLowerCase();
-            return lId === qLower || lRef === qLower || lRef.includes(qLower) || qLower.includes(lRef);
-          });
-        } catch {}
-
-        if (localFound) {
-          setGuestSearchResult({
-            orderId: localFound.id,
-            orderRefCode: localFound.orderRefCode || `HF-${localFound.id}`,
-            status: localFound.status,
-            statusLabel: localFound.statusLabel,
-            stage: localFound.stage,
-            total: localFound.total,
-            currency: localFound.currency || '₹',
-            dateCreated: localFound.dateCreated,
-            customerName: 'Customer',
-            phone: '',
-            shippingAddress: localFound.shippingAddress || '',
-            items: localFound.items || [],
-          });
-          setExpandedOrderId(localFound.id);
-        } else {
-          setGuestSearchError(`No order found matching #${rawQuery}. Please check Order ID.`);
-        }
+        setGuestSearchError(data?.message || `No order found matching #${rawQuery}. Please check Order ID.`);
       }
     } catch {
-      setGuestSearchError(`Failed to fetch Order #${rawQuery}. Please try again.`);
+      setGuestSearchError(`No order found matching #${rawQuery}. Please check Order ID.`);
     } finally {
       setGuestSearchLoading(false);
     }
@@ -2176,7 +2205,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     ) : (
                       <ShoppingBag className="w-5 h-5 text-white shrink-0" />
                     )}
-                    <span>{isProcessing ? 'Processing Order...' : 'Pay & Place Order'}</span>
+                    <span>
+                      {isProcessing
+                        ? 'Processing Order...'
+                        : (checkoutError && (checkoutError.includes('Retry Payment') || checkoutError.includes('not completed') || checkoutError.includes('cancelled') || checkoutError.includes('failed'))
+                            ? 'Retry Payment'
+                            : 'Pay & Place Order')}
+                    </span>
                   </button>
 
                   <button

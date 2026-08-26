@@ -88,19 +88,24 @@ export function App() {
     };
   }, []);
 
-  // Sync hash URL navigation
+  // Sync hash URL navigation & email tracking links
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash;
-      if (hash === '#shop') {
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+
+      const isTracking = hash.includes('track') || hash.includes('order') ||
+                         search.includes('order_id') || search.includes('id=') || search.includes('token=') || search.includes('track=');
+
+      if (isTracking) {
+        setCartDrawerInitialTab('orders');
+        setIsCartOpen(true);
+      } else if (hash === '#shop') {
         setCurrentPage('shop');
       } else if (hash === '#account' || hash === '#profile') {
         setCurrentPage('account');
       } else if (hash === '#home' || hash === '') {
         setCurrentPage('home');
-      } else if (hash.startsWith('#track')) {
-        setCartDrawerInitialTab('orders');
-        setIsCartOpen(true);
       }
     };
 
