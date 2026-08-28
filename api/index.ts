@@ -3456,20 +3456,13 @@ app.get([
         const rzpOrderIdMeta = Array.isArray(order.meta_data) ? order.meta_data.find((m: any) => m.key === '_razorpay_order_id') : null;
         const expTimeMeta = Array.isArray(order.meta_data) ? order.meta_data.find((m: any) => m.key === '_reservation_expires_at') : null;
 
-        const lineSubtotal = (order.line_items || []).reduce((acc: number, item: any) => acc + (parseFloat(item.total) || 0), 0);
-        const shippingVal = parseFloat(order.shipping_total) || 0;
-        const totalVal = parseFloat(order.total) || 0;
-        const resolvedTotal = (lineSubtotal > 0 && lineSubtotal < 499 && shippingVal === 0 && Math.abs(totalVal - lineSubtotal) < 0.01)
-          ? (lineSubtotal + 40).toFixed(2)
-          : order.total;
-
         return {
           id: order.id,
           orderRefCode: refCode,
           status: order.status,
           statusLabel: stageInfo.label,
           stage: stageInfo.stage,
-          total: resolvedTotal,
+          total: order.total || '0',
           currency: '₹',
           dateCreated: order.date_created,
           items: order.line_items?.map((item: any) => ({ name: item.name, quantity: item.quantity, pricePerUnit: parseFloat(item.price) || 0 })),
@@ -4516,13 +4509,6 @@ app.get([
     const address = order.shipping?.address_1 || order.billing?.address_1 || '';
     const formattedAddress = address ? `${address}, ${city}` : city;
 
-    const lineSubtotal = (order.line_items || []).reduce((acc: number, item: any) => acc + (parseFloat(item.total) || 0), 0);
-    const shippingVal = parseFloat(order.shipping_total) || 0;
-    const totalVal = parseFloat(order.total) || 0;
-    const resolvedTotal = (lineSubtotal > 0 && lineSubtotal < 499 && shippingVal === 0 && Math.abs(totalVal - lineSubtotal) < 0.01)
-      ? (lineSubtotal + 40).toFixed(2)
-      : (order.total || '0');
-
     return res.json({
       success: true,
       data: {
@@ -4531,7 +4517,7 @@ app.get([
         status: order.status,
         statusLabel: currentStatus.label,
         stage: currentStatus.stage,
-        total: resolvedTotal,
+        total: order.total || '0',
         currency: '₹',
         dateCreated: order.date_created || new Date().toISOString(),
         customerName: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Valued Customer',
