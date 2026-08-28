@@ -5,9 +5,7 @@ let memoryCache: Product[] | null = null;
 
 try {
   const saved = localStorage.getItem('hf_live_products_cache');
-  const savedTime = localStorage.getItem('hf_live_products_cache_time');
-  const isExpired = !savedTime || (Date.now() - parseInt(savedTime, 10) > 10 * 60 * 1000); // 10 mins cache
-  if (saved && !isExpired) {
+  if (saved) {
     const parsed = JSON.parse(saved);
     if (Array.isArray(parsed) && parsed.length > 0) {
       memoryCache = parsed;
@@ -16,7 +14,7 @@ try {
 } catch {}
 
 export function getCachedProductsSync(): Product[] {
-  return memoryCache && memoryCache.length > 0 ? memoryCache : PRODUCTS;
+  return memoryCache && memoryCache.length > 0 ? memoryCache : [];
 }
 
 export async function getLiveProducts(category?: string, search?: string, forceRefresh?: boolean): Promise<Product[]> {

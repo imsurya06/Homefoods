@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Filter, X, ArrowLeft, Check, ShoppingBag, Zap } from 'lucide-react';
-import { PRODUCTS, type Product } from '../data/products';
+import { type Product } from '../data/products';
 import { getLiveProducts, getCachedProductsSync } from '../services/productService';
 import { calculatePriceDetails, type CartItem } from '../data/bestsellers';
 import { filterAndSortProductsBySearch } from '../utils/searchUtils';
@@ -26,10 +26,8 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
   const [searchQuery, setSearchQuery] = useState<string>(initialSearchQuery);
   const [showInStockOnly, setShowInStockOnly] = useState<boolean>(false);
-  const [productsList, setProductsList] = useState<Product[]>(() => {
-    const cached = getCachedProductsSync();
-    return cached.length > 0 ? cached : PRODUCTS;
-  });
+  const [productsList, setProductsList] = useState<Product[]>(() => getCachedProductsSync());
+  const [isLoading, setIsLoading] = useState<boolean>(() => productsList.length === 0);
 
   // Track selected variant index for each product ID
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
@@ -70,11 +68,17 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
     let isMounted = true;
     getLiveProducts()
       .then((data) => {
-        if (isMounted && data && data.length > 0) {
-          setProductsList(data);
+        if (isMounted) {
+          if (data && data.length > 0) {
+            setProductsList(data);
+          }
+          setIsLoading(false);
         }
       })
-      .catch((err) => console.warn('Live products load error:', err));
+      .catch((err) => {
+        console.warn('Live products load error:', err);
+        if (isMounted) setIsLoading(false);
+      });
     return () => {
       isMounted = false;
     };
@@ -403,7 +407,20 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
             </div>
 
             {/* Product Cards Responsive Grid (2 Columns on Mobile, 3 Columns on Desktop) */}
-            {filteredProducts.length === 0 ? (
+            {isLoading && filteredProducts.length === 0 ? (
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-6 items-stretch">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div key={i} className="animate-pulse bg-white rounded-2xl border border-gray-200/80 p-3 space-y-3 flex flex-col justify-between">
+                    <div className="w-full aspect-square bg-gray-200 rounded-xl" />
+                    <div className="space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-3/4" />
+                      <div className="h-3 bg-gray-200 rounded w-1/2" />
+                    </div>
+                    <div className="h-9 bg-gray-200 rounded-xl w-full" />
+                  </div>
+                ))}
+              </div>
+            ) : filteredProducts.length === 0 ? (
               <div className="py-12 text-center bg-gray-50 rounded-2xl border border-gray-200/80 p-6 space-y-3">
                 <p className="text-sm font-bold text-gray-700">No traditional products match your search query "{searchQuery}".</p>
                 <p className="text-xs text-gray-500">Try searching for other ingredients like "garlic", "ragi", "honey", or reset your filters.</p>
