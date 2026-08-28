@@ -3456,13 +3456,20 @@ app.get([
         const rzpOrderIdMeta = Array.isArray(order.meta_data) ? order.meta_data.find((m: any) => m.key === '_razorpay_order_id') : null;
         const expTimeMeta = Array.isArray(order.meta_data) ? order.meta_data.find((m: any) => m.key === '_reservation_expires_at') : null;
 
+        const lineSubtotal = (order.line_items || []).reduce((acc: number, item: any) => acc + (parseFloat(item.total) || 0), 0);
+        const shippingVal = parseFloat(order.shipping_total) || 0;
+        const totalVal = parseFloat(order.total) || 0;
+        const resolvedTotal = (lineSubtotal > 0 && lineSubtotal < 499 && shippingVal === 0 && Math.abs(totalVal - lineSubtotal) < 0.01)
+          ? (lineSubtotal + 40).toFixed(2)
+          : order.total;
+
         return {
           id: order.id,
           orderRefCode: refCode,
           status: order.status,
           statusLabel: stageInfo.label,
           stage: stageInfo.stage,
-          total: order.total,
+          total: resolvedTotal,
           currency: '₹',
           dateCreated: order.date_created,
           items: order.line_items?.map((item: any) => ({ name: item.name, quantity: item.quantity, pricePerUnit: parseFloat(item.price) || 0 })),
@@ -4101,21 +4108,32 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
         const cleanPhone = (phone || '').trim();
 
         const safeItems = Array.isArray(items) ? items : [];
-        const lineItems = safeItems.map((item: any) => ({
-          product_id: parseInt(item.productId || item.id, 10) || 35,
-          quantity: parseInt(item.quantity || 1, 10),
-          subtotal: ((item.pricePerUnit || item.price || 70) * (item.quantity || 1)).toFixed(2),
-          total: ((item.pricePerUnit || item.price || 70) * (item.quantity || 1)).toFixed(2),
-          meta_data: [{ key: 'weight', value: item.weight || '250gms' }]
-        }));
+        let itemsSubtotal = 0;
+        const lineItems = safeItems.map((item: any) => {
+          const qty = parseInt(item.quantity || 1, 10);
+          const priceVal = item.pricePerUnit ?? item.price ?? 70;
+          const priceNum = typeof priceVal === 'number' ? priceVal : (parseFloat(priceVal) || 70);
+          const lineTotal = priceNum * qty;
+          itemsSubtotal += lineTotal;
+          return {
+            product_id: parseInt(item.productId || item.id, 10) || 35,
+            quantity: qty,
+            subtotal: lineTotal.toFixed(2),
+            total: lineTotal.toFixed(2),
+            meta_data: [{ key: 'weight', value: item.weight || '250gms' }]
+          };
+        });
 
-        const wcOrderPayload = {
+        const numTotal = parseFloat(totalAmount || '0') || itemsSubtotal;
+        const deliveryCharge = Math.max(0, numTotal - itemsSubtotal);
+
+        const wcOrderPayload: any = {
           payment_method: 'razorpay',
           payment_method_title: 'Razorpay (UPI/Cards/NetBanking)',
           set_paid: true,
           status: 'processing',
           transaction_id: razorpay_payment_id || `tx_${Date.now()}`,
-          total: (totalAmount || 0).toString(),
+          total: numTotal.toFixed(2),
           meta_data: [
             { key: '_payment_verified', value: 'true' },
             { key: '_payment_state', value: 'confirmed' },
@@ -4139,7 +4157,14 @@ app.post(['/api/v1/checkout/verify-payment', '/api/checkout/verify-payment', '/v
             state: 'TN',
             country: 'IN'
           },
-          line_items: lineItems
+          line_items: lineItems,
+          shipping_lines: deliveryCharge > 0 ? [
+            {
+              method_id: 'flat_rate',
+              method_title: 'Flat Delivery Charge',
+              total: deliveryCharge.toFixed(2)
+            }
+          ] : []
         };
 
         const createRes = await wcFetch('orders', { method: 'POST', body: wcOrderPayload });
@@ -4491,6 +4516,13 @@ app.get([
     const address = order.shipping?.address_1 || order.billing?.address_1 || '';
     const formattedAddress = address ? `${address}, ${city}` : city;
 
+    const lineSubtotal = (order.line_items || []).reduce((acc: number, item: any) => acc + (parseFloat(item.total) || 0), 0);
+    const shippingVal = parseFloat(order.shipping_total) || 0;
+    const totalVal = parseFloat(order.total) || 0;
+    const resolvedTotal = (lineSubtotal > 0 && lineSubtotal < 499 && shippingVal === 0 && Math.abs(totalVal - lineSubtotal) < 0.01)
+      ? (lineSubtotal + 40).toFixed(2)
+      : (order.total || '0');
+
     return res.json({
       success: true,
       data: {
@@ -4499,7 +4531,7 @@ app.get([
         status: order.status,
         statusLabel: currentStatus.label,
         stage: currentStatus.stage,
-        total: order.total || '0',
+        total: resolvedTotal,
         currency: '₹',
         dateCreated: order.date_created || new Date().toISOString(),
         customerName: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Valued Customer',
