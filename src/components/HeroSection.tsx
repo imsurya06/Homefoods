@@ -3,7 +3,7 @@ import { Search, ArrowRight, BookOpen, Layers, ChevronRight } from 'lucide-react
 import { MarqueeTrustBar } from './MarqueeTrustBar';
 import { CATEGORIES } from '../data/categories';
 import { type Product } from '../data/products';
-import { getLiveProducts, getCachedProductsSync, getLiveCategories, type LiveCategoryItem } from '../services/productService';
+import { getLiveProducts, getCachedProductsSync, getLiveCategories, getCachedCategoriesSync, type LiveCategoryItem } from '../services/productService';
 import { filterAndSortProductsBySearch } from '../utils/searchUtils';
 
 interface HeroSectionProps {
@@ -22,7 +22,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [liveProducts, setLiveProducts] = useState<Product[]>(() => getCachedProductsSync());
-  const [liveCategories, setLiveCategories] = useState<LiveCategoryItem[]>([]);
+  const [liveCategories, setLiveCategories] = useState<LiveCategoryItem[]>(() => getCachedCategoriesSync().filter((c) => c.id !== 'all' && c.slug !== 'uncategorized'));
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -330,7 +330,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         </div>
 
         {/* Straight Aligned Cards with Hover Lift Effect */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 sm:gap-8 items-stretch">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4 lg:gap-4 items-stretch">
           {(liveCategories.length > 0 ? liveCategories : CATEGORIES).map((category: any) => {
             const catId = category.id || category.slug || '';
             const catTitle = category.title || category.name || category.label || 'Category';
