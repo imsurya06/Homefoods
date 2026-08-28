@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, ArrowRight, BookOpen, Layers, ChevronRight } from 'lucide-react';
 import { MarqueeTrustBar } from './MarqueeTrustBar';
-import { CATEGORIES, type Category } from '../data/categories';
+import { CATEGORIES } from '../data/categories';
 import { type Product } from '../data/products';
-import { getLiveProducts, getCachedProductsSync } from '../services/productService';
+import { getLiveProducts, getCachedProductsSync, getLiveCategories, type LiveCategoryItem } from '../services/productService';
 import { filterAndSortProductsBySearch } from '../utils/searchUtils';
 
 interface HeroSectionProps {
@@ -22,11 +22,17 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [liveProducts, setLiveProducts] = useState<Product[]>(() => getCachedProductsSync());
+  const [liveCategories, setLiveCategories] = useState<LiveCategoryItem[]>([]);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getLiveProducts().then((data) => {
       if (data && data.length > 0) setLiveProducts(data);
+    });
+    getLiveCategories().then((cats) => {
+      if (cats && cats.length > 0) {
+        setLiveCategories(cats.filter((c) => c.id !== 'all' && c.slug !== 'uncategorized'));
+      }
     });
   }, []);
 
@@ -325,27 +331,33 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
         {/* Straight Aligned Cards with Hover Lift Effect */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 sm:gap-8 items-stretch">
-          {CATEGORIES.map((category: Category) => {
-            const catQuery = category.id.toLowerCase().trim().replace(/s$/, '');
+          {(liveCategories.length > 0 ? liveCategories : CATEGORIES).map((category: any) => {
+            const catId = category.id || category.slug || '';
+            const catTitle = category.title || category.name || category.label || 'Category';
+            const catSubtitle = category.subtitle || category.description || '';
+            const catImage = category.imageUrl || category.image?.src || 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80';
+
+            const catQuery = catId.toLowerCase().trim().replace(/s$/, '');
             const liveCount = liveProducts.filter((p) => {
               const pCatId = (p.categoryId || '').toLowerCase().trim();
               const pCatName = (p.categoryName || '').toLowerCase().trim();
               return pCatId.includes(catQuery) || catQuery.includes(pCatId) || pCatName.includes(catQuery);
             }).length;
 
-            const liveCountText = `${liveCount} ${liveCount === 1 ? 'Item' : 'Items'}`;
+            const finalCount = (category.count !== undefined && category.count > 0) ? category.count : liveCount;
+            const liveCountText = `${finalCount} ${finalCount === 1 ? 'Item' : 'Items'}`;
 
             return (
               <div
-                key={category.id}
-                onClick={() => onCategorySelect && onCategorySelect(category.id)}
+                key={catId}
+                onClick={() => onCategorySelect && onCategorySelect(catId)}
                 className="group cursor-pointer flex flex-col bg-white rounded-2xl border-2 border-transparent hover:border-[#95CD1A] overflow-hidden shadow-xs hover:shadow-xl hover:shadow-[#95CD1A]/15 hover:-translate-y-2.5 transition-all duration-300 transform"
               >
                 {/* Physical Printed Photo Frame Container */}
                 <div className="relative aspect-4/3 sm:aspect-square w-full max-h-36 sm:max-h-none overflow-hidden bg-gray-100 border-b border-gray-100">
                   <img
-                    src={category.imageUrl}
-                    alt={category.title}
+                    src={catImage}
+                    alt={catTitle}
                     loading="lazy"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                   />
@@ -360,10 +372,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <div className="p-3.5 sm:p-4 flex flex-col justify-between grow text-left space-y-2">
                   <div>
                     <h3 className="font-extrabold text-sm sm:text-base text-[#1F2937] group-hover:text-[#95CD1A] transition-colors duration-200 line-clamp-1">
-                      {category.title}
+                      {catTitle}
                     </h3>
                     <p className="text-xs text-gray-500 mt-1 line-clamp-1">
-                      {category.subtitle}
+                      {catSubtitle || 'Authentic traditional South Indian delicacy'}
                     </p>
                   </div>
                   

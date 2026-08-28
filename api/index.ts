@@ -1439,8 +1439,24 @@ app.get(['/api/v1/products', '/api/products', '/v1/products', '/products'], asyn
 app.get(['/api/v1/products/categories', '/products/categories'], async (_req, res) => {
   try {
     const wcRes = await wcFetch('products/categories', { params: { per_page: 100, hide_empty: false } });
-    const categories = wcRes.ok && Array.isArray(wcRes.data) ? wcRes.data : [];
-    return res.json({ success: true, data: categories });
+    const rawCategories = wcRes.ok && Array.isArray(wcRes.data) ? wcRes.data : [];
+    
+    const formattedCategories = rawCategories
+      .filter((c: any) => c.slug !== 'uncategorized' && (c.count > 0 || c.image?.src))
+      .map((c: any) => ({
+        id: c.slug || c.id.toString(),
+        wcId: c.id,
+        name: decodeHtmlEntities(c.name || ''),
+        title: decodeHtmlEntities(c.name || ''),
+        label: decodeHtmlEntities(c.name || ''),
+        slug: c.slug || '',
+        subtitle: decodeHtmlEntities(c.description || ''),
+        description: decodeHtmlEntities(c.description || ''),
+        count: c.count || 0,
+        imageUrl: c.image?.src || 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80',
+      }));
+
+    return res.json({ success: true, data: formattedCategories, raw: rawCategories });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }

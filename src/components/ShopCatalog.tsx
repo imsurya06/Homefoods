@@ -90,9 +90,8 @@ export const ShopCatalog: React.FC<ShopCatalogProps> = ({
     setSearchQuery(initialSearchQuery);
   }, [initialSearchQuery]);
 
-  // Smoothly scroll window to top whenever category or search filter changes
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo(0, 0);
   }, [selectedCategory, searchQuery]);
 
   const handleVariantChange = (productId: string, variantIdx: number) => {

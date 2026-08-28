@@ -19,7 +19,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigatePage, onOpenTrackModal
         }
       }, 100);
     } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo(0, 0);
     }
   };
 

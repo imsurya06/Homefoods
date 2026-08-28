@@ -92,7 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
 
     if (page === 'shop') {
       setActiveSection('shop');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo(0, 0);
       return;
     }
 
@@ -126,7 +126,7 @@ export const Header: React.FC<HeaderProps> = ({
       isProgrammaticScrollRef.current = true;
       if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
 
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo(0, 0);
 
       scrollTimerRef.current = setTimeout(() => {
         isProgrammaticScrollRef.current = false;

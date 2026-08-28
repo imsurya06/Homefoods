@@ -177,7 +177,7 @@ export function App() {
     setSelectedCategory(categoryId);
     setSearchQuery(query);
     window.location.hash = page === 'shop' ? '#shop' : page === 'account' ? '#account' : '#home';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo(0, 0);
   };
 
   const handleSearchSubmit = (searchTerm: string) => {
