@@ -1659,8 +1659,12 @@ app.post(['/api/v1/auth/send-otp', '/api/auth/send-otp', '/v1/auth/send-otp', '/
       return res.status(400).json({ success: false, message: dbRes.message || 'Failed to send verification code. Please try again.' });
     }
 
-    // Send email using SMTP non-blockingly
-    sendEmailOtp(cleanEmail, otp, cleanPurpose as any).catch(() => {});
+    // Send email using SMTP with await to prevent Vercel serverless freeze
+    try {
+      await sendEmailOtp(cleanEmail, otp, cleanPurpose as any);
+    } catch (mailErr: any) {
+      console.error('[OTP Email Send Error]:', mailErr.message);
+    }
 
     return res.json({
       success: true,
