@@ -1799,15 +1799,15 @@ app.post(['/api/v1/auth/verify-otp', '/api/auth/verify-otp', '/v1/auth/verify-ot
         success: true,
         accessToken,
         refreshToken,
-        isNewUser: !isExistingUser,
+        isNewUser: false,
         user: {
           id: customerId,
           email: cleanEmail,
-          firstName: customerUser?.first_name || firstName,
-          lastName: customerUser?.last_name || lastName,
-          displayName: customerUser?.display_name || `${firstName} ${lastName}`.trim(),
-          phone: customerUser?.billing?.phone || cleanPhone || '',
-          billing: customerUser?.billing || {
+          firstName,
+          lastName,
+          displayName: `${firstName} ${lastName}`.trim(),
+          phone: cleanPhone || '',
+          billing: {
             first_name: firstName,
             last_name: lastName,
             email: cleanEmail,
@@ -1817,7 +1817,7 @@ app.post(['/api/v1/auth/verify-otp', '/api/auth/verify-otp', '/v1/auth/verify-ot
             state: 'Tamil Nadu',
             postcode: ''
           },
-          shipping: customerUser?.shipping || {
+          shipping: {
             first_name: firstName,
             last_name: lastName,
             address_1: '',
