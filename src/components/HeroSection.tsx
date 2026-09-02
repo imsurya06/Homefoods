@@ -369,12 +369,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 </div>
 
                 {/* Content Details */}
-                <div className="p-3.5 sm:p-4 flex flex-col justify-between grow text-left space-y-2">
+                <div className="p-3 sm:p-3.5 flex flex-col justify-between grow text-left space-y-1.5">
                   <div>
-                    <h3 className="font-extrabold text-sm sm:text-base text-[#1F2937] group-hover:text-[#95CD1A] transition-colors duration-200 line-clamp-1">
+                    <h3 className="font-extrabold text-xs sm:text-sm text-[#1F2937] group-hover:text-[#95CD1A] transition-colors duration-200 leading-snug">
                       {catTitle}
                     </h3>
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-1">
+                    <p className="text-[11px] text-gray-500 mt-1 line-clamp-2 leading-tight">
                       {catSubtitle || 'Authentic traditional South Indian delicacy'}
                     </p>
                   </div>
