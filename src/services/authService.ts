@@ -234,11 +234,18 @@ export async function logoutAllDevices() {
 export async function sendEmailOtp(
   email: string,
   purpose: 'login' | 'checkout' | 'email_change'
-): Promise<{ success: boolean; message: string; isExistingUser?: boolean; testOtp?: string }> {
-  return fetchApi<{ success: boolean; message: string; isExistingUser?: boolean; testOtp?: string }>('/auth/send-otp', {
+): Promise<{ success: boolean; message: string; isExistingUser?: boolean; otpToken?: string; testOtp?: string }> {
+  const cleanEmail = email.trim().toLowerCase();
+  const res = await fetchApi<{ success: boolean; message: string; isExistingUser?: boolean; otpToken?: string; testOtp?: string }>('/auth/send-otp', {
     method: 'POST',
-    body: JSON.stringify({ email: email.trim().toLowerCase(), purpose })
+    body: JSON.stringify({ email: cleanEmail, purpose })
   });
+  if (res.success && res.otpToken) {
+    try {
+      sessionStorage.setItem(`hf_otp_token_${cleanEmail}`, res.otpToken);
+    } catch {}
+  }
+  return res;
 }
 
 export async function verifyEmailOtp(
@@ -249,6 +256,7 @@ export async function verifyEmailOtp(
   phone?: string
 ): Promise<{ success: boolean; message?: string; accessToken?: string; refreshToken?: string; user?: UserProfile; isNewUser?: boolean }> {
   const cleanEmail = email.trim().toLowerCase();
+  const savedOtpToken = sessionStorage.getItem(`hf_otp_token_${cleanEmail}`) || '';
   const res = await fetchApi<{
     success: boolean;
     message?: string;
@@ -261,6 +269,7 @@ export async function verifyEmailOtp(
     body: JSON.stringify({
       email: cleanEmail,
       otp: otp.trim(),
+      otpToken: savedOtpToken,
       purpose,
       name,
       phone,

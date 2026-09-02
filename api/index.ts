@@ -83,10 +83,47 @@ async function setOtpInDatabase(email: string, otp: string): Promise<{ success: 
   return { success: true };
 }
 
-async function verifyOtpInDatabase(email: string, otp: string): Promise<{ success: boolean; code?: string; message?: string; attempts_remaining?: number }> {
+function generateOtpToken(email: string, otp: string, expiresAt: number): string {
+  const cleanEmail = email.toLowerCase().trim();
+  const cleanOtp = otp.trim();
+  const signature = crypto
+    .createHmac('sha256', JWT_SECRET)
+    .update(`${cleanEmail}:${cleanOtp}:${expiresAt}`)
+    .digest('hex');
+  return `${expiresAt}.${signature}`;
+}
+
+function verifyOtpTokenSignature(email: string, otp: string, otpToken: string): boolean {
+  try {
+    if (!otpToken || !otpToken.includes('.')) return false;
+    const [expStr, signature] = otpToken.split('.');
+    const expiresAt = parseInt(expStr, 10);
+    if (!expiresAt || Date.now() > expiresAt) return false;
+
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanOtp = otp.trim();
+    const expectedSignature = crypto
+      .createHmac('sha256', JWT_SECRET)
+      .update(`${cleanEmail}:${cleanOtp}:${expiresAt}`)
+      .digest('hex');
+
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
+  } catch {
+    return false;
+  }
+}
+
+async function verifyOtpInDatabase(email: string, otp: string, otpToken?: string): Promise<{ success: boolean; code?: string; message?: string; attempts_remaining?: number }> {
   const cleanEmail = email.toLowerCase().trim();
   const cleanOtp = otp.trim();
 
+  // 1. Cryptographic HMAC Token Signature Check (Stateless across all serverless containers)
+  if (otpToken && verifyOtpTokenSignature(cleanEmail, cleanOtp, otpToken)) {
+    otpCache.delete(cleanEmail);
+    return { success: true };
+  }
+
+  // 2. Memory Cache Check
   const memorySession = otpCache.get(cleanEmail);
   if (memorySession) {
     if (Date.now() > memorySession.expiresAt) {
@@ -1666,9 +1703,13 @@ app.post(['/api/v1/auth/send-otp', '/api/auth/send-otp', '/v1/auth/send-otp', '/
       console.error('[OTP Email Send Error]:', mailErr.message);
     }
 
+    const expiresAt = Date.now() + 10 * 60 * 1000;
+    const otpToken = generateOtpToken(cleanEmail, otp, expiresAt);
+
     return res.json({
       success: true,
       isExistingUser: true,
+      otpToken,
       message: 'Verification code sent successfully to your email address.',
       testOtp: process.env.NODE_ENV !== 'production' ? otp : undefined
     });
@@ -1681,16 +1722,17 @@ app.post(['/api/v1/auth/send-otp', '/api/auth/send-otp', '/v1/auth/send-otp', '/
 // POST /api/v1/auth/verify-otp
 app.post(['/api/v1/auth/verify-otp', '/api/auth/verify-otp', '/v1/auth/verify-otp', '/auth/verify-otp'], authLimiter, async (req, res) => {
   try {
-    const { email, otp, purpose, name, phone, deviceId, deviceName } = req.body;
+    const { email, otp, otpToken, purpose, name, phone, deviceId, deviceName } = req.body;
     const cleanEmail = (email || '').trim().toLowerCase();
     const cleanOtp = (otp || '').trim();
+    const cleanOtpToken = (otpToken || '').trim();
     const cleanPurpose = (purpose || 'login').trim();
 
     if (!cleanEmail || !cleanOtp) {
       return res.status(400).json({ success: false, message: 'Email and verification code are required.' });
     }
 
-    const dbRes = await verifyOtpInDatabase(cleanEmail, cleanOtp);
+    const dbRes = await verifyOtpInDatabase(cleanEmail, cleanOtp, cleanOtpToken);
     if (!dbRes.success) {
       if (dbRes.code === 'EXPIRED') {
         return res.status(400).json({ success: false, message: 'Verification code not found or expired. Please request a new code.' });
