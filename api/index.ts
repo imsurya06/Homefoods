@@ -263,6 +263,12 @@ async function verifyUserExists(customerId: number, bypassCache: boolean = false
     return cached.exists;
   }
 
+  // Deterministic hashed IDs (>1000000) are non-sequential and will 404 on direct /customers/:id query.
+  // Always fail open for deterministic IDs so valid user sessions are never wrongly revoked.
+  if (customerId > 1000000) {
+    return true;
+  }
+
   try {
     const res = await wcFetch(`customers/${customerId}`);
     if (res.ok && res.data && res.data.id) {
@@ -1753,40 +1759,46 @@ app.post(['/api/v1/auth/verify-otp', '/api/auth/verify-otp', '/v1/auth/verify-ot
       const lastName = fullName.split(' ').slice(1).join(' ') || '';
       const cleanPhone = (phone || '').trim();
 
-      // Instant deterministic customer ID generation (0ms latency)
-      const customerId = getDeterministicUserId(cleanEmail);
+      // Look up real WooCommerce Customer ID synchronously to avoid ID mismatch or fake deletion warnings
+      let customerId = getDeterministicUserId(cleanEmail);
+      let customerUser: any = null;
+      try {
+        const searchRes = await wcFetch('customers', { params: { email: cleanEmail } });
+        if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+          customerUser = searchRes.data[0];
+          customerId = customerUser.id.toString();
+        } else {
+          // If not in WooCommerce yet, create new customer
+          const username = `${cleanEmail.split('@')[0]}_${Math.floor(1000 + Math.random() * 9000)}`;
+          const createRes = await wcFetch('customers', {
+            method: 'POST',
+            body: {
+              email: cleanEmail,
+              first_name: firstName,
+              last_name: lastName,
+              username,
+              billing: { first_name: firstName, last_name: lastName, email: cleanEmail, phone: cleanPhone },
+              shipping: { first_name: firstName, last_name: lastName }
+            }
+          });
+          if (createRes.ok && createRes.data && createRes.data.id) {
+            customerUser = createRes.data;
+            customerId = customerUser.id.toString();
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[Sync Customer Lookup Notice]:`, err.message);
+      }
 
-      // Create session tokens immediately (<5ms)
+      // Link guest orders in background
+      setImmediate(() => {
+        linkGuestOrdersToCustomer(cleanEmail, customerId);
+      });
+
+      // Create session tokens with real WooCommerce customerId
       const sessionId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
       const accessToken = jwt.sign({ customerId: parseInt(customerId, 10), email: cleanEmail }, JWT_SECRET, { expiresIn: '15m' });
       const refreshToken = jwt.sign({ customerId: parseInt(customerId, 10), sessionId }, JWT_REFRESH_SECRET, { expiresIn: '30d' });
-
-      // Non-blocking async WooCommerce customer sync in background
-      setImmediate(async () => {
-        try {
-          let wcCustId = customerId;
-          const searchRes = await wcFetch('customers', { params: { email: cleanEmail } });
-          if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
-            wcCustId = searchRes.data[0].id.toString();
-          } else {
-            const username = `${cleanEmail.split('@')[0]}_${Math.floor(1000 + Math.random() * 9000)}`;
-            await wcFetch('customers', {
-              method: 'POST',
-              body: {
-                email: cleanEmail,
-                first_name: firstName,
-                last_name: lastName,
-                username,
-                billing: { first_name: firstName, last_name: lastName, email: cleanEmail, phone: cleanPhone },
-                shipping: { first_name: firstName, last_name: lastName }
-              }
-            });
-          }
-          linkGuestOrdersToCustomer(cleanEmail, wcCustId);
-        } catch (err: any) {
-          console.warn(`[Async Customer Sync Notice]:`, err.message);
-        }
-      });
 
       res.cookie('jid', refreshToken, {
         httpOnly: true,
@@ -1794,6 +1806,9 @@ app.post(['/api/v1/auth/verify-otp', '/api/auth/verify-otp', '/v1/auth/verify-ot
         sameSite: 'none',
         maxAge: 30 * 24 * 60 * 60 * 1000
       });
+
+      const userFirstName = customerUser?.first_name || firstName;
+      const userLastName = customerUser?.last_name || lastName;
 
       return res.json({
         success: true,
@@ -1803,13 +1818,13 @@ app.post(['/api/v1/auth/verify-otp', '/api/auth/verify-otp', '/v1/auth/verify-ot
         user: {
           id: customerId,
           email: cleanEmail,
-          firstName,
-          lastName,
-          displayName: `${firstName} ${lastName}`.trim(),
-          phone: cleanPhone || '',
-          billing: {
-            first_name: firstName,
-            last_name: lastName,
+          firstName: userFirstName,
+          lastName: userLastName,
+          displayName: customerUser?.display_name || `${userFirstName} ${userLastName}`.trim(),
+          phone: customerUser?.billing?.phone || cleanPhone || '',
+          billing: customerUser?.billing || {
+            first_name: userFirstName,
+            last_name: userLastName,
             email: cleanEmail,
             phone: cleanPhone,
             address_1: '',
@@ -1817,9 +1832,9 @@ app.post(['/api/v1/auth/verify-otp', '/api/auth/verify-otp', '/v1/auth/verify-ot
             state: 'Tamil Nadu',
             postcode: ''
           },
-          shipping: {
-            first_name: firstName,
-            last_name: lastName,
+          shipping: customerUser?.shipping || {
+            first_name: userFirstName,
+            last_name: userLastName,
             address_1: '',
             city: '',
             state: 'Tamil Nadu',
